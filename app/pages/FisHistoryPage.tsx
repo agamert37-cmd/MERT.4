@@ -234,21 +234,79 @@ export function FisHistoryPage() {
   const handleDelete = (id: string) => {
     if (confirm('Bu fisi silmek istediginizden emin misiniz?')) {
       const fisToDelete = fisler.find(f => f.id === id);
-      const updated = fisler.filter(f => f.id !== id);
-      setFisler(updated);
-      setInStorage(StorageKey.FISLER, updated);
 
-      // Silinen fişi geçmişe ekle
       if (fisToDelete) {
+        const isSatisAlis = fisToDelete.mode === 'satis' || fisToDelete.mode === 'sale' || fisToDelete.mode === 'alis';
+
+        // ─── Stok geri al ───────────────────────────────────────
+        if (isSatisAlis && fisToDelete.items?.length) {
+          const existingStokList = getFromStorage<any[]>(StorageKey.STOK_DATA) || [];
+          const updatedStokList = existingStokList.map(stock => {
+            const matchItems = fisToDelete.items!.filter((p: any) => p.productName === stock.name);
+            if (!matchItems.length) return stock;
+
+            let netReversal = 0;
+            matchItems.forEach((item: any) => {
+              const absQty = Math.abs(item.quantity);
+              // Orijinal işlemde ne oldu → tersini uygula
+              let wasIncrease = false;
+              if (fisToDelete.mode === 'satis' || fisToDelete.mode === 'sale') {
+                wasIncrease = item.type === 'iade'; // iade stoku artırmıştı
+              } else if (fisToDelete.mode === 'alis') {
+                wasIncrease = item.type !== 'iade'; // alış stoku artırmıştı
+              }
+              netReversal += wasIncrease ? -absQty : absQty;
+            });
+
+            // Bu fişe ait hareket kayıtlarını da temizle
+            const filteredMovements = (stock.movements || []).filter(
+              (m: any) => !(m.description || '').includes(id)
+            );
+
+            return { ...stock, currentStock: stock.currentStock + netReversal, movements: filteredMovements };
+          });
+          setInStorage(StorageKey.STOK_DATA, updatedStokList);
+        }
+
+        // ─── Cari bakiyesi geri al ───────────────────────────────
+        if (isSatisAlis && fisToDelete.cari?.id) {
+          const cariList = getFromStorage<any[]>(StorageKey.CARI_DATA) || [];
+          const updatedCariList = cariList.map(cari => {
+            if (cari.id !== fisToDelete.cari.id) return cari;
+
+            const total = fisToDelete.total || 0;
+            const paidAmount = fisToDelete.payment?.amount || 0;
+            // Orijinalde balance'a eklenen miktar: (total - paidAmount)
+            // Silince geri çıkar → negatif delta
+            const balanceReversal = -(total - paidAmount);
+
+            const filteredHistory = (cari.transactionHistory || []).filter(
+              (t: any) => !(t.fisId || '').includes(id) && !(t.description || '').includes(id)
+            );
+
+            return {
+              ...cari,
+              balance: cari.balance + balanceReversal,
+              transactionHistory: filteredHistory,
+            };
+          });
+          setInStorage(StorageKey.CARI_DATA, updatedCariList);
+        }
+
+        // ─── Silinen fişi geçmişe ekle ─────────────────────────
         const deletedEntry = {
           ...fisToDelete,
           deletedAt: new Date().toISOString(),
           deletedBy: currentEmployee?.name || 'Bilinmeyen',
         };
-        const updatedDeleted = [deletedEntry, ...deletedFisler].slice(0, 100); // max 100
+        const updatedDeleted = [deletedEntry, ...deletedFisler].slice(0, 100);
         setDeletedFisler(updatedDeleted);
         setInStorage(StorageKey.DELETED_FISLER, updatedDeleted);
       }
+
+      const updated = fisler.filter(f => f.id !== id);
+      setFisler(updated);
+      setInStorage(StorageKey.FISLER, updated);
 
       emit('fis:deleted', { fisId: id, mode: fisToDelete?.mode });
       logActivity('custom', 'Fiş silindi (çöp kutusuna)', { employeeName: user?.name, page: 'FisHistory' });
@@ -385,7 +443,78 @@ export function FisHistoryPage() {
     if (!selectedFis) return;
 
     const isSatisAlis = selectedFis.mode === 'satis' || selectedFis.mode === 'sale' || selectedFis.mode === 'alis';
+    const newItems = editItems.map(({ _editId, ...rest }) => rest);
+    const newTotal = calculateEditTotal();
 
+    // ─── Stok delta güncelle ───────────────────────────────────
+    if (isSatisAlis) {
+      const oldItems: any[] = selectedFis.items || [];
+      const allProductNames = new Set([
+        ...oldItems.map((i: any) => i.productName),
+        ...newItems.map((i: any) => i.productName),
+      ]);
+
+      const existingStokList = getFromStorage<any[]>(StorageKey.STOK_DATA) || [];
+      const updatedStokList = existingStokList.map(stock => {
+        if (!allProductNames.has(stock.name)) return stock;
+
+        // Orijinal fişin stok etkisi
+        const oldEffect = oldItems
+          .filter((i: any) => i.productName === stock.name)
+          .reduce((sum: number, item: any) => {
+            const absQty = Math.abs(item.quantity);
+            let wasIncrease = false;
+            if (selectedFis.mode === 'satis' || selectedFis.mode === 'sale') {
+              wasIncrease = item.type === 'iade';
+            } else if (selectedFis.mode === 'alis') {
+              wasIncrease = item.type !== 'iade';
+            }
+            return sum + (wasIncrease ? absQty : -absQty);
+          }, 0);
+
+        // Güncel fişin stok etkisi
+        const newEffect = newItems
+          .filter((i: any) => i.productName === stock.name)
+          .reduce((sum: number, item: any) => {
+            const absQty = Math.abs(item.quantity);
+            let isIncrease = false;
+            if (selectedFis.mode === 'satis' || selectedFis.mode === 'sale') {
+              isIncrease = item.type === 'iade';
+            } else if (selectedFis.mode === 'alis') {
+              isIncrease = item.type !== 'iade';
+            }
+            return sum + (isIncrease ? absQty : -absQty);
+          }, 0);
+
+        const delta = newEffect - oldEffect;
+        if (delta === 0) return stock;
+
+        return { ...stock, currentStock: stock.currentStock + delta };
+      });
+      setInStorage(StorageKey.STOK_DATA, updatedStokList);
+    }
+
+    // ─── Cari bakiyesi delta güncelle ─────────────────────────
+    if (isSatisAlis && selectedFis.cari?.id) {
+      const oldTotal = selectedFis.total || 0;
+      const oldPaid = selectedFis.payment?.amount || 0;
+      const newPaid = editPaymentAmount;
+
+      const oldBalanceEffect = oldTotal - oldPaid;
+      const newBalanceEffect = newTotal - newPaid;
+      const balanceDelta = newBalanceEffect - oldBalanceEffect;
+
+      if (balanceDelta !== 0) {
+        const cariList = getFromStorage<any[]>(StorageKey.CARI_DATA) || [];
+        const updatedCariList = cariList.map(cari => {
+          if (cari.id !== selectedFis.cari.id) return cari;
+          return { ...cari, balance: cari.balance + balanceDelta };
+        });
+        setInStorage(StorageKey.CARI_DATA, updatedCariList);
+      }
+    }
+
+    // ─── Fişi güncelle ────────────────────────────────────────
     const updatedFis: Fis = {
       ...selectedFis,
       description: editDescription,
@@ -395,8 +524,8 @@ export function FisHistoryPage() {
         amount: editAmount,
       } : {}),
       ...(isSatisAlis ? {
-        items: editItems.map(({ _editId, ...rest }) => rest),
-        total: calculateEditTotal(),
+        items: newItems,
+        total: newTotal,
       } : {}),
       ...(selectedFis.payment ? {
         payment: { ...selectedFis.payment, amount: editPaymentAmount }
