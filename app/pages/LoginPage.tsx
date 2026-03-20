@@ -552,6 +552,14 @@ export function LoginPage() {
     return products;
   }, [catalogProducts, selectedCategory, productSearch]);
 
+  // Pazarlama duyurularını yükle — ürün modalında ilgili haberler için kullanılır
+  const pazarlamaAnnouncements = useMemo(() => {
+    try {
+      const pazarlama = getFromStorage<any>(StorageKey.PAZARLAMA_CONTENT);
+      return (pazarlama?.announcements || []).filter((a: any) => a.active !== false);
+    } catch { return []; }
+  }, []);
+
   const companyInfo = useMemo(() => {
     try {
       const settings = getFromStorage<any>(StorageKey.SYSTEM_SETTINGS);
@@ -836,7 +844,7 @@ export function LoginPage() {
                 </div>
                 <div>
                   <h3 className="text-base sm:text-lg font-bold text-white">Ürün Kataloğu</h3>
-                  <p className="text-[10px] sm:text-xs text-muted-foreground">{catalogProducts.length} ürün • Güncel ortalama fiyatlar</p>
+                  <p className="text-[10px] sm:text-xs text-muted-foreground">{catalogProducts.length} ürün • <span className="text-amber-400/80 font-semibold">Güncel ortalama fiyatlar</span> • Tıklayın detay görün</p>
                 </div>
               </div>
               {/* Search */}
@@ -899,11 +907,13 @@ export function LoginPage() {
                         <Star className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-amber-400 fill-amber-400" />
                       </div>
                     )}
-                    {/* Quick price overlay */}
-                    <div className="absolute bottom-1.5 right-1.5 sm:bottom-2 sm:right-2 px-1.5 py-0.5 sm:px-2 sm:py-1 rounded-md bg-black/70 backdrop-blur-md border border-white/10">
-                      <span className="text-[10px] sm:text-xs font-bold text-white">₺{product.avgPrice}</span>
-                      <span className="text-[8px] sm:text-[9px] text-gray-400">/{product.priceUnit}</span>
-                    </div>
+                    {/* Quick price overlay — daha belirgin */}
+                    {product.avgPrice > 0 && (
+                      <div className="absolute bottom-1.5 right-1.5 sm:bottom-2 sm:right-2 px-2 py-1 sm:px-2.5 sm:py-1.5 rounded-lg bg-black/80 backdrop-blur-md border border-white/15 shadow-lg">
+                        <p className="text-[8px] sm:text-[9px] text-amber-400/80 font-bold uppercase tracking-wide leading-none mb-0.5">ort. fiyat</p>
+                        <p className="text-[12px] sm:text-sm font-black text-white leading-none">₺{product.avgPrice}<span className="text-[8px] sm:text-[9px] text-gray-400 font-normal">/{product.priceUnit}</span></p>
+                      </div>
+                    )}
                   </div>
                   {/* Info */}
                   <div className="p-2.5 sm:p-3">
@@ -1852,6 +1862,59 @@ export function LoginPage() {
                   </div>
                 </div>
               </div>
+
+              {/* ─── İlgili Haberler ───────────────────────────────────────── */}
+              {(() => {
+                const related = pazarlamaAnnouncements.filter(
+                  (a: any) => (a.relatedProducts || []).some(
+                    (rp: string) => rp.toLowerCase().trim() === selectedProduct.name.toLowerCase().trim()
+                  )
+                );
+                if (!related.length) return null;
+                return (
+                  <div className="px-4 sm:px-6 lg:px-8 pb-1">
+                    <h4 className="text-xs sm:text-sm font-bold text-white mb-2.5 flex items-center gap-2">
+                      <Newspaper className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-cyan-400" />
+                      Bu Ürünle İlgili Haberler
+                      <span className="ml-1 px-1.5 py-0.5 text-[9px] font-bold bg-cyan-500/20 text-cyan-400 rounded-md">{related.length}</span>
+                    </h4>
+                    <div className="space-y-2">
+                      {related.map((news: any) => (
+                        <motion.div
+                          key={news.id}
+                          initial={{ opacity: 0, x: -8 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          className="flex gap-3 p-3 rounded-xl bg-cyan-500/5 border border-cyan-500/10 hover:border-cyan-500/20 transition-colors"
+                        >
+                          {news.imageUrl && (
+                            <img
+                              src={news.imageUrl}
+                              alt=""
+                              className="w-12 h-12 sm:w-14 sm:h-14 rounded-lg object-cover flex-shrink-0"
+                            />
+                          )}
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-1.5 mb-0.5">
+                              {news.badge && (
+                                <span className={`px-1.5 py-0.5 text-[9px] font-bold rounded ${
+                                  news.badge === 'Onemli' || news.badge === 'Acil' ? 'bg-red-500/20 text-red-400' :
+                                  news.badge === 'Yeni' ? 'bg-blue-500/20 text-blue-400' :
+                                  news.badge === 'Kampanya' ? 'bg-orange-500/20 text-orange-400' :
+                                  news.badge === 'Basari' ? 'bg-emerald-500/20 text-emerald-400' :
+                                  'bg-cyan-500/20 text-cyan-400'
+                                }`}>{news.badge}</span>
+                              )}
+                              <span className="text-[9px] sm:text-[10px] text-gray-500">{news.date}</span>
+                            </div>
+                            <p className="text-[11px] sm:text-xs font-semibold text-white leading-snug mb-0.5">{news.title}</p>
+                            <p className="text-[10px] sm:text-[11px] text-gray-400 line-clamp-2 leading-relaxed">{news.text}</p>
+                          </div>
+                        </motion.div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })()}
 
               {/* Footer */}
               <div className="px-4 py-3 sm:px-6 sm:py-4 border-t border-white/5 bg-black/30">

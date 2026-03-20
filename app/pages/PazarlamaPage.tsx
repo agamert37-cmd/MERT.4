@@ -50,6 +50,7 @@ interface Announcement {
   badge: string;
   imageUrl: string;
   active: boolean;
+  relatedProducts?: string[]; // Haber hangi vitrin ürünleriyle ilgili (isim eşleşmesi)
 }
 
 interface ProductShowcase {
@@ -128,9 +129,9 @@ const DEFAULT_CONTENT: PazarlamaContent = {
     { id: '2', imageUrl: 'https://images.unsplash.com/photo-1763140446057-9becaa30b868?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxwcmVtaXVtJTIwbWVhdCUyMGN1dHMlMjBkaXNwbGF5JTIwYnV0Y2hlcnxlbnwxfHx8fDE3NzMwNjUxNTd8MA&ixlib=rb-4.1.0&q=80&w=1080', title: 'Genis Urun Yelpazesi', subtitle: 'Her damak tadina uygun secenekler', buttonText: '', buttonLink: '', active: true },
   ],
   announcements: [
-    { id: '1', title: 'Yeni Sezon Urunleri', text: 'Kis sezonuna ozel urun yelpazemiz hazir. Premium dana ve kuzu cesitlerimiz stoklarimizda.', date: '2026-03-09', badge: 'Yeni', imageUrl: '', active: true },
-    { id: '2', title: 'Hijyen Sertifikamiz Yenilendi', text: 'ISO 22000 Gida Guvenligi sertifikamiz 2026 yili icin guncellenmistir.', date: '2026-03-01', badge: 'Onemli', imageUrl: '', active: true },
-    { id: '3', title: 'Musteri Memnuniyeti %98', text: '2025 yili musteri memnuniyet anketinde %98 basari orani elde ettik.', date: '2026-02-15', badge: 'Basari', imageUrl: '', active: true },
+    { id: '1', title: 'Yeni Sezon Urunleri', text: 'Kis sezonuna ozel urun yelpazemiz hazir. Premium dana ve kuzu cesitlerimiz stoklarimizda.', date: '2026-03-09', badge: 'Yeni', imageUrl: '', active: true, relatedProducts: [] },
+    { id: '2', title: 'Hijyen Sertifikamiz Yenilendi', text: 'ISO 22000 Gida Guvenligi sertifikamiz 2026 yili icin guncellenmistir.', date: '2026-03-01', badge: 'Onemli', imageUrl: '', active: true, relatedProducts: [] },
+    { id: '3', title: 'Musteri Memnuniyeti %98', text: '2025 yili musteri memnuniyet anketinde %98 basari orani elde ettik.', date: '2026-02-15', badge: 'Basari', imageUrl: '', active: true, relatedProducts: [] },
   ],
   products: [
     { id: '1', name: 'Dana But', description: 'Birinci sinif dana but, gunluk kesim', imageUrl: '', price: 'Fiyat icin arayin', badge: 'Populer', active: true },
@@ -1181,9 +1182,59 @@ export function PazarlamaPage() {
                       </div>
                       <textarea value={item.text} onChange={e => updateItem<Announcement>('announcements', item.id, { text: e.target.value })} rows={2} className={`${inputClass} resize-none`} placeholder="Haber icerik metni..." />
                       <ImageInputField value={item.imageUrl} onChange={(v) => updateItem<Announcement>('announcements', item.id, { imageUrl: v })} placeholder="Haber gorseli (opsiyonel)" />
+
+                      {/* ─ İlgili Ürün Etiketleri ─────────────────────────────────── */}
+                      {content.products.filter(p => p.active && p.name).length > 0 && (
+                        <div className="mt-3 pt-3 border-t border-white/5">
+                          <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2">
+                            İlgili Ürünler
+                            <span className="ml-1.5 text-gray-600 font-normal normal-case">
+                              — müşteri bu ürüne tıklayınca bu haber görünür
+                            </span>
+                          </p>
+                          <div className="flex flex-wrap gap-1.5">
+                            {content.products
+                              .filter(p => p.active && p.name)
+                              .map(p => {
+                                const selected = (item.relatedProducts || []).includes(p.name);
+                                return (
+                                  <button
+                                    key={p.id}
+                                    type="button"
+                                    onClick={() => {
+                                      const current = item.relatedProducts || [];
+                                      updateItem<Announcement>('announcements', item.id, {
+                                        relatedProducts: selected
+                                          ? current.filter(n => n !== p.name)
+                                          : [...current, p.name],
+                                      });
+                                    }}
+                                    className={`px-2.5 py-1 text-[10px] font-semibold rounded-lg border transition-all ${
+                                      selected
+                                        ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40'
+                                        : 'bg-white/[0.04] text-gray-500 border-white/10 hover:bg-white/[0.08] hover:text-gray-300'
+                                    }`}
+                                  >
+                                    {selected ? '✓ ' : ''}{p.name}
+                                  </button>
+                                );
+                              })}
+                          </div>
+                          {(item.relatedProducts || []).length > 0 && (
+                            <p className="text-[10px] text-cyan-400/70 mt-1.5">
+                              {(item.relatedProducts || []).length} ürünle bağlantılı: {(item.relatedProducts || []).join(', ')}
+                            </p>
+                          )}
+                        </div>
+                      )}
+                      {content.products.filter(p => p.active).length === 0 && (
+                        <p className="text-[10px] text-gray-600 mt-2 pl-1">
+                          Ürün bağlamak için önce "Ürünler" sekmesinden vitrin ürünleri ekleyin.
+                        </p>
+                      )}
                     </motion.div>
                   ))}
-                  <AddButton label="Yeni Haber Ekle" onClick={() => addItem('announcements', { id: crypto.randomUUID(), title: '', text: '', date: new Date().toISOString().split('T')[0], badge: 'Duyuru', imageUrl: '', active: true })} color="cyan" />
+                  <AddButton label="Yeni Haber Ekle" onClick={() => addItem('announcements', { id: crypto.randomUUID(), title: '', text: '', date: new Date().toISOString().split('T')[0], badge: 'Duyuru', imageUrl: '', active: true, relatedProducts: [] })} color="cyan" />
                 </div>
               )}
 
