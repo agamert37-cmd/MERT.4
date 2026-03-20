@@ -1,48 +1,100 @@
 @import "tailwindcss";
 
-/* Hide scrollbar utility */
-.no-scrollbar::-webkit-scrollbar {
-  display: none;
-}
+/* ─── Scrollbar Utilities ─────────────────────────────────────────────────── */
+.no-scrollbar::-webkit-scrollbar { display: none; }
 .no-scrollbar {
   -ms-overflow-style: none;
   scrollbar-width: none;
 }
 
-/* Mobile safe area padding */
+/* ─── Safe Area Insets (notch / Dynamic Island / home indicator) ──────────── */
 @supports (padding-bottom: env(safe-area-inset-bottom)) {
-  .pb-safe {
-    padding-bottom: env(safe-area-inset-bottom, 0px);
-  }
+  .pb-safe { padding-bottom: env(safe-area-inset-bottom, 0px); }
+  .pt-safe { padding-top: env(safe-area-inset-top, 0px); }
+  .pl-safe { padding-left: env(safe-area-inset-left, 0px); }
+  .pr-safe { padding-right: env(safe-area-inset-right, 0px); }
 }
 
-/* Mobile bottom nav spacing — adds padding for pages so content isn't hidden behind nav */
+/* ─── Mobile Bottom Nav Spacing ───────────────────────────────────────────── */
+/* Sayfaların içeriği mobil nav'ın arkasında kalmasın */
 @media (max-width: 1023px) {
   main {
-    padding-bottom: 4.5rem;
+    padding-bottom: calc(4.5rem + env(safe-area-inset-bottom, 0px));
   }
 }
 
-/* Better touch targets */
+/* ─── Touch Targets (Apple HIG: 44px, Material: 48px) ────────────────────── */
 @media (pointer: coarse) {
   button, a, [role="button"] {
-    min-height: 36px;
+    min-height: 44px;       /* iOS HIG minimum dokunma hedefi */
   }
   input, select, textarea {
-    font-size: 16px !important; /* Prevent iOS zoom on focus */
+    font-size: 16px !important; /* iOS'ta odaklanınca zoom engelle */
+    min-height: 44px;
   }
 }
 
-/* Momentum scrolling for mobile */
+/* ─── Momentum / Smooth Scrolling ────────────────────────────────────────── */
 .custom-scrollbar {
   -webkit-overflow-scrolling: touch;
+  scroll-behavior: smooth;
 }
 
+/* ─── Horizontal Table Scroll (mobil tablo yardımcısı) ───────────────────── */
+.table-mobile-scroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  /* Kaydırılabilir olduğunu gösteren soluk gradient ipucu */
+  background:
+    linear-gradient(to right, transparent 96%, rgba(59,130,246,0.08)),
+    linear-gradient(to left,  transparent 96%, rgba(59,130,246,0.08));
+  background-attachment: local, local;
+}
+
+/* ─── Active / Tap States (dokunma geri bildirimi) ───────────────────────── */
+@media (pointer: coarse) {
+  button:active, [role="button"]:active {
+    opacity: 0.75;
+    transform: scale(0.97);
+    transition: opacity 60ms, transform 60ms;
+  }
+}
+
+/* ─── Landscape Orientation ──────────────────────────────────────────────── */
+@media (max-width: 1023px) and (orientation: landscape) {
+  /* Yatay modda alt nav daha ince — yükseklik kazancı */
+  nav.fixed.bottom-0 {
+    height: 3rem;
+  }
+  /* Yatay modda main padding daha az */
+  main {
+    padding-bottom: calc(3rem + env(safe-area-inset-bottom, 0px));
+  }
+}
+
+/* ─── Pull-to-Refresh Indicator ──────────────────────────────────────────── */
+.pull-indicator {
+  position: fixed;
+  top: env(safe-area-inset-top, 0px);
+  left: 50%;
+  transform: translateX(-50%) translateY(-100%);
+  z-index: 200;
+  transition: transform 0.2s ease;
+  pointer-events: none;
+}
+
+/* ─── Text Selection on Mobile ───────────────────────────────────────────── */
+.no-select {
+  -webkit-user-select: none;
+  user-select: none;
+}
+.select-text {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+/* ─── Shimmer animation ──────────────────────────────────────────────────── */
 @keyframes shimmer {
-  0% {
-    transform: translateX(-100%);
-  }
-  100% {
-    transform: translateX(100%);
-  }
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
 }
