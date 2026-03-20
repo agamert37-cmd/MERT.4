@@ -191,7 +191,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     // Eğer şifre düz metin olarak kayıtlıysa, bunu güvenli (hashed) versiyona geçir
-    const isPlaintextMatch = (userPassword && userPassword === trimmedPassword) || (userPin && userPin === trimmedPassword);
+    // Not: Her alan kendi trimmedPassword eşleşmesiyle ayrı ayrı kontrol edilir.
+    // password ile giriş yapıldığında pin'in hash'lenmesi engellenir, tersi de geçerlidir.
+    const isPasswordPlaintext = !!(userPassword && userPassword === trimmedPassword);
+    const isPinPlaintext      = !!(userPin && userPin === trimmedPassword);
+    const isPlaintextMatch    = isPasswordPlaintext || isPinPlaintext;
 
     const loggedInUser: User = { 
       id: foundUser.id, 
@@ -224,12 +228,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           status: 'online', 
           lastLogin: new Date().toLocaleString('tr-TR'), 
           last_login: new Date().toLocaleString('tr-TR'),
-          // Migration
-          ...(isPlaintextMatch ? {
-            password: p.password ? hashedPassword : p.password,
-            pinCode: p.pinCode ? hashedPassword : p.pinCode,
-            pin_code: p.pin_code ? hashedPassword : p.pin_code
-          } : {})
+          // Migration: her alan yalnızca kendi düz metin eşleşmesi varsa hash'lenir
+          ...(isPasswordPlaintext && p.password ? { password: hashedPassword } : {}),
+          ...(isPinPlaintext && p.pinCode  ? { pinCode:  hashedPassword } : {}),
+          ...(isPinPlaintext && p.pin_code ? { pin_code: hashedPassword } : {}),
         };
       }
       return p;
@@ -250,8 +252,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       role: foundUser.role === 'Yönetici' ? 'Yönetici' : 'Personel',
       department: foundUser.department || foundUser.position || 'Genel',
       permissions: parsedPermissions,
-      pinCode: isPlaintextMatch && userPin ? hashedPassword : (foundUser.pinCode || foundUser.pin_code),
-      password: isPlaintextMatch && userPassword ? hashedPassword : foundUser.password,
+      // Her alan yalnızca kendi düz metin eşleşmesi varsa hash'lenir
+      pinCode: isPinPlaintext ? hashedPassword : (foundUser.pinCode || foundUser.pin_code),
+      password: isPasswordPlaintext ? hashedPassword : foundUser.password,
     });
 
     // Cihaz izleme ve ihlal tespiti

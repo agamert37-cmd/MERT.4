@@ -115,10 +115,12 @@ export function DashboardPage() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [chartView, setChartView] = useState<'area' | 'bar' | 'composed'>('composed');
 
-  // Sayfa ziyaretini logla
+  // Sayfa ziyaretini logla (kullanıcı yüklenince bir kez)
   useEffect(() => {
-    logActivity('page_visit', 'Dashboard sayfası görüntülendi', { employeeName: user?.name });
-  }, []);
+    if (user?.name) {
+      logActivity('page_visit', 'Dashboard sayfası görüntülendi', { employeeName: user.name });
+    }
+  }, [user?.name]);
 
   useEffect(() => {
     const handler = () => setRefreshCounter(c => c + 1);

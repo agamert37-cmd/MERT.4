@@ -40,24 +40,23 @@ async function runCloudAutoBackup() {
   }
 }
 
-function scheduleCloudAutoBackup(): (() => void) | null {
+function scheduleCloudAutoBackup(): () => void {
   try {
     const raw = localStorage.getItem(CLOUD_AUTO_BACKUP_CONFIG_KEY);
     const config = raw ? JSON.parse(raw) : {};
-    if (!config.enabled) return null;
+    if (!config.enabled) return () => {};
 
     const intervalMs = (config.intervalHours || 24) * 60 * 60 * 1000;
     const lastRun = config.lastRun ? new Date(config.lastRun).getTime() : 0;
     const nextRun = lastRun + intervalMs;
     const delay = Math.max(nextRun - Date.now(), 60_000); // en az 1 dakika bekle
 
-    const timer = setTimeout(() => {
+    // Her iki ID'yi de dışarıda tut ki cleanup fonksiyonu temizleyebilsin
+    let periodicId: ReturnType<typeof setInterval> | null = null;
+
+    const timerId = setTimeout(() => {
       runCloudAutoBackup();
-      // İlk çalışmadan sonra periyodik tekrar başlat
-      const periodic = setInterval(runCloudAutoBackup, intervalMs);
-      // Cleanup fonksiyonu interval'ı temizlemez; component unmount'ta zaten duracak
-      // (setInterval ref'i burada tutmak için dış scope'a ihtiyaç var, basit tutuyoruz)
-      void periodic;
+      periodicId = setInterval(runCloudAutoBackup, intervalMs);
     }, delay);
 
     console.log(
@@ -65,9 +64,13 @@ function scheduleCloudAutoBackup(): (() => void) | null {
       'color: #a855f7'
     );
 
-    return () => clearTimeout(timer);
+    // Hem timeout hem de interval temizlenir
+    return () => {
+      clearTimeout(timerId);
+      if (periodicId !== null) clearInterval(periodicId);
+    };
   } catch {
-    return null;
+    return () => {};
   }
 }
 // ─────────────────────────────────────────────────────────────────────────────
@@ -82,7 +85,7 @@ export default function App() {
   }, []);
 
   // Uygulama acildiginda tum senkronizasyon servislerini baslat
-  const cloudBackupCleanupRef = useRef<(() => void) | null>(null);
+  const cloudBackupCleanupRef = useRef<() => void>(() => {});
 
   useEffect(() => {
     // 1. Buluttan/yerel depodan verileri cek ve localStorage ile merge et
@@ -118,7 +121,7 @@ export default function App() {
       stopAutoSync();
       stopAutoBackup();
       stopHealthHeartbeat();
-      cloudBackupCleanupRef.current?.();
+      cloudBackupCleanupRef.current();
     };
   }, []);
 
