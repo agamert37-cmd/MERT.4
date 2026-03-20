@@ -20,6 +20,8 @@ import { usePageSecurity } from '../hooks/usePageSecurity';
 import { useTableSync } from '../hooks/useTableSync';
 import { productToDb, productFromDb } from './StokPage';
 import { cariToDb, cariFromDb } from './CariPage';
+import { generateUBLXML, downloadXML, type UBLFaturaData } from '../utils/ublTr';
+import { getCompanyInfo } from './SettingsPage';
 
 // ─── Interfaces ────────────────────────────────────────────────
 export interface Fatura {
@@ -55,6 +57,14 @@ export interface Fatura {
   createdAt: string;
   cancelledAt?: string;
   cancelledBy?: string;
+  // e-Fatura / LUCA entegrasyon alanları (opsiyonel)
+  efatura?: {
+    status: 'bekliyor' | 'gonderildi' | 'onaylandi' | 'reddedildi';
+    ettn?: string;           // GİB tarafından atanan UUID (e-Fatura imzalandıktan sonra)
+    efaturaNo?: string;      // e-Fatura numarası (EAF2026...)
+    gonderimTarihi?: string; // Gönderim tarihi ISO
+    notlar?: string;
+  };
 }
 
 export interface FaturaItem {
@@ -468,6 +478,59 @@ export function FaturaPage() {
     logActivity('invoice_cancel', 'Fatura İptal Edildi', { employeeName: user?.name, page: 'Fatura', description: `Fatura ID: ${id} — ₺${fatura.grossAmount}` });
   };
 
+  /** UBL-TR XML indir — LUCA portala yüklemek için */
+  const handleDownloadUBL = (fatura: Fatura) => {
+    if (fatura.type !== 'satis') { toast.error('UBL-TR XML sadece satış faturaları için oluşturulabilir'); return; }
+    const company = getCompanyInfo();
+    const satirlar = fatura.faturaItems.map((item, i) => ({
+      sira: i + 1,
+      aciklama: item.name,
+      miktar: item.quantity,
+      birim: item.unit || 'KG',
+      birimFiyat: item.unitPrice,
+      matrah: item.totalPrice,
+      kdvOrani: item.itemKdvRate ?? fatura.kdvRate,
+      kdvTutar: item.itemKdvAmount ?? (item.totalPrice * (item.itemKdvRate ?? fatura.kdvRate) / 100),
+      satirToplam: item.itemGrossTotal ?? (item.totalPrice * (1 + (item.itemKdvRate ?? fatura.kdvRate) / 100)),
+    }));
+    const ublData: UBLFaturaData = {
+      faturaUUID: fatura.id.replace(/[^a-f0-9-]/gi, '') || crypto.randomUUID(),
+      faturaNo: fatura.faturaNo || `EAF${new Date().getFullYear()}${String(Date.now()).slice(-9)}`,
+      tarih: fatura.date,
+      saat: new Date(fatura.createdAt).toTimeString().slice(0, 8),
+      faturaType: 'SATIS',
+      saticiVKN: (company as any).vkn || '0000000000',
+      saticiUnvan: company.companyName || 'İŞLEYEN ET',
+      saticiAdres: (company as any).address || '',
+      saticiIlce: (company as any).ilce || '',
+      saticiIl: (company as any).il || 'İstanbul',
+      aliciUnvan: fatura.counterParty,
+      aliciVKN: undefined,
+      satirlar: satirlar.length > 0 ? satirlar : [{ sira: 1, aciklama: fatura.counterParty, miktar: 1, birim: 'Adet', birimFiyat: fatura.netAmount, matrah: fatura.netAmount, kdvOrani: fatura.kdvRate, kdvTutar: fatura.kdvAmount, satirToplam: fatura.grossAmount }],
+      matrahToplam: fatura.netAmount,
+      kdvToplam: fatura.kdvAmount,
+      genelToplam: fatura.grossAmount,
+      para: 'TRY',
+      aciklama: fatura.description,
+    };
+    const xml = generateUBLXML(ublData);
+    const fatNo = fatura.faturaNo || fatura.id.slice(-8).toUpperCase();
+    downloadXML(xml, `efatura_${fatNo}_${fatura.date}.xml`);
+    // e-Fatura durumunu "bekliyor" olarak işaretle
+    const updated = faturalar.map(f => f.id === fatura.id ? { ...f, efatura: { ...(f.efatura || {}), status: 'bekliyor' as const, efaturaNo: ublData.faturaNo } } : f);
+    setInStorage(StorageKey.FATURALAR, updated);
+    logActivity('efatura_xml_download', 'e-Fatura UBL-TR XML indirildi', { employeeName: user?.name, page: 'Fatura', description: `${ublData.faturaNo}` });
+    toast.success(`UBL-TR XML indirildi — LUCA portalına yükleyebilirsiniz`, { description: 'turmobefatura.luca.com.tr adresine giriş yapın' });
+  };
+
+  /** e-Fatura durumunu güncelle */
+  const updateEfaturaStatus = (id: string, status: Fatura['efatura']) => {
+    const updated = faturalar.map(f => f.id === id ? { ...f, efatura: status } : f);
+    setInStorage(StorageKey.FATURALAR, updated);
+    if (selectedFatura?.id === id) setSelectedFatura(updated.find(f => f.id === id) || null);
+    toast.success('e-Fatura durumu güncellendi');
+  };
+
   // Delete fatura
   const handleDelete = (id: string) => {
     if (!canDelete) { toast.error(t('fatura.err.noPermDelete')); return; }
@@ -822,6 +885,11 @@ export function FaturaPage() {
 
                 {/* Actions */}
                 <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity" onClick={e => e.stopPropagation()}>
+                  {fatura.status === 'aktif' && fatura.type === 'satis' && (
+                    <button onClick={() => handleDownloadUBL(fatura)} className="p-2 hover:bg-blue-500/10 rounded-lg transition-all" title="e-Fatura XML İndir (LUCA)">
+                      <Download className="w-4 h-4 text-blue-400" />
+                    </button>
+                  )}
                   {fatura.status === 'aktif' && (
                     <button onClick={() => handleCancel(fatura.id)} className="p-2 hover:bg-red-500/10 rounded-lg transition-all" title="İptal Et">
                       <XCircle className="w-4 h-4 text-red-400" />
@@ -831,6 +899,20 @@ export function FaturaPage() {
                     <Trash2 className="w-4 h-4 text-red-400" />
                   </button>
                 </div>
+                {/* e-Fatura durum rozeti */}
+                {fatura.efatura && (
+                  <div className="mt-2 pt-2 border-t border-white/5 flex items-center gap-2">
+                    <span className={`px-2 py-0.5 rounded-md text-[9px] font-bold ${
+                      fatura.efatura.status === 'onaylandi' ? 'bg-emerald-500/20 text-emerald-400' :
+                      fatura.efatura.status === 'reddedildi' ? 'bg-red-500/20 text-red-400' :
+                      fatura.efatura.status === 'gonderildi' ? 'bg-blue-500/20 text-blue-400' :
+                      'bg-amber-500/20 text-amber-400'
+                    }`}>
+                      e-Fatura {fatura.efatura.status === 'bekliyor' ? 'Bekliyor' : fatura.efatura.status === 'gonderildi' ? 'Gönderildi' : fatura.efatura.status === 'onaylandi' ? 'Onaylandı ✓' : 'Reddedildi ✗'}
+                    </span>
+                    {fatura.efatura.efaturaNo && <span className="text-[9px] font-mono text-gray-500">{fatura.efatura.efaturaNo}</span>}
+                  </div>
+                )}
               </div>
 
               {/* Items preview */}
@@ -1370,6 +1452,28 @@ export function FaturaPage() {
                     </div>
                   )}
                 </div>
+
+                {/* ─── e-Fatura / LUCA Bölümü ───────────────────────── */}
+                {selectedFatura.type === 'satis' && selectedFatura.status === 'aktif' && (
+                  <div className="mx-6 mb-4 p-4 rounded-2xl bg-blue-500/5 border border-blue-500/15">
+                    <h3 className="text-xs font-bold text-blue-400 uppercase tracking-widest mb-3 flex items-center gap-2">
+                      <FileCheck className="w-3.5 h-3.5" /> e-Fatura (LUCA)
+                    </h3>
+                    <div className="flex items-center gap-3 mb-3">
+                      {(['bekliyor', 'gonderildi', 'onaylandi', 'reddedildi'] as const).map(s => (
+                        <button key={s} onClick={() => updateEfaturaStatus(selectedFatura.id, { ...(selectedFatura.efatura || { status: 'bekliyor' }), status: s })}
+                          className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition-all border ${selectedFatura.efatura?.status === s ? (s === 'onaylandi' ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' : s === 'reddedildi' ? 'bg-red-500/20 text-red-400 border-red-500/30' : s === 'gonderildi' ? 'bg-blue-500/20 text-blue-400 border-blue-500/30' : 'bg-amber-500/20 text-amber-400 border-amber-500/30') : 'bg-white/5 text-gray-500 border-white/10 hover:bg-white/10'}`}>
+                          {s === 'bekliyor' ? 'Bekliyor' : s === 'gonderildi' ? 'Gönderildi' : s === 'onaylandi' ? 'Onaylandı ✓' : 'Reddedildi ✗'}
+                        </button>
+                      ))}
+                    </div>
+                    <button onClick={() => handleDownloadUBL(selectedFatura)}
+                      className="flex items-center gap-2 px-4 py-2 bg-blue-600/20 hover:bg-blue-600/30 border border-blue-500/25 rounded-xl text-sm font-bold text-blue-300 transition-all">
+                      <Download className="w-4 h-4" /> UBL-TR XML İndir
+                    </button>
+                    <p className="text-[10px] text-gray-600 mt-2">XML dosyasını <a href="https://turmobefatura.luca.com.tr" target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:underline">turmobefatura.luca.com.tr</a> adresine yükleyin.</p>
+                  </div>
+                )}
 
                 <div className="p-6 border-t border-white/10 flex gap-3">
                   {selectedFatura.status === 'aktif' && (

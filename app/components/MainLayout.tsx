@@ -41,7 +41,8 @@ import {
   Megaphone,
   Globe,
   FileEdit,
-  FileCheck
+  FileCheck,
+  Landmark
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { ProfileEditModal } from './ProfileEditModal';
@@ -82,6 +83,7 @@ const menuItems: MenuItem[] = [
   { path: '/raporlar', labelKey: 'nav.reports', icon: FileText, color: 'cyan', permKey: 'raporlar' },
   { path: '/fis-gecmisi', labelKey: 'nav.receiptHistory', icon: Receipt, color: 'amber', permKey: 'raporlar' },
   { path: '/faturalar', labelKey: 'nav.invoices', icon: FileCheck, color: 'indigo', permKey: 'kasa' },
+  { path: '/banka', labelKey: 'nav.bank', icon: Landmark, color: 'blue', permKey: 'kasa' },
   { path: '/dosyalar', labelKey: 'nav.files', icon: FolderOpen, color: 'teal', permKey: 'ayarlar' },
   { path: '/pazarlama', labelKey: 'nav.marketing', icon: Megaphone, color: 'pink', permKey: 'ayarlar' },
   { path: '/yedekler', labelKey: 'nav.backups', icon: Database, color: 'slate', permKey: 'ayarlar' },
@@ -107,6 +109,7 @@ const breadcrumbKeyMap: Record<string, string> = {
   '/raporlar': 'breadcrumb.reports',
   '/fis-gecmisi': 'breadcrumb.receiptHistory',
   '/faturalar': 'breadcrumb.invoices',
+  '/banka': 'breadcrumb.bank',
   '/dosyalar': 'breadcrumb.files',
   '/pazarlama': 'breadcrumb.marketing',
   '/yedekler': 'breadcrumb.backups',

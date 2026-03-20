@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import OpenAI from 'openai';
-import { Settings, Database, Sparkles, Save, Trash2, Eye, EyeOff, CheckCircle, XCircle, Shield, ExternalLink, Building2, Phone, MapPin, FileText, Hash, Monitor, Upload, Loader2, RefreshCw, X, Plus } from 'lucide-react';
+import { Settings, Database, Sparkles, Save, Trash2, Eye, EyeOff, CheckCircle, XCircle, Shield, ExternalLink, Building2, Phone, MapPin, FileText, Hash, Monitor, Upload, Loader2, RefreshCw, X, Plus, MessageCircle, Bell, ToggleLeft, ToggleRight } from 'lucide-react';
+import { DEFAULT_SMS_CONFIG, type SMSConfig } from '../utils/smsService';
 import { getOpenAIKey, saveOpenAIKey, clearOpenAIKey, isOpenAIConfigured, getEmbeddedSupabaseConfig } from '../lib/api-config';
 import { reinitializeOpenAI } from '../lib/chatgpt-assistant';
 import { testSupabaseConnection } from '../lib/supabase';
@@ -56,6 +57,20 @@ export function SettingsPage() {
   const [showKey, setShowKey] = useState(false);
   const [testing, setTesting] = useState(false);
   const [testResults, setTestResults] = useState({ supabase: null as boolean | null, openai: null as boolean | null });
+
+  // SMS yapılandırması
+  const [smsConfig, setSmsConfig] = useState<SMSConfig>(() => {
+    const s = getFromStorage<any>(StorageKey.SYSTEM_SETTINGS);
+    return s?.smsConfig ? { ...DEFAULT_SMS_CONFIG, ...s.smsConfig } : DEFAULT_SMS_CONFIG;
+  });
+  const [showSmsPass, setShowSmsPass] = useState(false);
+
+  const saveSmsConfig = () => {
+    const existing = getFromStorage<any>(StorageKey.SYSTEM_SETTINGS) || {};
+    setInStorage(StorageKey.SYSTEM_SETTINGS, { ...existing, smsConfig });
+    logActivity('settings_change', 'SMS yapılandırması kaydedildi', { employeeName: user?.name, page: 'Ayarlar' });
+    toast.success('SMS ayarları kaydedildi');
+  };
   const [integrityReport, setIntegrityReport] = useState<IntegrityReport | null>(null);
   const [integrityRunning, setIntegrityRunning] = useState(false);
   const [companyInfo, setCompanyInfo] = useState<CompanyInfo>(() => getCompanyInfo());
@@ -404,6 +419,89 @@ export function SettingsPage() {
           </div>
         </div>
       </div>
+
+      {/* ─── SMS Bildirimleri ────────────────────────────────── */}
+      <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}
+        className="bg-[#111] rounded-2xl sm:rounded-3xl p-5 sm:p-8 border border-white/5 space-y-5">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-green-500/20 to-emerald-500/20 border border-green-500/20 flex items-center justify-center">
+              <MessageCircle className="w-5 h-5 text-green-400" />
+            </div>
+            <div>
+              <h2 className="text-lg font-bold text-white">SMS Bildirimleri</h2>
+              <p className="text-xs text-gray-500">Netgsm entegrasyonu — satış, tahsilat ve stok uyarıları</p>
+            </div>
+          </div>
+          <button onClick={() => setSmsConfig(c => ({ ...c, enabled: !c.enabled }))}
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-all border ${smsConfig.enabled ? 'bg-green-500/15 text-green-400 border-green-500/25' : 'bg-white/5 text-gray-500 border-white/10'}`}>
+            {smsConfig.enabled ? <><ToggleRight className="w-5 h-5" /> Aktif</> : <><ToggleLeft className="w-5 h-5" /> Pasif</>}
+          </button>
+        </div>
+
+        {/* API Bilgileri */}
+        <div className="p-4 rounded-xl bg-white/3 border border-white/5 space-y-3">
+          <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">Netgsm API Bilgileri</p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-bold text-gray-500 mb-1.5">Kullanıcı Kodu</label>
+              <input value={smsConfig.usercode} onChange={e => setSmsConfig(c => ({ ...c, usercode: e.target.value }))}
+                className="w-full bg-black/40 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-green-500/40 transition-all"
+                placeholder="Netgsm kullanıcı kodu" />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-gray-500 mb-1.5">Şifre</label>
+              <div className="relative">
+                <input type={showSmsPass ? 'text' : 'password'} value={smsConfig.password} onChange={e => setSmsConfig(c => ({ ...c, password: e.target.value }))}
+                  className="w-full bg-black/40 border border-white/10 rounded-xl px-3 py-2.5 pr-10 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-green-500/40 transition-all"
+                  placeholder="Netgsm şifresi" />
+                <button type="button" onClick={() => setShowSmsPass(v => !v)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300">
+                  {showSmsPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-gray-500 mb-1.5">Gönderici Başlığı (max 11 karakter)</label>
+              <input value={smsConfig.msgheader} onChange={e => setSmsConfig(c => ({ ...c, msgheader: e.target.value.slice(0, 11) }))}
+                className="w-full bg-black/40 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-green-500/40 transition-all"
+                placeholder="İŞLEYENET" maxLength={11} />
+              <p className="text-[10px] text-gray-600 mt-1">GİB/BTK onaylı başlık olmalı. {smsConfig.msgheader.length}/11</p>
+            </div>
+          </div>
+          <div className="pt-1 pb-0.5">
+            <p className="text-[10px] text-gray-600">
+              Netgsm hesabı için: <a href="https://www.netgsm.com.tr" target="_blank" rel="noopener noreferrer" className="text-green-400 hover:underline">netgsm.com.tr</a> —
+              API dokümantasyonu: <a href="https://www.netgsm.com.tr/dokuman/" target="_blank" rel="noopener noreferrer" className="text-green-400 hover:underline">netgsm.com.tr/dokuman</a>
+            </p>
+          </div>
+        </div>
+
+        {/* Tetikleyiciler */}
+        <div className="p-4 rounded-xl bg-white/3 border border-white/5 space-y-3">
+          <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">Otomatik Bildirimler</p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+            {([
+              { key: 'onSale', label: 'Satış Fişi Oluşturulunca', desc: 'Müşteriye otomatik satış teyidi gönder' },
+              { key: 'onCollection', label: 'Tahsilat Yapılınca', desc: 'Müşteriye ödeme alındı bildirimi gönder' },
+              { key: 'onInvoice', label: 'Fatura Düzenlenince', desc: 'Müşteriye fatura oluşturuldu bildirimi' },
+              { key: 'onLowStock', label: 'Kritik Stok Uyarısı', desc: 'Personele minimum stok uyarısı gönder' },
+            ] as { key: keyof SMSConfig['triggers']; label: string; desc: string }[]).map(t => (
+              <label key={t.key} className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-all ${smsConfig.triggers[t.key] ? 'bg-green-500/8 border-green-500/20' : 'bg-black/20 border-white/5 hover:border-white/10'}`}>
+                <input type="checkbox" checked={smsConfig.triggers[t.key]} onChange={e => setSmsConfig(c => ({ ...c, triggers: { ...c.triggers, [t.key]: e.target.checked } }))} className="mt-0.5 accent-green-500" />
+                <div>
+                  <p className="text-sm font-semibold text-white">{t.label}</p>
+                  <p className="text-[10px] text-gray-500 mt-0.5">{t.desc}</p>
+                </div>
+              </label>
+            ))}
+          </div>
+        </div>
+
+        <button onClick={saveSmsConfig}
+          className="flex items-center gap-2 px-5 py-2.5 bg-green-600 hover:bg-green-500 rounded-xl text-sm font-bold text-white transition-all shadow-lg shadow-green-600/20">
+          <Save className="w-4 h-4" /> SMS Ayarlarını Kaydet
+        </button>
+      </motion.div>
 
       {/* Local Repo Panel */}
       <LocalRepoPanel />
