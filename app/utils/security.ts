@@ -272,34 +272,55 @@ interface RateLimitEntry {
   windowStart: number;
 }
 
+// Bellek içi yedek (sessionStorage erişilemezse kullanılır)
 const rateLimitStore = new Map<string, RateLimitEntry>();
 
+function getRateLimitEntry(key: string): RateLimitEntry | null {
+  try {
+    const raw = sessionStorage.getItem(`rl_${key}`);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return rateLimitStore.get(key) || null;
+  }
+}
+
+function setRateLimitEntry(key: string, entry: RateLimitEntry): void {
+  try {
+    sessionStorage.setItem(`rl_${key}`, JSON.stringify(entry));
+  } catch {
+    // sessionStorage doluysa bellekte tut
+  }
+  rateLimitStore.set(key, entry);
+}
+
 /**
- * Rate limit kontrolu
+ * Rate limit kontrolu — sessionStorage'da kalıcı (sayfa yenilemesinde korunur)
  * @param key - Benzersiz anahtar (orn: 'login_admin', 'api_export')
  * @param maxRequests - Pencere basina maksimum istek
  * @param windowMs - Pencere suresi (ms)
  */
 export function checkRateLimit(key: string, maxRequests: number, windowMs: number): { allowed: boolean; remaining: number; resetIn: number } {
   const now = Date.now();
-  const entry = rateLimitStore.get(key);
-  
+  const entry = getRateLimitEntry(key);
+
   if (!entry || now - entry.windowStart > windowMs) {
-    rateLimitStore.set(key, { count: 1, windowStart: now });
+    setRateLimitEntry(key, { count: 1, windowStart: now });
     return { allowed: true, remaining: maxRequests - 1, resetIn: windowMs };
   }
-  
+
   if (entry.count >= maxRequests) {
     const resetIn = windowMs - (now - entry.windowStart);
     return { allowed: false, remaining: 0, resetIn };
   }
-  
-  entry.count++;
-  return { allowed: true, remaining: maxRequests - entry.count, resetIn: windowMs - (now - entry.windowStart) };
+
+  const updated = { count: entry.count + 1, windowStart: entry.windowStart };
+  setRateLimitEntry(key, updated);
+  return { allowed: true, remaining: maxRequests - updated.count, resetIn: windowMs - (now - entry.windowStart) };
 }
 
 /** Rate limit sayacini sifirla */
 export function resetRateLimit(key: string): void {
+  try { sessionStorage.removeItem(`rl_${key}`); } catch { /* ignore */ }
   rateLimitStore.delete(key);
 }
 

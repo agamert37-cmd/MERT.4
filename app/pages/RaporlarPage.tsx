@@ -155,7 +155,7 @@ export function RaporlarPage() {
       const parts = dateString.split('.');
       if (parts.length === 3) d = new Date(`${parts[2]}-${parts[1]}-${parts[0]}`);
     }
-    if (isNaN(d.getTime())) return true;
+    if (isNaN(d.getTime())) return false; // Geçersiz tarih → rapora dahil etme
     const start = new Date(dateRange.start); start.setHours(0, 0, 0, 0);
     const end = new Date(dateRange.end); end.setHours(23, 59, 59, 999);
     return d >= start && d <= end;
@@ -351,9 +351,9 @@ export function RaporlarPage() {
   const filteredExpense = useMemo(() => expenseCategoryFilter ? expenseData.filter(e => e.category === expenseCategoryFilter) : expenseData, [expenseData, expenseCategoryFilter]);
 
   // Max values for inline bars
-  const maxSaleAmount = useMemo(() => Math.max(...salesData.map(s => Math.abs(s.amount)), 1), [salesData]);
-  const maxStockValue = useMemo(() => Math.max(...stockData.map(s => s.stock * s.price), 1), [stockData]);
-  const maxPersonelSales = useMemo(() => Math.max(...personelPerformansData.map((p: any) => p.netSales), 1), [personelPerformansData]);
+  const maxSaleAmount = useMemo(() => Math.max(1, ...salesData.map(s => Math.abs(s.amount))), [salesData]);
+  const maxStockValue = useMemo(() => Math.max(1, ...stockData.map(s => s.stock * s.price)), [stockData]);
+  const maxPersonelSales = useMemo(() => Math.max(1, ...personelPerformansData.map((p: any) => p.netSales)), [personelPerformansData]);
 
   // Security log data from activity logger
   const securityLogs = useMemo(() => {
