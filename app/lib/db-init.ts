@@ -180,7 +180,8 @@ export async function initializeDatabase(forceReinit = false): Promise<DbInitRes
   // 2. Eksik tablolar varsa kur
   console.log('%c[DB Init] Tablolar eksik, otomatik kurulum başlıyor...', 'color: #f59e0b; font-weight: bold');
   const setupResult = await setupDatabase();
-  _initResult = setupResult;
+  // Cache'e yaz (setup sonucu 'ready' veya 'error' olur)
+  _initResult = { ...setupResult, status: setupResult.status };
 
   if (setupResult.status === 'ready') {
     console.log('%c[DB Init] Kurulum tamamlandı ✓', 'color: #22c55e; font-weight: bold');

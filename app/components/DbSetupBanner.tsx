@@ -12,9 +12,9 @@ import React, { useEffect, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { Database, CheckCircle2, Loader2, AlertTriangle, RefreshCw, X } from 'lucide-react';
 import {
-  initializeDatabase,
+  checkDatabaseStatus,
+  setupDatabase,
   resetDbInitCache,
-  type DbInitResult,
   type DbInitStatus,
 } from '../lib/db-init';
 
@@ -37,47 +37,45 @@ export function DbSetupBanner({ onReady }: DbSetupBannerProps) {
     setStatus('checking');
     setMessage('Veritabanı tablolar kontrol ediliyor...');
     setVisible(true);
+    setDismissed(false);
 
-    const result: DbInitResult = await initializeDatabase();
+    // 1. Mevcut durumu kontrol et
+    const checkResult = await checkDatabaseStatus();
 
-    if (result.status === 'ready') {
+    if (checkResult.status === 'ready') {
       setStatus('ready');
       setMessage('Veritabanı hazır ✓');
       onReady?.();
-      // 3 saniye sonra banner'ı gizle
       setTimeout(() => setVisible(false), 3000);
-    } else if (result.status === 'setup_needed') {
-      setStatus('setting_up');
-      setMessage('Tablolar oluşturuluyor...');
-    } else if (result.status === 'error') {
+      return;
+    }
+
+    if (checkResult.status === 'error') {
       setStatus('error');
-      setMessage(result.message || 'Veritabanı bağlantı hatası');
+      setMessage(checkResult.message || 'Bağlantı hatası');
+      return;
+    }
+
+    // 2. Tablolar eksik → hemen kur
+    setStatus('setting_up');
+    setMessage('Tablolar oluşturuluyor...');
+
+    const setupResult = await setupDatabase();
+
+    if (setupResult.status === 'ready') {
+      setStatus('ready');
+      setMessage('Tablolar oluşturuldu, veritabanı hazır ✓');
+      onReady?.();
+      setTimeout(() => setVisible(false), 3000);
+    } else {
+      setStatus('error');
+      setMessage(setupResult.message || 'Kurulum başarısız');
     }
   };
 
   useEffect(() => {
     runInit();
   }, []);
-
-  // Kurulum devam ederken durumu takip et
-  useEffect(() => {
-    if (status !== 'setting_up') return;
-    const interval = setInterval(async () => {
-      const result = await initializeDatabase(true);
-      if (result.status === 'ready') {
-        setStatus('ready');
-        setMessage('Tablolar oluşturuldu, veritabanı hazır ✓');
-        onReady?.();
-        clearInterval(interval);
-        setTimeout(() => setVisible(false), 3000);
-      } else if (result.status === 'error') {
-        setStatus('error');
-        setMessage(result.message || 'Kurulum başarısız');
-        clearInterval(interval);
-      }
-    }, 4000);
-    return () => clearInterval(interval);
-  }, [status]);
 
   const handleRetry = () => {
     resetDbInitCache();
