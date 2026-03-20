@@ -160,7 +160,10 @@ export function TahsilatPage() {
   const generateInstallmentPlan = useCallback(() => {
     const total = parseFloat(amount);
     if (isNaN(total) || total <= 0 || installmentCount < 2) return;
-    const perInstallment = Math.round((total / installmentCount) * 100) / 100;
+    // Tam kuruş aritmetiği ile yuvarlama hatalarını önle
+    const centTotal = Math.round(total * 100);
+    const centPerInstallment = Math.floor(centTotal / installmentCount);
+    const lastInstallmentCents = centTotal - centPerInstallment * (installmentCount - 1);
     const plan: InstallmentPlan[] = [];
     for (let i = 0; i < installmentCount; i++) {
       const date = new Date();
@@ -168,7 +171,7 @@ export function TahsilatPage() {
       plan.push({
         no: i + 1,
         date: date.toISOString().split('T')[0],
-        amount: i === installmentCount - 1 ? Math.round((total - perInstallment * (installmentCount - 1)) * 100) / 100 : perInstallment,
+        amount: i === installmentCount - 1 ? lastInstallmentCents / 100 : centPerInstallment / 100,
         status: 'pending',
       });
     }
@@ -223,8 +226,8 @@ export function TahsilatPage() {
     setShowConfirmDialog(false);
 
     const paymentAmount = paymentType === 'taksit'
-      ? installmentPlan.reduce((s, i) => s + i.amount, 0)
-      : parseFloat(amount);
+      ? installmentPlan.reduce((s, i) => s + (i.amount || 0), 0)
+      : (parseFloat(amount) || 0);
 
     // 1. Cari bakiyesini güncelle
     const allCari = getFromStorage<any[]>(StorageKey.CARI_DATA) || [];
@@ -238,7 +241,7 @@ export function TahsilatPage() {
       newHistory.unshift({
         id: `tx-tahsilat-${Date.now()}`,
         date: new Date().toISOString(),
-        type: 'credit',
+        type: 'debit',
         amount: paymentAmount,
         description: `${paymentTypeLabels[paymentType]} ${t('collection.title')}${descSuffix}`
       });

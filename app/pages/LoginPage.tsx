@@ -443,7 +443,7 @@ export function LoginPage() {
   const [lockoutRemaining, setLockoutRemaining] = useState(0);
 
   const { login, isAuthenticated } = useAuth();
-  const { setCurrentEmployee, availableEmployees } = useEmployee();
+  const { setCurrentEmployee, availableEmployees = [] } = useEmployee();
   const navigate = useNavigate();
   const { t } = useLanguage();
 

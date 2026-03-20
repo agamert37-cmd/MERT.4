@@ -117,7 +117,7 @@ export function DashboardPage() {
 
   // Sayfa ziyaretini logla
   useEffect(() => {
-    logActivity('page_visit', 'Dashboard sayfası görüntülendi', user?.name);
+    logActivity('page_visit', 'Dashboard sayfası görüntülendi', { employeeName: user?.name });
   }, []);
 
   useEffect(() => {
@@ -660,7 +660,7 @@ export function DashboardPage() {
         topProducts, recentActivities, user?.name || 'Sistem Kullanıcısı'
       );
       toast.success(t('dashboard.reportDownloaded'));
-      logActivity('report_export', 'Dashboard PDF raporu indirildi', user?.name);
+      logActivity('report_export', 'Dashboard PDF raporu indirildi', { employeeName: user?.name });
     }, 500);
   };
 

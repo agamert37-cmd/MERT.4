@@ -1722,7 +1722,7 @@ export function SalesPage() {
                     onClick={() => {
                       // Ödeme bilgisi opsiyonel - sadece ödeme yöntemi seçildiyse validate et
                       if (paymentInfo?.method) {
-                        if (!paymentInfo?.amount) {
+                        if ((paymentInfo?.amount ?? 0) <= 0) {
                           toast.error(t('salesPage.enterPaymentAmount'));
                           return;
                         }
@@ -1826,9 +1826,10 @@ export function SalesPage() {
                             newMovements.unshift(newMovement);
                           });
                           
+                          const currentQty = typeof stock.currentStock === 'number' && !isNaN(stock.currentStock) ? stock.currentStock : 0;
                           const updatedStock = {
                             ...stock,
-                            currentStock: stock.currentStock + netQuantityDiff,
+                            currentStock: currentQty + netQuantityDiff,
                             movements: newMovements
                           };
                           
@@ -2445,7 +2446,7 @@ export function SalesPage() {
                   </button>
                   <button
                     onClick={() => {
-                      if (!giderCategory || !giderAmount || !giderDescription || !paymentInfo) {
+                      if (!giderCategory || Number(giderAmount) <= 0 || !giderDescription || !paymentInfo) {
                         toast.error(t('salesPage.fillAllRequired'));
                         return;
                       }
