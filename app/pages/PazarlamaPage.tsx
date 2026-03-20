@@ -9,7 +9,7 @@ import {
   Megaphone, Save, Plus, Trash2, X, Edit2, Eye, EyeOff,
   Newspaper, BarChart3, Building2, Star,
   Gift, HelpCircle, Share2, Image as ImageIcon,
-  ChevronDown, Sparkles,
+  Sparkles,
   ExternalLink, Globe, ShoppingBag,
   Instagram, Facebook, Youtube, Twitter, Linkedin,
   ArrowUp, ArrowDown, Copy, Monitor, AlertCircle,
