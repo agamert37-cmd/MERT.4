@@ -155,12 +155,12 @@ export function StokHareketPage() {
         }
       }
       if (filterType !== 'all' && h.type !== filterType) return false;
-      if (searchTerm) {
-        const term = searchTerm.toLowerCase();
+      if (searchTerm?.trim()) {
+        const term = searchTerm.trim().toLowerCase();
         return (
-          h.productName.toLowerCase().includes(term) ||
-          h.cari.toLowerCase().includes(term) ||
-          h.source.toLowerCase().includes(term)
+          (h.productName || '').toLowerCase().includes(term) ||
+          (h.cari || '').toLowerCase().includes(term) ||
+          (h.source || '').toLowerCase().includes(term)
         );
       }
       return true;

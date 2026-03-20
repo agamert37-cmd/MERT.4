@@ -3,7 +3,7 @@
  * KV store bazli tablo durumlarini takip eder
  */
 
-import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { checkAllTables, type SetupStatus } from '../lib/auto-setup';
 import { SUPABASE_ANON_KEY } from '../lib/supabase-config';
 
@@ -28,10 +28,11 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
   const [isChecking, setIsChecking] = useState(false);
   const [lastChecked, setLastChecked] = useState<Date | null>(null);
   const [consecutiveFailures, setConsecutiveFailures] = useState(0);
+  const isCheckingRef = useRef(false); // Eş zamanlı çağrıları engelle
 
   const isSupabaseConfigured = useMemo(() => {
     return !!SUPABASE_ANON_KEY && SUPABASE_ANON_KEY.length > 10;
-  }, []);
+  }, [SUPABASE_ANON_KEY]);
 
   const recheckTables = useCallback(async () => {
     if (!isSupabaseConfigured) {
@@ -44,6 +45,9 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
       return;
     }
 
+    // Eş zamanlı çalışmayı önle
+    if (isCheckingRef.current) return;
+    isCheckingRef.current = true;
     setIsChecking(true);
     try {
       const status = await checkAllTables();
@@ -58,6 +62,7 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
       console.warn('SyncContext check error:', e);
       setConsecutiveFailures(prev => prev + 1);
     } finally {
+      isCheckingRef.current = false;
       setIsChecking(false);
     }
   }, [isSupabaseConfigured]);

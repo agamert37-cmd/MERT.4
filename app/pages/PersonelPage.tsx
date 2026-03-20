@@ -377,9 +377,10 @@ export function PersonelPage() {
       if (p.id === request.employeeId) {
         let perms: string[] = [];
         try { if (typeof p.permissions === 'string') perms = JSON.parse(p.permissions); else if (Array.isArray(p.permissions)) perms = p.permissions; } catch {}
-        if (!perms.includes(request.panel)) perms.push(request.panel);
-        const tempPerms = p.tempPermissions || {}; tempPerms[request.panel] = expiresAt;
-        return { ...p, permissions: JSON.stringify(perms), tempPermissions: tempPerms };
+        // Orijinal diziyi mutate etmemek için kopyala
+        const newPerms = perms.includes(request.panel) ? [...perms] : [...perms, request.panel];
+        const newTempPerms = { ...(p.tempPermissions || {}), [request.panel]: expiresAt };
+        return { ...p, permissions: JSON.stringify(newPerms), tempPermissions: newTempPerms };
       }
       return p;
     });
@@ -414,7 +415,8 @@ export function PersonelPage() {
 
     fisler.forEach(f => {
       if (f.createdBy === name || f.personel === name || f.employeeName === name) {
-        const fDate = f.date || new Date().toISOString();
+        if (!f.date) return; // Tarihsiz kayıt → aktivite analizine dahil etme
+        const fDate = f.date;
         allActions.push({
           date: fDate.split('T')[0], time: f.time || (fDate.includes('T') ? fDate.split('T')[1].substring(0, 5) : '12:00'),
           type: 'Satış İşlemi', desc: `${f.cariName || f.cari?.companyName || '-'} - ${(f.totalAmount || f.total || f.amount || 0).toLocaleString('tr-TR')} ₺`, page: 'Satış',
@@ -424,7 +426,8 @@ export function PersonelPage() {
 
     kasa.forEach(k => {
       if (k.createdBy === name) {
-        const kDate = k.date || new Date().toISOString();
+        if (!k.date) return; // Tarihsiz kayıt → aktivite analizine dahil etme
+        const kDate = k.date;
         allActions.push({
           date: kDate.split('T')[0], time: k.time || (kDate.includes('T') ? kDate.split('T')[1].substring(0, 5) : '12:00'),
           type: 'Kasa İşlemi', desc: `${k.type === 'income' ? 'Gelir' : 'Gider'}: ${k.amount?.toLocaleString('tr-TR')} ₺`, page: 'Kasa',
