@@ -1,0 +1,48 @@
+@import "tailwindcss";
+
+/* Hide scrollbar utility */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* Mobile safe area padding */
+@supports (padding-bottom: env(safe-area-inset-bottom)) {
+  .pb-safe {
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+}
+
+/* Mobile bottom nav spacing — adds padding for pages so content isn't hidden behind nav */
+@media (max-width: 1023px) {
+  main {
+    padding-bottom: 4.5rem;
+  }
+}
+
+/* Better touch targets */
+@media (pointer: coarse) {
+  button, a, [role="button"] {
+    min-height: 36px;
+  }
+  input, select, textarea {
+    font-size: 16px !important; /* Prevent iOS zoom on focus */
+  }
+}
+
+/* Momentum scrolling for mobile */
+.custom-scrollbar {
+  -webkit-overflow-scrolling: touch;
+}
+
+@keyframes shimmer {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
+}
