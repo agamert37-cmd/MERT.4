@@ -226,7 +226,7 @@ const tr: TranslationDict = {
   // ── Dashboard Release Notes ──────────────────────────
   'dashboard.releaseTitle': 'Sistem Güncellemesi: v4.2 KALKAN',
   'dashboard.releaseNew': 'YENİ',
-  'dashboard.releaseDesc': 'Sistem güvenliği sıkılaştırıldı. Brute Force koruması, 15 dakikalık otomatik oturum kapatma, aktivite bazlı detaylı güvenlik loglaması ve yeni <strong>Güvenlik Merkezi</strong> modülü devreye alındı. Arayüzde karanlık tema (dark mode) ve cam efektleri (frosted glass) optimize edildi.',
+  'dashboard.releaseDesc': 'Sistem güvenliği sıkılaştırıldı. Brute Force koruması, 15 dakikalık otomatik oturum kapatma, aktivite bazlı detaylı güvenlik loglaması ve yeni Güvenlik Merkezi modülü devreye alındı. Arayüzde karanlık tema (dark mode) ve cam efektleri (frosted glass) optimize edildi.',
 
   // ── Stock ──────────────────────────
   'stock.title': 'Stok Yönetimi',
@@ -1583,7 +1583,7 @@ const en: TranslationDict = {
   // ── Dashboard Release Notes ──────────────────────────
   'dashboard.releaseTitle': 'System Update: v4.2 KALKAN',
   'dashboard.releaseNew': 'NEW',
-  'dashboard.releaseDesc': 'System security has been tightened. Brute Force protection, 15-minute auto-logout, detailed activity-based security logging, and the new <strong>Security Center</strong> module have been deployed. The user interface was optimized with a dark theme and frosted glass effects.',
+  'dashboard.releaseDesc': 'System security has been tightened. Brute Force protection, 15-minute auto-logout, detailed activity-based security logging, and the new Security Center module have been deployed. The user interface was optimized with a dark theme and frosted glass effects.',
 
   // ── Stock ──────────────────────────
   'stock.title': 'Stock Management',
@@ -2890,7 +2890,7 @@ const ru: TranslationDict = {
   // ── Dashboard Release Notes ──────────────────────────
   'dashboard.releaseTitle': 'Обновление системы: v4.2 KALKAN',
   'dashboard.releaseNew': 'НОВОЕ',
-  'dashboard.releaseDesc': 'Повышена безопасность системы. Внедрена защита от Brute Force, автоматический выход через 15 минут, подробное журналирование безопасности и новый модуль <strong>Центр безопасности</strong>. Пользовательский интерфейс оптимизирован с помощью темной темы и эффектов матового стекла.',
+  'dashboard.releaseDesc': 'Повышена безопасность системы. Внедрена защита от Brute Force, автоматический выход через 15 минут, подробное журналирование безопасности и новый модуль Центр безопасности. Пользовательский интерфейс оптимизирован с помощью темной темы и эффектов матового стекла.',
 
   // ── Stock ──────────────────────────
   'stock.title': 'Управление складом',
@@ -4129,7 +4129,7 @@ const uz: TranslationDict = {
   // ── Dashboard Release Notes ──────────────────────────
   'dashboard.releaseTitle': 'Tizim yangilanishi: v4.2 KALKAN',
   'dashboard.releaseNew': 'YANGI',
-  'dashboard.releaseDesc': 'Tizim xavfsizligi kuchaytirildi. Brute Force himoyasi, 15 daqiqalik avtomatik chiqish, faoliyatga asoslangan batafsil xavfsizlik jurnallari va yangi <strong>Xavfsizlik Markazi</strong> moduli joriy etildi. Foydalanuvchi interfeysi qorong\'u mavzu (dark mode) va oyna effektlari (frosted glass) bilan optimallashtirildi.',
+  'dashboard.releaseDesc': 'Tizim xavfsizligi kuchaytirildi. Brute Force himoyasi, 15 daqiqalik avtomatik chiqish, faoliyatga asoslangan batafsil xavfsizlik jurnallari va yangi Xavfsizlik Markazi moduli joriy etildi. Foydalanuvchi interfeysi qorong\'u mavzu (dark mode) va oyna effektlari (frosted glass) bilan optimallashtirildi.',
 
   // ── Stock ──────────────────────────
   'stock.title': 'Ombor boshqaruvi',

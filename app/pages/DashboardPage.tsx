@@ -685,7 +685,7 @@ export function DashboardPage() {
             <h3 className="text-sm sm:text-base font-bold text-emerald-400">{t('dashboard.releaseTitle')}</h3>
             <span className="px-2 py-0.5 text-[10px] font-bold bg-emerald-500/20 text-emerald-300 rounded-full border border-emerald-500/30">{t('dashboard.releaseNew')}</span>
           </div>
-          <p className="text-xs sm:text-sm text-gray-400 max-w-3xl leading-relaxed" dangerouslySetInnerHTML={{ __html: t('dashboard.releaseDesc') }} />
+          <p className="text-xs sm:text-sm text-gray-400 max-w-3xl leading-relaxed">{t('dashboard.releaseDesc')}</p>
         </div>
       </motion.div>
 

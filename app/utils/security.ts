@@ -539,15 +539,15 @@ export interface SecurityPolicy {
 }
 
 const DEFAULT_SECURITY_POLICY: SecurityPolicy = {
-  minPasswordLength: 6,
-  requireUppercase: false,
+  minPasswordLength: 8,           // Minimum 8 karakter (NIST SP 800-63B)
+  requireUppercase: true,         // En az 1 büyük harf zorunlu
   requireLowercase: true,
   requireNumbers: true,
-  requireSpecialChars: false,
+  requireSpecialChars: true,      // En az 1 özel karakter zorunlu
   maxLoginAttempts: 5,
   lockoutDurationMinutes: 15,
   sessionTimeoutMinutes: 15,
-  requirePasswordChangeOnFirstLogin: false,
+  requirePasswordChangeOnFirstLogin: true,  // İlk girişte şifre değiştirme zorunlu
   passwordExpiryDays: 90,
   maxConcurrentSessions: 3,
   enforceIPRestriction: false,

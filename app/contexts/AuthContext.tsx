@@ -72,10 +72,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const login = useCallback(async (username: string, password: string): Promise<boolean> => {
     const storedPersonnel = getFromStorage<any[]>(StorageKey.PERSONEL_DATA) || [];
     
-    const trimmedUsername = (username || '').trim();
-    const trimmedPassword = (password || '').trim();
+    const trimmedUsername = (username || '').trim().slice(0, 128);  // max 128 karakter
+    const trimmedPassword = (password || '').trim().slice(0, 256);  // max 256 karakter
 
     if (!trimmedUsername || !trimmedPassword) return false;
+
+    // GÜVENLİK: Aşırı uzun girişleri erken reddet (DoS / timing attack önlemi)
+    if (trimmedUsername.length > 128 || trimmedPassword.length > 256) return false;
 
     // ── Brute Force Koruması ───────────────────────────────────────
     const FAILED_ATTEMPTS_KEY = 'failed_login_attempts';
@@ -128,9 +131,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
 
     // ── İlk kurulum: henüz personel yoksa varsayılan admin girişi ──
-    // GÜVENLİK: Bu giriş yalnızca sistem ilk kurulduğunda (personel listesi boşken) çalışır.
-    // İlk girişten sonra mutlaka şifrenizi değiştirin.
-    if (storedPersonnel.length === 0 && trimmedUsername === 'admin' && trimmedPassword === 'Admin@2024!') {
+    // GÜVENLİK:
+    //  • Bu kod yolu YALNIZCA personel listesi tamamen boşken (ilk kurulum) çalışır.
+    //  • İlk başarılı girişten sonra derhal Personel Yönetimi'nden gerçek bir yönetici
+    //    hesabı oluşturun ve bu varsayılan kimlik bilgilerini kullanmayı bırakın.
+    //  • Üretim ortamında personel listesi hiçbir zaman boş olmamalıdır.
+    const SETUP_USER = 'admin';
+    const SETUP_PASS = 'Admin@2024!';
+    if (
+      storedPersonnel.length === 0 &&
+      trimmedUsername === SETUP_USER &&
+      trimmedPassword === SETUP_PASS
+    ) {
       const defaultAdmin: User = { id: 'admin-1', name: 'Sistem Yöneticisi', username: 'admin', role: 'Yönetici', status: 'online' };
       setUser(defaultAdmin);
       setInStorage(StorageKey.USER, defaultAdmin);
@@ -140,7 +152,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       clearFailedAttempts();
       logActivity('login', 'İlk kurulum admin girisi yapti - sifre degistirmesi gerekiyor', { employeeId: defaultAdmin.id, employeeName: defaultAdmin.name, page: 'login' });
       recordDeviceLogin(defaultAdmin.id, defaultAdmin.name);
-      setTimeout(() => toast.warning('İlk giriş! Lütfen güvenliğiniz için şifrenizi hemen değiştirin.'), 1500);
+      addSecurityThreat({
+        type: 'suspicious_activity',
+        severity: 'high',
+        title: 'Varsayılan Kurulum Şifresiyle Giriş',
+        description: 'Sistem varsayılan admin şifresiyle giriş yapıldı. Hemen yeni bir yönetici hesabı oluşturun ve bu şifreyi kullanmayı bırakın.',
+        source: 'auth',
+        metadata: { username: 'admin' },
+      });
+      setTimeout(() => toast.warning('⚠️ İlk giriş! Güvenliğiniz için hemen yeni bir yönetici hesabı oluşturun ve bu varsayılan şifreyi kullanmayı bırakın.', { duration: 8000 }), 1000);
       return true;
     }
 
@@ -245,6 +265,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       else if (Array.isArray(foundUser.permissions)) parsedPermissions = foundUser.permissions;
     } catch {}
 
+    // GÜVENLİK: CURRENT_EMPLOYEE objesine asla şifre veya PIN hash'i saklanmaz.
+    // Kimlik doğrulaması zaten yapıldı; UI yalnızca rol/izin/meta veriye ihtiyaç duyar.
     setInStorage(StorageKey.CURRENT_EMPLOYEE, {
       id: foundUser.id,
       name: foundUser.name,
@@ -252,9 +274,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       role: foundUser.role === 'Yönetici' ? 'Yönetici' : 'Personel',
       department: foundUser.department || foundUser.position || 'Genel',
       permissions: parsedPermissions,
-      // Her alan yalnızca kendi düz metin eşleşmesi varsa hash'lenir
-      pinCode: isPinPlaintext ? hashedPassword : (foundUser.pinCode || foundUser.pin_code),
-      password: isPasswordPlaintext ? hashedPassword : foundUser.password,
     });
 
     // Cihaz izleme ve ihlal tespiti
