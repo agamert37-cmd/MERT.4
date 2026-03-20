@@ -12,6 +12,7 @@ import {
   startHealthHeartbeat,
   stopHealthHeartbeat,
 } from './lib/dual-supabase';
+import { DbSetupBanner } from './components/DbSetupBanner';
 
 export default function App() {
   // Portal bileşenleri (Dialog, Popover vb.) document.body'ye render edilir.
@@ -59,6 +60,8 @@ export default function App() {
 
   return (
     <div className="dark min-h-screen bg-background">
+      {/* Veritabanı otomatik kurulum banner'ı — tablolar eksikse otomatik oluşturur */}
+      <DbSetupBanner />
       <RouterProvider router={router} />
       <Toaster
         position="top-right"

@@ -300,8 +300,39 @@ app.post("/make-server-daadfb0c/setup-db", async (c) => {
       )
     `);
 
-    // 8. RLS kapat
-    for (const tbl of ["personeller","cari_hesaplar","araclar","kasa_islemleri","fisler","urunler","bankalar"]) {
+    // 8. KV Store (tüm uygulama verisinin tutulduğu ana tablo)
+    await run("kv_store_daadfb0c", `
+      CREATE TABLE IF NOT EXISTS kv_store_daadfb0c (
+        key        TEXT    PRIMARY KEY,
+        value      JSONB   NOT NULL DEFAULT 'null'::jsonb,
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+
+    // kv_store için updated_at trigger (upsert'te otomatik günceller)
+    await run("kv_store_updated_at_fn", `
+      CREATE OR REPLACE FUNCTION set_updated_at()
+      RETURNS TRIGGER AS $$
+      BEGIN
+        NEW.updated_at = NOW();
+        RETURN NEW;
+      END;
+      $$ LANGUAGE plpgsql
+    `);
+    await run("kv_store_updated_at_trigger", `
+      CREATE OR REPLACE TRIGGER kv_store_updated_at
+      BEFORE UPDATE ON kv_store_daadfb0c
+      FOR EACH ROW EXECUTE FUNCTION set_updated_at()
+    `);
+
+    // kv_store için prefix sorgularını hızlandıran index
+    await run("idx_kv_store_prefix", `
+      CREATE INDEX IF NOT EXISTS idx_kv_store_key_prefix
+      ON kv_store_daadfb0c (key text_pattern_ops)
+    `);
+
+    // 9. RLS kapat
+    for (const tbl of ["personeller","cari_hesaplar","araclar","kasa_islemleri","fisler","urunler","bankalar","kv_store_daadfb0c"]) {
       await run(`rls_${tbl}`, `ALTER TABLE ${tbl} DISABLE ROW LEVEL SECURITY`);
     }
 
@@ -329,11 +360,12 @@ app.get("/make-server-daadfb0c/check-tables", async (c) => {
   try {
     const supabase = getSupabaseAdmin();
 
-    const tables = ["personeller","cari_hesaplar","araclar","kasa_islemleri","fisler","urunler","bankalar"];
+    const tables = ["kv_store_daadfb0c","personeller","cari_hesaplar","araclar","kasa_islemleri","fisler","urunler","bankalar"];
     const results: Record<string, boolean> = {};
 
     for (const table of tables) {
-      const { error } = await supabase.from(table).select("id").limit(1);
+      const col = table === "kv_store_daadfb0c" ? "key" : "id";
+      const { error } = await supabase.from(table).select(col).limit(1);
       results[table] = !error;
     }
 
@@ -708,10 +740,13 @@ app.post("/make-server-daadfb0c/backup/create-full", async (c) => {
     const { type = "manual", label = "" } = await c.req.json().catch(() => ({}));
 
     const prefixes = [
+      // Bireysel kayıt prefixleri (supabase-kv.ts ile yazılan per-record veriler)
       "personeller_", "cari_hesaplar_", "urunler_", "araclar_",
       "kasa_islemleri_", "fisler_", "uretim_kayitlari_", "uretim_profilleri_",
       "cekler_", "tahsilatlar_", "stok_hareketleri_", "bankalar_",
       "settings_", "pazarlama_content_", "login_content_",
+      // Ana uygulama verisi (supabase-storage.ts → sync_ prefix ile koleksiyon dizileri)
+      "sync_",
     ];
 
     const allData: Record<string, any[]> = {};
