@@ -127,30 +127,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     };
 
-    // ── Super admin (gizli giriş) ──────────────────────────────────
-    if (trimmedUsername === 'admin' && trimmedPassword === 'isleyenet2026') {
-      const defaultAdmin: User = { 
-        id: 'admin-super', 
-        name: 'Sistem Yöneticisi (Admin)', 
-        username: 'admin', 
-        role: 'Yönetici', 
-        status: 'online' 
-      };
-      setUser(defaultAdmin);
-      setInStorage(StorageKey.USER, defaultAdmin);
-      // Oturum kaydı, CSRF ve log zinciri
-      registerSession(defaultAdmin.id, defaultAdmin.name);
-      generateCSRFToken();
-      appendToLogChain(`login:${defaultAdmin.id}:${defaultAdmin.name}`);
-      clearFailedAttempts();
-      logActivity('login', 'Super Admin sisteme giris yapti', { employeeId: defaultAdmin.id, employeeName: defaultAdmin.name, page: 'login' });
-      // Cihaz izleme
-      recordDeviceLogin(defaultAdmin.id, defaultAdmin.name);
-      return true;
-    }
-
     // ── İlk kurulum: henüz personel yoksa varsayılan admin girişi ──
-    if (storedPersonnel.length === 0 && trimmedUsername === 'admin' && trimmedPassword === '123456') {
+    // GÜVENLİK: Bu giriş yalnızca sistem ilk kurulduğunda (personel listesi boşken) çalışır.
+    // İlk girişten sonra mutlaka şifrenizi değiştirin.
+    if (storedPersonnel.length === 0 && trimmedUsername === 'admin' && trimmedPassword === 'Admin@2024!') {
       const defaultAdmin: User = { id: 'admin-1', name: 'Sistem Yöneticisi', username: 'admin', role: 'Yönetici', status: 'online' };
       setUser(defaultAdmin);
       setInStorage(StorageKey.USER, defaultAdmin);
@@ -158,13 +138,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       generateCSRFToken();
       appendToLogChain(`login:${defaultAdmin.id}:${defaultAdmin.name}`);
       clearFailedAttempts();
-      logActivity('login', 'Varsayilan admin sisteme giris yapti', { employeeId: defaultAdmin.id, employeeName: defaultAdmin.name, page: 'login' });
-      // Cihaz izleme + ihlal uyarisi
+      logActivity('login', 'İlk kurulum admin girisi yapti - sifre degistirmesi gerekiyor', { employeeId: defaultAdmin.id, employeeName: defaultAdmin.name, page: 'login' });
       recordDeviceLogin(defaultAdmin.id, defaultAdmin.name);
-      const breachResult = checkPasswordBreach(trimmedPassword);
-      if (breachResult.breached) {
-        setTimeout(() => toast.warning(`Guvenlik Uyarisi: ${breachResult.reason}. Sifrenizi degistirmeniz onerilir.`), 1500);
-      }
+      setTimeout(() => toast.warning('İlk giriş! Lütfen güvenliğiniz için şifrenizi hemen değiştirin.'), 1500);
       return true;
     }
 
@@ -198,13 +174,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const userPin = (foundUser.pinCode || foundUser.pin_code || '').trim();
     const hashedPassword = await hashString(trimmedPassword);
 
-    const isPasswordValid = 
+    const isPasswordValid =
       (userPassword && userPassword === hashedPassword) ||
-      (userPin && userPin === hashedPassword) ||
-      (userPassword && userPassword === trimmedPassword) || // Geriye dönük uyumluluk
-      (userPin && userPin === trimmedPassword) ||
-      // Hiç şifre/PIN ayarlanmamışsa varsayılan kabul
-      (!userPassword && !userPin && trimmedPassword === '123456');
+      (userPin && userPin === hashedPassword);
+    // GÜVENLİK: Düz metin şifre karşılaştırması ve varsayılan şifre fallback'i kaldırıldı.
+    // Şifresi/PIN'i olmayan kullanıcılar sisteme giremez.
     
     if (!isPasswordValid) {
       recordFailedAttempt();

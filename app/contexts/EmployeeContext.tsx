@@ -50,7 +50,46 @@ export function EmployeeProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  // Initialize current employee from storage or fallback to the first available admin
+  /**
+   * GÜVENLİK: localStorage'dan okunan currentEmployee verisi doğrulanır.
+   * Saldırgan localStorage'ı düzenlese bile, rol ve izinler her zaman
+   * PERSONEL_DATA'daki gerçek verilerle örtüşür.
+   * admin-super özel durumu: EmployeeContext tarafından inject edilir, bu yüzden
+   * yalnızca AuthContext'ten gelen user.id 'admin-super' olduğunda güvenilir.
+   */
+  const validateEmployeeFromStorage = useCallback((stored: Employee | null, personnel: any[]): Employee | null => {
+    if (!stored) return null;
+
+    // admin-super için özel durum: inject edilen sabit objeyi döndür
+    if (stored.id === 'admin-super') {
+      return {
+        id: 'admin-super',
+        name: 'Sistem Yöneticisi (Admin)',
+        role: 'Yönetici',
+        department: 'Yönetim',
+        permissions: ['dashboard', 'satis', 'stok', 'kasa', 'cari', 'raporlar', 'personel', 'ayarlar'],
+      };
+    }
+
+    // Gerçek personel listesinde bu id var mı?
+    const realData = personnel.find((p: any) => p.id === stored.id);
+    if (!realData) return null; // Listede olmayan bir çalışan → güvenilmez
+
+    // Rol ve izinleri her zaman PERSONEL_DATA'dan al (localStorage'dan değil)
+    let parsedPermissions: string[] = [];
+    try {
+      if (typeof realData.permissions === 'string') parsedPermissions = JSON.parse(realData.permissions);
+      else if (Array.isArray(realData.permissions)) parsedPermissions = realData.permissions;
+    } catch {}
+
+    return {
+      ...stored,
+      role: realData.role === 'Yönetici' ? 'Yönetici' : 'Personel',
+      permissions: parsedPermissions,
+    };
+  }, []);
+
+  // Initialize current employee from storage, validated against personnel list
   const [currentEmployee, setCurrentEmployeeState] = useState<Employee | null>(() => {
     return getFromStorage<Employee>(StorageKey.CURRENT_EMPLOYEE) || null;
   });
@@ -60,7 +99,9 @@ export function EmployeeProvider({ children }: { children: ReactNode }) {
     const syncFromStorage = () => {
       const stored = getFromStorage<Employee>(StorageKey.CURRENT_EMPLOYEE);
       if (stored && stored.id !== currentEmployee?.id) {
-        setCurrentEmployeeState(stored);
+        const storedPersonnel = getFromStorage<any[]>(StorageKey.PERSONEL_DATA) || [];
+        const validated = validateEmployeeFromStorage(stored, storedPersonnel);
+        setCurrentEmployeeState(validated);
       }
     };
     window.addEventListener('storage_update', syncFromStorage);
@@ -69,21 +110,31 @@ export function EmployeeProvider({ children }: { children: ReactNode }) {
       window.removeEventListener('storage_update', syncFromStorage);
       window.removeEventListener('storage', syncFromStorage);
     };
-  }, [currentEmployee?.id]);
+  }, [currentEmployee?.id, validateEmployeeFromStorage]);
 
-  // Ensure current employee is set if none is selected and available employees load
+  // availableEmployees yüklendiğinde currentEmployee'yi doğrula
   useEffect(() => {
     if (availableEmployees.length > 0) {
-      const isCurrentValid = currentEmployee && availableEmployees.some(e => e.id === currentEmployee.id);
-      
-      if (!isCurrentValid) {
-        // If current employee is invalid (e.g. deleted), fallback to super admin or a valid manager
-        const defaultEmp = availableEmployees.find(e => e.id === 'admin-super') || availableEmployees.find(e => e.role === 'Yönetici') || availableEmployees[0];
-        setCurrentEmployeeState(defaultEmp);
-        setInStorage(StorageKey.CURRENT_EMPLOYEE, defaultEmp);
+      const storedPersonnel = getFromStorage<any[]>(StorageKey.PERSONEL_DATA) || [];
+      const validated = validateEmployeeFromStorage(currentEmployee, storedPersonnel);
+
+      if (!validated) {
+        // Geçersiz (listede olmayan veya silinmiş) çalışan → fallback
+        const defaultEmp = availableEmployees.find(e => e.id === 'admin-super')
+          || availableEmployees.find(e => e.role === 'Yönetici')
+          || availableEmployees[0];
+        setCurrentEmployeeState(defaultEmp ?? null);
+        if (defaultEmp) setInStorage(StorageKey.CURRENT_EMPLOYEE, defaultEmp);
+      } else if (
+        validated.role !== currentEmployee?.role ||
+        JSON.stringify(validated.permissions) !== JSON.stringify(currentEmployee?.permissions)
+      ) {
+        // Rol veya izinler localStorage'da değiştirilmiş → düzelt
+        setCurrentEmployeeState(validated);
+        setInStorage(StorageKey.CURRENT_EMPLOYEE, validated);
       }
     }
-  }, [currentEmployee, availableEmployees]);
+  }, [availableEmployees, currentEmployee, validateEmployeeFromStorage]);
 
   const handleSetCurrentEmployee = useCallback((employee: Employee | null) => {
     setCurrentEmployeeState(employee);

@@ -1,7 +1,7 @@
 import { createBrowserRouter, Navigate, Outlet } from "react-router";
 import { MainLayout } from "./components/MainLayout";
 import { ErrorPage } from "./pages/ErrorPage";
-import { AuthProvider } from "./contexts/AuthContext";
+import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import { EmployeeProvider } from "./contexts/EmployeeContext";
 import { NotificationProvider } from "./contexts/NotificationContext";
 import { SyncProvider } from "./contexts/SyncContext";
@@ -32,6 +32,18 @@ import { PazarlamaPage } from "./pages/PazarlamaPage";
 import { CeklerPage } from "./pages/CeklerPage";
 import { SecurityPage } from "./pages/SecurityPage";
 import { FaturaPage } from "./pages/FaturaPage";
+
+/**
+ * Route guard: kullanıcı giriş yapmamışsa /login'e yönlendirir.
+ * Tüm korumalı sayfalarda component mount'tan ÖNCE kontrol yapılır.
+ */
+function ProtectedRoute({ element }: { element: React.ReactElement }) {
+  const { isAuthenticated } = useAuth();
+  if (!isAuthenticated) {
+    return <Navigate to="/login" replace />;
+  }
+  return element;
+}
 
 /**
  * Error page wrapper that provides contexts for the error boundary.
@@ -89,30 +101,30 @@ export const router = createBrowserRouter([
         path: "/",
         Component: MainLayout,
         children: [
-          { index: true, element: <Navigate to="/dashboard" replace /> },
-          { path: "dashboard", element: <DashboardPage /> },
-          { path: "sales", element: <SalesPage /> },
-          { path: "tahsilat", element: <TahsilatPage /> },
-          { path: "gun-sonu", element: <GunSonuPage /> },
-          { path: "arac-takip", element: <AracTakipPage /> },
-          { path: "chat", element: <ChatPage /> },
-          { path: "stok", element: <StokPage /> },
-          { path: "stok-hareket", element: <StokHareketPage /> },
-          { path: "uretim", element: <UretimPage /> },
-          { path: "pazarlama", element: <PazarlamaPage /> },
-          { path: "cekler", element: <CeklerPage /> },
-          { path: "cari", element: <CariPage /> },
-          { path: "cari/:id", element: <CariDetailPage /> },
-          { path: "kasa", element: <KasaPage /> },
-          { path: "arac", element: <AracPage /> },
-          { path: "personel", element: <PersonelPage /> },
-          { path: "raporlar", element: <RaporlarPage /> },
-          { path: "dosyalar", element: <FilesPage /> },
-          { path: "fis-gecmisi", element: <FisHistoryPage /> },
-          { path: "settings", element: <SettingsPage /> },
-          { path: "yedekler", element: <YedeklerPage /> },
-          { path: "guvenlik", element: <SecurityPage /> },
-          { path: "faturalar", element: <FaturaPage /> },
+          { index: true, element: <ProtectedRoute element={<Navigate to="/dashboard" replace />} /> },
+          { path: "dashboard", element: <ProtectedRoute element={<DashboardPage />} /> },
+          { path: "sales", element: <ProtectedRoute element={<SalesPage />} /> },
+          { path: "tahsilat", element: <ProtectedRoute element={<TahsilatPage />} /> },
+          { path: "gun-sonu", element: <ProtectedRoute element={<GunSonuPage />} /> },
+          { path: "arac-takip", element: <ProtectedRoute element={<AracTakipPage />} /> },
+          { path: "chat", element: <ProtectedRoute element={<ChatPage />} /> },
+          { path: "stok", element: <ProtectedRoute element={<StokPage />} /> },
+          { path: "stok-hareket", element: <ProtectedRoute element={<StokHareketPage />} /> },
+          { path: "uretim", element: <ProtectedRoute element={<UretimPage />} /> },
+          { path: "pazarlama", element: <ProtectedRoute element={<PazarlamaPage />} /> },
+          { path: "cekler", element: <ProtectedRoute element={<CeklerPage />} /> },
+          { path: "cari", element: <ProtectedRoute element={<CariPage />} /> },
+          { path: "cari/:id", element: <ProtectedRoute element={<CariDetailPage />} /> },
+          { path: "kasa", element: <ProtectedRoute element={<KasaPage />} /> },
+          { path: "arac", element: <ProtectedRoute element={<AracPage />} /> },
+          { path: "personel", element: <ProtectedRoute element={<PersonelPage />} /> },
+          { path: "raporlar", element: <ProtectedRoute element={<RaporlarPage />} /> },
+          { path: "dosyalar", element: <ProtectedRoute element={<FilesPage />} /> },
+          { path: "fis-gecmisi", element: <ProtectedRoute element={<FisHistoryPage />} /> },
+          { path: "settings", element: <ProtectedRoute element={<SettingsPage />} /> },
+          { path: "yedekler", element: <ProtectedRoute element={<YedeklerPage />} /> },
+          { path: "guvenlik", element: <ProtectedRoute element={<SecurityPage />} /> },
+          { path: "faturalar", element: <ProtectedRoute element={<FaturaPage />} /> },
         ],
       },
       {

@@ -252,9 +252,18 @@ export function PersonelPage() {
       if (strength.score < 20) { toast.error('Şifre çok zayıf! Lütfen daha güçlü bir şifre seçin.'); return; }
     }
 
+    // GÜVENLİK: Yalnızca yöneticiler Yönetici rolü atayabilir
+    const requestedRole = fd.get('role') as 'Yönetici' | 'Personel';
+    if (requestedRole === 'Yönetici' && user?.role !== 'Yönetici') {
+      toast.error('Yönetici rolü atama yetkiniz bulunmamaktadır.');
+      logActivity('security_alert', 'Yetkisiz Yönetici Rolü Atama Denemesi', { level: 'critical', employeeName: user?.name, description: 'Personel, yönetici rolü atamaya çalıştı.' });
+      addSecurityThreat({ type: 'privilege_escalation', severity: 'critical', title: 'Yetkisiz Rol Atama', description: `${user?.name} yönetici rolü atamaya çalıştı.`, source: 'personel_form', metadata: { userId: user?.id } });
+      return;
+    }
+
     const newPersonnel: Personnel = {
       id: crypto.randomUUID(), name: deepSanitize(nameVal), username: deepSanitize(uname),
-      position: (fd.get('department') as string).trim(), role: fd.get('role') as 'Yönetici' | 'Personel',
+      position: (fd.get('department') as string).trim(), role: requestedRole,
       status: 'offline', phone: (fd.get('phone') as string).trim(), email: (fd.get('email') as string || '').trim(),
       lastLogin: t('personnel.neverLoggedIn'), joinDate: new Date().toLocaleDateString('tr-TR'),
       department: (fd.get('department') as string).trim(), salary: Number(fd.get('salary') || 0), active: true,
@@ -317,6 +326,14 @@ export function PersonelPage() {
       if (policy.requireUppercase && !/[A-Z]/.test(editPassword.trim())) { toast.error('Güvenlik politikası gereği şifre büyük harf içermelidir.'); return; }
       if (policy.requireSpecialChars && !/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(editPassword.trim())) { toast.error('Güvenlik politikası gereği şifre özel karakter içermelidir.'); return; }
       if (strength.score < 20) { toast.error('Şifre çok zayıf! Lütfen daha güçlü bir şifre seçin.'); return; }
+    }
+
+    // GÜVENLİK: Yalnızca yöneticiler Yönetici rolü atayabilir
+    if (editRole === 'Yönetici' && user?.role !== 'Yönetici') {
+      toast.error('Yönetici rolü atama yetkiniz bulunmamaktadır.');
+      logActivity('security_alert', 'Yetkisiz Yönetici Rolü Düzenleme Denemesi', { level: 'critical', employeeName: user?.name, description: 'Personel, yönetici rolü atamaya çalıştı.' });
+      addSecurityThreat({ type: 'privilege_escalation', severity: 'critical', title: 'Yetkisiz Rol Düzenleme', description: `${user?.name} personel düzenleme ile yönetici rolü atamaya çalıştı.`, source: 'personel_edit', metadata: { userId: user?.id } });
+      return;
     }
 
     const updates: Partial<Personnel> = {
