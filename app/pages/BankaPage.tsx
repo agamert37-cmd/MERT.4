@@ -88,7 +88,7 @@ export function BankaPage() {
   usePageSecurity('kasa');
   const { currentEmployee } = useEmployee();
   const { user } = useAuth();
-  const perms = getPagePermissions('kasa', currentEmployee);
+  const perms = getPagePermissions(user, currentEmployee, 'kasa');
 
   const [accounts, setAccounts] = useState<BankAccount[]>(
     () => (getFromStorage<BankAccount[]>(StorageKey.BANK_DATA) || [])
@@ -161,7 +161,7 @@ export function BankaPage() {
     setSelectedId(newAcc.id);
     setShowAddAccount(false);
     setAccountForm(emptyAccountForm());
-    logActivity('bank_account_created', `Banka hesabı oluşturuldu: ${newAcc.bankName}`, { employeeName: currentEmployee?.name || user?.name });
+    logActivity('custom', `Banka hesabı oluşturuldu: ${newAcc.bankName}`, { employeeName: currentEmployee?.name || user?.name });
     toast.success(`${newAcc.bankName} hesabı eklendi`);
   };
 
@@ -197,7 +197,7 @@ export function BankaPage() {
     persist(next);
     setShowAddMovement(false);
     setMovForm(emptyMovForm());
-    logActivity('bank_movement', `Banka hareketi: ${newMov.type === 'giris' ? '+' : '-'}${fmt(newMov.amount)} — ${newMov.description}`, { employeeName: currentEmployee?.name || user?.name });
+    logActivity('custom', `Banka hareketi: ${newMov.type === 'giris' ? '+' : '-'}${fmt(newMov.amount)} — ${newMov.description}`, { employeeName: currentEmployee?.name || user?.name });
     toast.success(`Hareket kaydedildi`);
   };
 

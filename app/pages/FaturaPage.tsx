@@ -519,7 +519,7 @@ export function FaturaPage() {
     // e-Fatura durumunu "bekliyor" olarak işaretle
     const updated = faturalar.map(f => f.id === fatura.id ? { ...f, efatura: { ...(f.efatura || {}), status: 'bekliyor' as const, efaturaNo: ublData.faturaNo } } : f);
     setInStorage(StorageKey.FATURALAR, updated);
-    logActivity('efatura_xml_download', 'e-Fatura UBL-TR XML indirildi', { employeeName: user?.name, page: 'Fatura', description: `${ublData.faturaNo}` });
+    logActivity('custom', 'e-Fatura UBL-TR XML indirildi', { employeeName: user?.name, page: 'Fatura', description: `${ublData.faturaNo}` });
     toast.success(`UBL-TR XML indirildi — LUCA portalına yükleyebilirsiniz`, { description: 'turmobefatura.luca.com.tr adresine giriş yapın' });
   };
 

@@ -121,32 +121,36 @@ const breadcrumbKeyMap: Record<string, string> = {
 // Spring physics animation config
 const springConfig = {
   type: "spring" as const,
-  stiffness: 180,
-  damping: 24,
+  stiffness: 240,
+  damping: 26,
   mass: 1.0
 };
 
 const pageVariants = {
-  initial: { 
-    opacity: 0, 
-    y: 12,
-    filter: 'blur(6px)'
+  initial: {
+    opacity: 0,
+    y: 20,
+    filter: 'blur(12px)',
+    scale: 0.985,
   },
-  animate: { 
-    opacity: 1, 
+  animate: {
+    opacity: 1,
     y: 0,
     filter: 'blur(0px)',
+    scale: 1,
     transition: {
       ...springConfig,
-      filter: { duration: 0.5, ease: 'easeOut' }
+      filter: { duration: 0.5, ease: [0.16, 1, 0.3, 1] },
+      scale: { type: 'spring', stiffness: 320, damping: 32, mass: 0.85 },
     }
   },
-  exit: { 
-    opacity: 0, 
-    y: -6,
-    filter: 'blur(4px)',
-    transition: { 
-      duration: 0.25,
+  exit: {
+    opacity: 0,
+    y: -12,
+    filter: 'blur(10px)',
+    scale: 0.992,
+    transition: {
+      duration: 0.24,
       ease: [0.4, 0, 0.2, 1]
     }
   }
@@ -509,16 +513,24 @@ export function MainLayout() {
           {/* Logo & Company */}
           <div className="p-4 border-b border-border relative">
             <Link to="/dashboard" className="flex items-center gap-3 group">
-              <motion.div 
-                whileHover={{ scale: 1.08, rotate: 3 }}
-                whileTap={{ scale: 0.95 }}
-                className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 via-blue-600 to-indigo-700 flex items-center justify-center shadow-lg shadow-blue-600/25 flex-shrink-0 relative overflow-hidden"
+              <motion.div
+                whileHover={{ scale: 1.12, rotate: 4, boxShadow: '0 0 22px rgba(99,102,241,0.55)' }}
+                whileTap={{ scale: 0.93, rotate: -2 }}
+                transition={{ type: 'spring', stiffness: 520, damping: 28, mass: 0.7 }}
+                className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 via-blue-600 to-indigo-700 flex items-center justify-center shadow-lg shadow-blue-600/30 flex-shrink-0 relative overflow-hidden"
               >
                 <Package className="w-5 h-5 text-white relative z-10" />
+                {/* Shine sweep */}
                 <motion.div
-                  className="absolute inset-0 bg-gradient-to-tr from-transparent via-white/15 to-transparent"
-                  animate={{ x: [-40, 40] }}
-                  transition={{ duration: 2, repeat: Infinity, repeatDelay: 4 }}
+                  className="absolute inset-0 bg-gradient-to-tr from-transparent via-white/25 to-transparent skew-x-12"
+                  animate={{ x: [-56, 56] }}
+                  transition={{ duration: 1.8, repeat: Infinity, repeatDelay: 5, ease: [0.4, 0, 0.6, 1] }}
+                />
+                {/* Subtle pulse glow overlay */}
+                <motion.div
+                  className="absolute inset-0 rounded-xl bg-white/5"
+                  animate={{ opacity: [0, 0.15, 0] }}
+                  transition={{ duration: 3.5, repeat: Infinity, ease: 'easeInOut', repeatDelay: 1 }}
                 />
               </motion.div>
               <AnimatePresence>
@@ -605,19 +617,28 @@ export function MainLayout() {
                       />
                     )}
 
-                    {/* Active Left Bar */}
+                    {/* Active Left Bar — glow ile */}
                     {isActive && (
-                      <motion.div
-                        layoutId="activeNavBar"
-                        className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 bg-blue-300 rounded-full"
-                        transition={{ type: "spring", stiffness: 260, damping: 28 }}
-                      />
+                      <>
+                        <motion.div
+                          layoutId="activeNavBar"
+                          className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-6 bg-blue-300 rounded-full"
+                          transition={{ type: "spring", stiffness: 320, damping: 30 }}
+                          style={{ boxShadow: '0 0 8px rgba(147,197,253,0.8)' }}
+                        />
+                        <motion.div
+                          layoutId="activeNavGlow"
+                          className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-10 bg-blue-400/30 rounded-full blur-md"
+                          transition={{ type: "spring", stiffness: 320, damping: 30 }}
+                        />
+                      </>
                     )}
 
                     <motion.div
                       className="relative z-10 flex-shrink-0"
-                      whileHover={{ scale: 1.15 }}
-                      whileTap={{ scale: 0.9 }}
+                      whileHover={{ scale: 1.18, rotate: isActive ? 0 : 6 }}
+                      whileTap={{ scale: 0.88 }}
+                      transition={{ type: 'spring', stiffness: 600, damping: 28, mass: 0.5 }}
                     >
                       <Icon className="w-[18px] h-[18px]" />
                       {/* Collapsed badge dot */}
@@ -643,13 +664,21 @@ export function MainLayout() {
                     </AnimatePresence>
                     
                     {dynamicBadge && !isCollapsed && (
-                      <motion.span 
-                        initial={{ scale: 0 }}
-                        animate={{ scale: 1 }}
+                      <motion.span
+                        initial={{ scale: 0, rotate: -10 }}
+                        animate={{ scale: 1, rotate: 0 }}
+                        transition={{ type: 'spring', stiffness: 520, damping: 24, mass: 0.6 }}
                         className={`relative z-10 ml-auto text-white text-[10px] px-1.5 py-0.5 rounded-full font-bold ${
-                          isCriticalBadge ? 'bg-red-500 animate-pulse' : 'bg-blue-500/80'
+                          isCriticalBadge ? 'bg-red-500' : 'bg-blue-500/80'
                         }`}
                       >
+                        {isCriticalBadge && (
+                          <motion.span
+                            className="absolute inset-0 rounded-full bg-red-400"
+                            animate={{ scale: [1, 1.8, 1], opacity: [0.6, 0, 0.6] }}
+                            transition={{ duration: 2, repeat: Infinity, ease: 'easeOut' }}
+                          />
+                        )}
                         {dynamicBadge}
                       </motion.span>
                     )}
@@ -691,9 +720,24 @@ export function MainLayout() {
                 className="px-4 py-2 border-t border-border/40"
               >
                 <div className="flex items-center gap-2 px-2 py-1.5 rounded-lg bg-gradient-to-r from-emerald-900/20 to-blue-900/20 border border-emerald-800/20">
-                  <Zap className="w-3 h-3 text-emerald-400" />
+                  <motion.div
+                    animate={{ rotate: [0, 20, -10, 0] }}
+                    transition={{ duration: 4, repeat: Infinity, repeatDelay: 6, ease: 'easeInOut' }}
+                  >
+                    <Zap className="w-3 h-3 text-emerald-400" />
+                  </motion.div>
                   <span className="text-[10px] text-emerald-300/80 font-medium tracking-wider">KALKAN v4.2</span>
-                  <span className="ml-auto w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                  <motion.span
+                    className="ml-auto w-1.5 h-1.5 rounded-full bg-emerald-500 relative"
+                    animate={{ scale: [1, 1.4, 1], opacity: [1, 0.6, 1] }}
+                    transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut' }}
+                  >
+                    <motion.span
+                      className="absolute inset-0 rounded-full bg-emerald-400"
+                      animate={{ scale: [1, 2.8, 1], opacity: [0.4, 0, 0.4] }}
+                      transition={{ duration: 3, repeat: Infinity, ease: 'easeOut' }}
+                    />
+                  </motion.span>
                 </div>
               </motion.div>
             )}
@@ -822,25 +866,35 @@ export function MainLayout() {
           >
             <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1 overflow-hidden">
               {/* Mobile Hamburger */}
-              <button
+              <motion.button
+                whileHover={{ scale: 1.1, backgroundColor: 'rgba(255,255,255,0.08)' }}
+                whileTap={{ scale: 0.88 }}
+                transition={{ type: 'spring', stiffness: 520, damping: 28 }}
                 onClick={() => setIsMobileSidebarOpen(true)}
-                className="lg:hidden p-2 hover:bg-secondary/60 rounded-lg text-muted-foreground hover:text-white transition-colors flex-shrink-0"
+                className="lg:hidden p-2 rounded-lg text-muted-foreground hover:text-white transition-colors flex-shrink-0"
               >
                 <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
                 </svg>
-              </button>
+              </motion.button>
 
               {/* Mobile page title */}
               {currentPageLabel && (
-                <motion.span
-                  key={currentPageLabel}
-                  initial={{ opacity: 0, x: -6 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  className="lg:hidden text-white font-semibold text-sm truncate max-w-[120px] sm:max-w-[180px]"
-                >
-                  {currentPageLabel}
-                </motion.span>
+                <AnimatePresence mode="wait">
+                  <motion.span
+                    key={currentPageLabel}
+                    initial={{ opacity: 0, x: -14, filter: 'blur(6px)' }}
+                    animate={{ opacity: 1, x: 0, filter: 'blur(0px)',
+                      transition: { type: 'spring', stiffness: 400, damping: 30, filter: { duration: 0.25 } }
+                    }}
+                    exit={{ opacity: 0, x: 10, filter: 'blur(4px)',
+                      transition: { duration: 0.16, ease: [0.4, 0, 1, 1] }
+                    }}
+                    className="lg:hidden text-white font-semibold text-sm truncate max-w-[120px] sm:max-w-[180px]"
+                  >
+                    {currentPageLabel}
+                  </motion.span>
+                </AnimatePresence>
               )}
 
               <div className="hidden sm:block flex-shrink-0">
@@ -850,15 +904,26 @@ export function MainLayout() {
               {/* Breadcrumb (desktop) */}
               {currentPageLabel && (
                 <div className="hidden lg:flex items-center gap-1.5 text-sm flex-shrink-0">
-                  <span className="text-muted-foreground/40">/</span>
                   <motion.span
-                    key={currentPageLabel + '-desk'}
-                    initial={{ opacity: 0, x: -6 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    className="text-foreground font-medium"
-                  >
-                    {currentPageLabel}
-                  </motion.span>
+                    animate={{ opacity: [0.3, 0.5, 0.3] }}
+                    transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut' }}
+                    className="text-muted-foreground/40"
+                  >/</motion.span>
+                  <AnimatePresence mode="wait">
+                    <motion.span
+                      key={currentPageLabel + '-desk'}
+                      initial={{ opacity: 0, y: -8, filter: 'blur(6px)', scale: 0.95 }}
+                      animate={{ opacity: 1, y: 0, filter: 'blur(0px)', scale: 1,
+                        transition: { type: 'spring', stiffness: 380, damping: 28, mass: 0.7, filter: { duration: 0.3 } }
+                      }}
+                      exit={{ opacity: 0, y: 8, filter: 'blur(4px)',
+                        transition: { duration: 0.18, ease: [0.4, 0, 1, 1] }
+                      }}
+                      className="text-foreground font-medium"
+                    >
+                      {currentPageLabel}
+                    </motion.span>
+                  </AnimatePresence>
                 </div>
               )}
 
@@ -871,7 +936,17 @@ export function MainLayout() {
                   animate={{ opacity: 1, x: 0 }}
                   className="flex items-center gap-1.5 sm:gap-2 text-sm min-w-0 overflow-hidden"
                 >
-                  <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse flex-shrink-0" />
+                  <motion.div
+                    className="w-2 h-2 rounded-full bg-green-500 flex-shrink-0 relative"
+                    animate={{ scale: [1, 1.3, 1], opacity: [1, 0.7, 1] }}
+                    transition={{ duration: 2.8, repeat: Infinity, ease: 'easeInOut' }}
+                  >
+                    <motion.div
+                      className="absolute inset-0 rounded-full bg-green-400"
+                      animate={{ scale: [1, 2.2, 1], opacity: [0.5, 0, 0.5] }}
+                      transition={{ duration: 2.8, repeat: Infinity, ease: 'easeOut' }}
+                    />
+                  </motion.div>
                   <span className="text-muted-foreground hidden lg:inline flex-shrink-0">Aktif:</span>
                   <span className={`font-medium truncate max-w-[80px] sm:max-w-[140px] lg:max-w-none ${currentEmployee.id === 'admin-super' ? 'text-red-400 drop-shadow-[0_0_5px_rgba(248,113,113,0.8)]' : 'text-white'}`}>
                     {currentEmployee.name}
