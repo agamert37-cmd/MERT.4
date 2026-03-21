@@ -26,6 +26,14 @@ export const hashString = async (message: string): Promise<string> => {
   return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
 };
 
+/** Tuzlu SHA-256 hash — sifre saklama icin kullanin (rainbow table direnci) */
+export const hashStringWithSalt = async (message: string, salt: string): Promise<string> => {
+  const msgUint8 = new TextEncoder().encode(`${salt}:${message}`);
+  const hashBuffer = await crypto.subtle.digest('SHA-256', msgUint8);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+};
+
 /** Senkron hash - basit djb2 algoritması (non-crypto, hızlı) */
 export function quickHash(str: string): string {
   let hash = 5381;
@@ -424,7 +432,9 @@ const CURRENT_SESSION_ID_KEY = 'isleyen_et_current_session_id';
 function getCurrentSessionId(): string {
   let id = sessionStorage.getItem(CURRENT_SESSION_ID_KEY);
   if (!id) {
-    id = `sess_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
+    const arr = new Uint8Array(12);
+    crypto.getRandomValues(arr);
+    id = `sess_${Array.from(arr).map(b => b.toString(16).padStart(2, '0')).join('')}`;
     sessionStorage.setItem(CURRENT_SESSION_ID_KEY, id);
   }
   return id;

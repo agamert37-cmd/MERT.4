@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
 import { StorageKey, getFromStorage, setInStorage, removeFromStorage } from '../utils/storage';
-import { hashString } from '../utils/security';
+import { hashString, hashStringWithSalt } from '../utils/security';
 import { registerSession, removeSession, generateCSRFToken, appendToLogChain, addSecurityThreat, isUnusualHour, recordDeviceLogin, checkPasswordBreach } from '../utils/security';
 import { logActivity } from '../utils/activityLogger';
 import { toast } from 'sonner';
@@ -192,14 +192,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // ── Şifre doğrulama ────────────────────────────────────────────
     const userPassword = (foundUser.password || '').trim();
     const userPin = (foundUser.pinCode || foundUser.pin_code || '').trim();
-    const hashedPassword = await hashString(trimmedPassword);
+    // Tuzlu hash (yeni format) — kullanici ID'si tuz olarak kullanilir
+    const saltKey = foundUser.id;
+    const hashedPassword = await hashString(trimmedPassword);              // Eski format (tuzsuz)
+    const hashedPasswordSalted = await hashStringWithSalt(trimmedPassword, saltKey); // Yeni format (tuzlu)
 
+    // Once tuzlu (yeni) hash dene, sonra tuzsuz (eski/migration) hash dene
     const isPasswordValid =
-      (userPassword && userPassword === hashedPassword) ||
-      (userPin && userPin === hashedPassword);
-    // GÜVENLİK: Düz metin şifre karşılaştırması ve varsayılan şifre fallback'i kaldırıldı.
+      (userPassword && (userPassword === hashedPasswordSalted || userPassword === hashedPassword)) ||
+      (userPin && (userPin === hashedPasswordSalted || userPin === hashedPassword));
+    // GÜVENLİK: Düz metin şifre karşılaştırması kaldırıldı.
     // Şifresi/PIN'i olmayan kullanıcılar sisteme giremez.
-    
+
     if (!isPasswordValid) {
       recordFailedAttempt();
       logActivity('security_alert', 'Hatalı şifre girişi', {
@@ -210,12 +214,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return false;
     }
 
-    // Eğer şifre düz metin olarak kayıtlıysa, bunu güvenli (hashed) versiyona geçir
-    // Not: Her alan kendi trimmedPassword eşleşmesiyle ayrı ayrı kontrol edilir.
-    // password ile giriş yapıldığında pin'in hash'lenmesi engellenir, tersi de geçerlidir.
-    const isPasswordPlaintext = !!(userPassword && userPassword === trimmedPassword);
-    const isPinPlaintext      = !!(userPin && userPin === trimmedPassword);
-    const isPlaintextMatch    = isPasswordPlaintext || isPinPlaintext;
+    // Eski tuzsuz hash ile giriş yapıldıysa tuzlu hash'e migrate et
+    const needsPasswordMigration = !!(userPassword && userPassword === hashedPassword && userPassword !== hashedPasswordSalted);
+    const needsPinMigration = !!(userPin && userPin === hashedPassword && userPin !== hashedPasswordSalted);
 
     const loggedInUser: User = { 
       id: foundUser.id, 
@@ -243,15 +244,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Personel durumunu güncelle
     const updatedPersonnel = storedPersonnel.map(p => {
       if (p.id === foundUser.id) {
-        return { 
-          ...p, 
-          status: 'online', 
-          lastLogin: new Date().toLocaleString('tr-TR'), 
+        return {
+          ...p,
+          status: 'online',
+          lastLogin: new Date().toLocaleString('tr-TR'),
           last_login: new Date().toLocaleString('tr-TR'),
-          // Migration: her alan yalnızca kendi düz metin eşleşmesi varsa hash'lenir
-          ...(isPasswordPlaintext && p.password ? { password: hashedPassword } : {}),
-          ...(isPinPlaintext && p.pinCode  ? { pinCode:  hashedPassword } : {}),
-          ...(isPinPlaintext && p.pin_code ? { pin_code: hashedPassword } : {}),
+          // Migration: tuzsuz hash'i tuzlu hash'e gecir
+          ...(needsPasswordMigration && p.password ? { password: hashedPasswordSalted } : {}),
+          ...(needsPinMigration && p.pinCode  ? { pinCode:  hashedPasswordSalted } : {}),
+          ...(needsPinMigration && p.pin_code ? { pin_code: hashedPasswordSalted } : {}),
         };
       }
       return p;

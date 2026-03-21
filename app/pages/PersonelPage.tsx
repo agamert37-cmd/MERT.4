@@ -13,7 +13,7 @@ import { useModuleBus } from '../hooks/useModuleBus';
 import { getPagePermissions } from '../utils/permissions';
 import { SyncStatusBar, SyncBadge } from '../components/SyncStatusBar';
 import { getFromStorage, setInStorage, StorageKey } from '../utils/storage';
-import { hashString } from '../utils/security';
+import { hashString, hashStringWithSalt } from '../utils/security';
 import { analyzePasswordStrength, getSecurityPolicy, checkRateLimit, generateCSRFToken, validateCSRFToken, addSecurityThreat, detectRapidActions, deepSanitize, detectSQLInjection, appendToLogChain } from '../utils/security';
 import { useSecurityMonitor } from '../hooks/useSecurityMonitor';
 import { PasswordStrengthBar } from '../components/PasswordStrengthBar';
@@ -262,13 +262,14 @@ export function PersonelPage() {
       return;
     }
 
+    const newPersonnelId = crypto.randomUUID();
     const newPersonnel: Personnel = {
-      id: crypto.randomUUID(), name: deepSanitize(nameVal), username: deepSanitize(uname),
+      id: newPersonnelId, name: deepSanitize(nameVal), username: deepSanitize(uname),
       position: (fd.get('department') as string).trim(), role: requestedRole,
       status: 'offline', phone: (fd.get('phone') as string).trim(), email: (fd.get('email') as string || '').trim(),
       lastLogin: t('personnel.neverLoggedIn'), joinDate: new Date().toLocaleDateString('tr-TR'),
       department: (fd.get('department') as string).trim(), salary: Number(fd.get('salary') || 0), active: true,
-      pinCode: pin ? await hashString(pin) : undefined, password: pw ? await hashString(pw) : undefined, permissions: addPermissions,
+      pinCode: pin ? await hashStringWithSalt(pin, newPersonnelId) : undefined, password: pw ? await hashStringWithSalt(pw, newPersonnelId) : undefined, permissions: addPermissions,
     };
 
     await addItem(newPersonnel);
@@ -341,8 +342,8 @@ export function PersonelPage() {
       name: deepSanitize(editName.trim()), username: deepSanitize(editUsername.trim()), position: editDepartment.trim(), department: editDepartment.trim(),
       role: editRole, phone: editPhone.trim(), email: editEmail.trim(), salary: Number(editSalary || 0), permissions: editPermissions,
     };
-    if (editPin.trim()) updates.pinCode = await hashString(editPin.trim());
-    if (editPassword.trim()) updates.password = await hashString(editPassword.trim());
+    if (editPin.trim()) updates.pinCode = await hashStringWithSalt(editPin.trim(), editId);
+    if (editPassword.trim()) updates.password = await hashStringWithSalt(editPassword.trim(), editId);
 
     await updateItem(editId, updates);
     appendToLogChain(`personel_update:${editId}:${editName}`);
