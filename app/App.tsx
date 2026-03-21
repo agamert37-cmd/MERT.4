@@ -1,7 +1,7 @@
 import { RouterProvider } from 'react-router';
 import { router } from './routes';
 import { Toaster } from 'sonner';
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { startInitialSync, startRealtimeSync, stopRealtimeSync } from './utils/storage';
 import {
   getLocalRepoConfig,
@@ -12,6 +12,68 @@ import {
   startHealthHeartbeat,
   stopHealthHeartbeat,
 } from './lib/dual-supabase';
+import { DbSetupBanner } from './components/DbSetupBanner';
+import { SERVER_BASE_URL, SUPABASE_ANON_KEY } from './lib/supabase-config';
+
+// ─── Bulut Otomatik Yedekleme ─────────────────────────────────────────────────
+// YedeklerPage'deki ayarları okur ve periyodik olarak bulut yedeği alır.
+const CLOUD_AUTO_BACKUP_CONFIG_KEY = 'isleyen_et_auto_backup_config';
+
+async function runCloudAutoBackup() {
+  try {
+    const res = await fetch(`${SERVER_BASE_URL}/backup/create-full`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+      },
+      body: JSON.stringify({ type: 'auto' }),
+    });
+    if (res.ok) {
+      const config = JSON.parse(localStorage.getItem(CLOUD_AUTO_BACKUP_CONFIG_KEY) || '{}');
+      config.lastRun = new Date().toISOString();
+      localStorage.setItem(CLOUD_AUTO_BACKUP_CONFIG_KEY, JSON.stringify(config));
+      console.log('%c[CloudAutoBackup] Otomatik bulut yedeği alındı ✓', 'color: #22c55e');
+    }
+  } catch (e: any) {
+    console.warn('[CloudAutoBackup] Yedek alınamadı:', e.message);
+  }
+}
+
+function scheduleCloudAutoBackup(): () => void {
+  try {
+    const raw = localStorage.getItem(CLOUD_AUTO_BACKUP_CONFIG_KEY);
+    const config = raw ? JSON.parse(raw) : {};
+    if (!config.enabled) return () => {};
+
+    const intervalMs = (config.intervalHours || 24) * 60 * 60 * 1000;
+    const lastRun = config.lastRun ? new Date(config.lastRun).getTime() : 0;
+    const nextRun = lastRun + intervalMs;
+    const delay = Math.max(nextRun - Date.now(), 60_000); // en az 1 dakika bekle
+
+    // Her iki ID'yi de dışarıda tut ki cleanup fonksiyonu temizleyebilsin
+    let periodicId: ReturnType<typeof setInterval> | null = null;
+
+    const timerId = setTimeout(() => {
+      runCloudAutoBackup();
+      periodicId = setInterval(runCloudAutoBackup, intervalMs);
+    }, delay);
+
+    console.log(
+      `%c[CloudAutoBackup] ${config.intervalHours || 24}s aralıklı otomatik yedek aktif (ilk çalışma: ${Math.round(delay / 60000)} dk sonra)`,
+      'color: #a855f7'
+    );
+
+    // Hem timeout hem de interval temizlenir
+    return () => {
+      clearTimeout(timerId);
+      if (periodicId !== null) clearInterval(periodicId);
+    };
+  } catch {
+    return () => {};
+  }
+}
+// ─────────────────────────────────────────────────────────────────────────────
 
 export default function App() {
   // Portal bileşenleri (Dialog, Popover vb.) document.body'ye render edilir.
@@ -23,6 +85,8 @@ export default function App() {
   }, []);
 
   // Uygulama acildiginda tum senkronizasyon servislerini baslat
+  const cloudBackupCleanupRef = useRef<() => void>(() => {});
+
   useEffect(() => {
     // 1. Buluttan/yerel depodan verileri cek ve localStorage ile merge et
     startInitialSync().then(() => {
@@ -49,16 +113,22 @@ export default function App() {
       }
     }
 
+    // 4. Bulut otomatik yedekleme zamanlayıcısı (YedeklerPage ayarlarına göre)
+    cloudBackupCleanupRef.current = scheduleCloudAutoBackup();
+
     return () => {
       stopRealtimeSync();
       stopAutoSync();
       stopAutoBackup();
       stopHealthHeartbeat();
+      cloudBackupCleanupRef.current();
     };
   }, []);
 
   return (
     <div className="dark min-h-screen bg-background">
+      {/* Veritabanı otomatik kurulum banner'ı — tablolar eksikse otomatik oluşturur */}
+      <DbSetupBanner />
       <RouterProvider router={router} />
       <Toaster
         position="top-right"

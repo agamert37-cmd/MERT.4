@@ -32,6 +32,8 @@ import {
   ArrowRight,
   CheckCircle2,
   Layers,
+  TrendingUp,
+  Zap,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { toast } from 'sonner';
@@ -544,11 +546,106 @@ export function TahsilatPage() {
       {/* Sağ Panel - Ödeme Formu */}
       <div className="flex-1 flex flex-col overflow-auto min-w-0">
         <div className="p-4 sm:p-6 border-b border-border">
-          <h1 className="text-xl sm:text-2xl font-bold text-white mb-1">{t('collection.title')} ({t('collection.subtitle')})</h1>
-          <p className="text-muted-foreground text-sm">
-            {t('collection.performedBy')}: <span className="text-blue-400">{currentEmployee?.name || t('common.noData')}</span>
-          </p>
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div>
+              <h1 className="text-xl sm:text-2xl font-bold text-white mb-1">{t('collection.title')} ({t('collection.subtitle')})</h1>
+              <p className="text-muted-foreground text-sm">
+                {t('collection.performedBy')}: <span className="text-blue-400">{currentEmployee?.name || t('common.noData')}</span>
+              </p>
+            </div>
+            {/* Dinamik günlük toplam göstergesi */}
+            <AnimatePresence mode="wait">
+              {todayTotal > 0 ? (
+                <motion.div
+                  key="total-chip"
+                  initial={{ opacity: 0, scale: 0.85, x: 20 }}
+                  animate={{ opacity: 1, scale: 1, x: 0 }}
+                  exit={{ opacity: 0, scale: 0.85, x: 20 }}
+                  transition={{ type: 'spring', stiffness: 320, damping: 28 }}
+                  className="flex items-center gap-2 px-3.5 py-2.5 rounded-2xl bg-gradient-to-r from-emerald-500/15 to-green-500/10 border border-emerald-500/25 shrink-0"
+                >
+                  <div className="relative">
+                    <TrendingUp className="w-4 h-4 text-emerald-400" />
+                    <motion.div
+                      animate={{ scale: [1, 1.6, 1], opacity: [0.6, 0, 0.6] }}
+                      transition={{ duration: 2.2, repeat: Infinity }}
+                      className="absolute inset-0 rounded-full border border-emerald-400/40"
+                    />
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-bold text-emerald-400/70 uppercase tracking-wider leading-none">Bugün Toplam</p>
+                    <motion.p
+                      key={todayTotal}
+                      initial={{ y: -8, opacity: 0 }}
+                      animate={{ y: 0, opacity: 1 }}
+                      transition={{ type: 'spring', stiffness: 400, damping: 22 }}
+                      className="text-sm sm:text-base font-black text-emerald-400 leading-none mt-0.5"
+                    >
+                      ₺{todayTotal.toLocaleString('tr-TR')}
+                    </motion.p>
+                  </div>
+                  <span className="text-[10px] font-bold text-emerald-500/60 bg-emerald-500/10 px-1.5 py-0.5 rounded-lg">
+                    {todayPayments.length} işlem
+                  </span>
+                </motion.div>
+              ) : (
+                <motion.div
+                  key="empty-chip"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="flex items-center gap-2 px-3 py-2 rounded-xl bg-white/3 border border-white/8 text-xs text-gray-600"
+                >
+                  <Zap className="w-3.5 h-3.5" />
+                  <span>Henüz tahsilat yok</span>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
         </div>
+
+        {/* Ödeme tipi dağılımı — günlük mini göstergeler */}
+        {todayPayments.length > 0 && (() => {
+          const labels: Record<string, { color: string; icon: string }> = {
+            'Nakit': { color: 'emerald', icon: '💵' },
+            'POS': { color: 'blue', icon: '💳' },
+            'Çek': { color: 'purple', icon: '📄' },
+            'EFT': { color: 'cyan', icon: '🔄' },
+            'Taksit': { color: 'indigo', icon: '📅' },
+          };
+          const byType: Record<string, number> = {};
+          todayPayments.forEach(p => {
+            const key = Object.keys(labels).find(k => (p.description || '').startsWith(k)) || 'Diğer';
+            byType[key] = (byType[key] || 0) + (p.amount || 0);
+          });
+          const entries = Object.entries(byType).filter(([, v]) => v > 0);
+          if (entries.length < 2) return null;
+          return (
+            <div className="px-4 sm:px-6 py-2.5 border-b border-border/40 bg-secondary/10 overflow-x-auto scrollbar-hide">
+              <div className="flex items-center gap-2 min-w-max">
+                <span className="text-[10px] font-bold text-gray-600 uppercase tracking-wider shrink-0">Dağılım:</span>
+                {entries.map(([type, amount], i) => {
+                  const cfg = labels[type] || { color: 'gray', icon: '•' };
+                  const pct = Math.round((amount / todayTotal) * 100);
+                  return (
+                    <motion.div
+                      key={type}
+                      initial={{ opacity: 0, x: -8 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: i * 0.06, type: 'spring', stiffness: 300, damping: 26 }}
+                      className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-${cfg.color}-500/10 border border-${cfg.color}-500/20`}
+                    >
+                      <span className="text-xs leading-none">{cfg.icon}</span>
+                      <span className={`text-[11px] font-bold text-${cfg.color}-400`}>{type}</span>
+                      <span className="text-[10px] text-gray-500">₺{Math.round(amount).toLocaleString('tr-TR')}</span>
+                      <span className={`text-[9px] font-black text-${cfg.color}-400/70 bg-${cfg.color}-500/15 px-1 py-0.5 rounded-md`}>{pct}%</span>
+                    </motion.div>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })()}
 
         <div className="flex-1 p-4 sm:p-6">
           {!selectedCustomer ? (

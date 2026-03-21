@@ -304,42 +304,56 @@ function MobileBottomSheet({
 // ─── Hero Carousel ───────────────────────────────────────────────
 function HeroCarousel({ banners }: { banners: any[] }) {
   const [current, setCurrent] = useState(0);
+  const [progress, setProgress] = useState(0);
+  const SLIDE_DURATION = 6000;
 
   useEffect(() => {
     if (banners.length <= 1) return;
-    const timer = setInterval(() => setCurrent(p => (p + 1) % banners.length), 6000);
-    return () => clearInterval(timer);
-  }, [banners.length]);
+    setProgress(0);
+    const startTime = Date.now();
+    const tickId = setInterval(() => {
+      const elapsed = Date.now() - startTime;
+      setProgress(Math.min((elapsed / SLIDE_DURATION) * 100, 100));
+    }, 50);
+    const timerId = setTimeout(() => {
+      setCurrent(p => (p + 1) % banners.length);
+    }, SLIDE_DURATION);
+    return () => { clearInterval(tickId); clearTimeout(timerId); };
+  }, [current, banners.length]);
 
   if (banners.length === 0) return null;
 
-  return (
-    <div className="relative w-full h-full overflow-hidden rounded-2xl lg:rounded-none shadow-2xl">
-      <AnimatePresence mode="wait">
-        <motion.div
-          key={current}
-          initial={{ opacity: 0, scale: 1.05 }}
-          animate={{ opacity: 1, scale: 1 }}
-          exit={{ opacity: 0, scale: 0.95 }}
-          transition={{ duration: 0.8 }}
-          className="absolute inset-0"
-        >
-          <img src={banners[current]?.imageUrl} alt="" className="w-full h-full object-cover" />
-          <div className="absolute inset-0 bg-gradient-to-t from-background via-background/40 to-transparent" />
-          <div className="absolute inset-0 bg-gradient-to-r from-background/80 via-transparent to-background/20" />
-        </motion.div>
-      </AnimatePresence>
+  const prev = () => setCurrent(p => (p - 1 + banners.length) % banners.length);
+  const next = () => setCurrent(p => (p + 1) % banners.length);
 
+  return (
+    <div className="relative w-full h-full overflow-hidden rounded-2xl lg:rounded-none shadow-2xl group/carousel">
+      {/* Crossfade: tüm görseller üst üste, sadece aktif görünür — boşluk yok */}
+      {banners.map((banner, i) => (
+        <motion.div
+          key={i}
+          className="absolute inset-0"
+          animate={{ opacity: i === current ? 1 : 0, scale: i === current ? 1 : 1.06 }}
+          transition={{ duration: 0.9, ease: [0.25, 0.46, 0.45, 0.94] }}
+        >
+          <img src={banner.imageUrl} alt="" className="w-full h-full object-cover" />
+          <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/35 to-black/10" />
+          <div className="absolute inset-0 bg-gradient-to-r from-black/75 via-transparent to-black/15" />
+        </motion.div>
+      ))}
+
+      {/* Metin içeriği */}
       <div className="absolute bottom-0 left-0 right-0 p-5 sm:p-8 lg:p-12 z-10">
         <AnimatePresence mode="wait">
           <motion.div
             key={`text-${current}`}
-            initial={{ opacity: 0, y: 20 }}
+            initial={{ opacity: 0, y: 22 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -10 }}
-            transition={{ duration: 0.5, delay: 0.2 }}
+            transition={{ duration: 0.4, ease: [0.25, 0.46, 0.45, 0.94] }}
           >
-            <span className="inline-block px-2.5 py-0.5 sm:px-3 sm:py-1 bg-blue-600/80 text-white text-[10px] sm:text-xs font-bold rounded-lg mb-2 sm:mb-3 backdrop-blur-md border border-blue-500/50">
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 sm:px-3 sm:py-1 bg-blue-600/85 text-white text-[10px] sm:text-xs font-bold rounded-lg mb-2 sm:mb-3 backdrop-blur-md border border-blue-500/50 shadow-lg shadow-blue-600/20">
+              <Sparkles className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
               ÖNE ÇIKAN
             </span>
             <h2 className="text-xl sm:text-3xl lg:text-5xl font-extrabold text-white mb-1.5 sm:mb-3 leading-tight drop-shadow-lg">
@@ -351,18 +365,48 @@ function HeroCarousel({ banners }: { banners: any[] }) {
           </motion.div>
         </AnimatePresence>
 
+        {/* İlerleme göstergesi (progress bar) */}
         {banners.length > 1 && (
           <div className="flex items-center gap-2 mt-4 sm:mt-8">
             {banners.map((_, i) => (
               <button
                 key={i}
                 onClick={() => setCurrent(i)}
-                className={`transition-all duration-300 rounded-full ${i === current ? 'w-8 sm:w-12 h-2 sm:h-2.5 bg-blue-500' : 'w-2 sm:w-2.5 h-2 sm:h-2.5 bg-white/30 hover:bg-white/50'}`}
-              />
+                className={`relative overflow-hidden transition-all duration-300 rounded-full ${
+                  i === current
+                    ? 'w-10 sm:w-14 h-2 sm:h-2.5 bg-white/20'
+                    : 'w-2 sm:w-2.5 h-2 sm:h-2.5 bg-white/30 hover:bg-white/50'
+                }`}
+              >
+                {i === current && (
+                  <motion.div
+                    className="absolute inset-y-0 left-0 bg-blue-500 rounded-full"
+                    style={{ width: `${progress}%` }}
+                  />
+                )}
+              </button>
             ))}
           </div>
         )}
       </div>
+
+      {/* Önceki / Sonraki okları — desktop, hover'da görünür */}
+      {banners.length > 1 && (
+        <>
+          <button
+            onClick={prev}
+            className="absolute left-3 sm:left-4 top-1/2 -translate-y-1/2 z-20 w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-black/50 hover:bg-black/75 border border-white/20 flex items-center justify-center backdrop-blur-sm transition-all duration-200 opacity-0 group-hover/carousel:opacity-100 shadow-xl"
+          >
+            <ChevronRight className="w-4 h-4 sm:w-5 sm:h-5 text-white rotate-180" />
+          </button>
+          <button
+            onClick={next}
+            className="absolute right-3 sm:right-4 top-1/2 -translate-y-1/2 z-20 w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-black/50 hover:bg-black/75 border border-white/20 flex items-center justify-center backdrop-blur-sm transition-all duration-200 opacity-0 group-hover/carousel:opacity-100 shadow-xl"
+          >
+            <ChevronRight className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
+          </button>
+        </>
+      )}
     </div>
   );
 }
@@ -552,6 +596,14 @@ export function LoginPage() {
     return products;
   }, [catalogProducts, selectedCategory, productSearch]);
 
+  // Pazarlama duyurularını yükle — ürün modalında ilgili haberler için kullanılır
+  const pazarlamaAnnouncements = useMemo(() => {
+    try {
+      const pazarlama = getFromStorage<any>(StorageKey.PAZARLAMA_CONTENT);
+      return (pazarlama?.announcements || []).filter((a: any) => a.active !== false);
+    } catch { return []; }
+  }, []);
+
   const companyInfo = useMemo(() => {
     try {
       const settings = getFromStorage<any>(StorageKey.SYSTEM_SETTINGS);
@@ -665,20 +717,23 @@ export function LoginPage() {
       {/* ═══════════════════════════════════════════════════════════
            SOL PANEL: HERO CAROUSEL
          ═══════════════════════════════════════════════════════════ */}
-      <div className="w-full lg:w-[45%] h-[38vh] sm:h-[40vh] lg:h-screen p-3 sm:p-4 lg:p-0 relative z-10 flex-shrink-0">
+      <div className="w-full lg:w-[45%] h-[46vh] sm:h-[52vh] lg:h-screen p-3 sm:p-4 lg:p-0 relative z-10 flex-shrink-0">
         <HeroCarousel banners={DEFAULT_BANNERS} />
-        <div className="absolute top-5 left-5 sm:top-8 sm:left-8 lg:left-12 z-20">
-          <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.3 }}
-            className="flex items-center gap-3 sm:gap-4">
-            <div className="w-10 h-10 sm:w-14 sm:h-14 rounded-xl sm:rounded-2xl bg-gradient-to-br from-blue-600 to-cyan-500 flex items-center justify-center shadow-lg shadow-blue-500/30">
-              <Sparkles className="w-5 h-5 sm:w-7 sm:h-7 text-white" />
-            </div>
-            <div>
-              <h1 className="text-white font-extrabold text-lg sm:text-2xl tracking-tight drop-shadow-md">{companyInfo.name}</h1>
-              <p className="text-blue-100 font-medium text-xs sm:text-sm drop-shadow-md">{companyInfo.slogan}</p>
-            </div>
-          </motion.div>
-        </div>
+        {/* Logo overlay — carousel üstünde sabit */}
+        <motion.div
+          initial={{ opacity: 0, x: -20 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ delay: 0.3 }}
+          className="absolute top-5 left-5 sm:top-8 sm:left-8 lg:top-10 lg:left-10 z-20 flex items-center gap-3 sm:gap-4"
+        >
+          <div className="w-10 h-10 sm:w-13 sm:h-13 lg:w-14 lg:h-14 rounded-xl sm:rounded-2xl bg-gradient-to-br from-blue-600 to-cyan-500 flex items-center justify-center shadow-xl shadow-blue-500/40 border border-white/10">
+            <Sparkles className="w-5 h-5 sm:w-6 sm:h-6 lg:w-7 lg:h-7 text-white" />
+          </div>
+          <div className="drop-shadow-[0_2px_8px_rgba(0,0,0,0.8)]">
+            <h1 className="text-white font-extrabold text-lg sm:text-2xl tracking-tight leading-tight">{companyInfo.name}</h1>
+            <p className="text-blue-200/90 font-medium text-[11px] sm:text-sm leading-tight">{companyInfo.slogan}</p>
+          </div>
+        </motion.div>
       </div>
 
       {/* ═══════════════════════════════════════════════════════════
@@ -836,7 +891,7 @@ export function LoginPage() {
                 </div>
                 <div>
                   <h3 className="text-base sm:text-lg font-bold text-white">Ürün Kataloğu</h3>
-                  <p className="text-[10px] sm:text-xs text-muted-foreground">{catalogProducts.length} ürün • Güncel ortalama fiyatlar</p>
+                  <p className="text-[10px] sm:text-xs text-muted-foreground">{catalogProducts.length} ürün • <span className="text-amber-400/80 font-semibold">Güncel ortalama fiyatlar</span> • Tıklayın detay görün</p>
                 </div>
               </div>
               {/* Search */}
@@ -899,11 +954,13 @@ export function LoginPage() {
                         <Star className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-amber-400 fill-amber-400" />
                       </div>
                     )}
-                    {/* Quick price overlay */}
-                    <div className="absolute bottom-1.5 right-1.5 sm:bottom-2 sm:right-2 px-1.5 py-0.5 sm:px-2 sm:py-1 rounded-md bg-black/70 backdrop-blur-md border border-white/10">
-                      <span className="text-[10px] sm:text-xs font-bold text-white">₺{product.avgPrice}</span>
-                      <span className="text-[8px] sm:text-[9px] text-gray-400">/{product.priceUnit}</span>
-                    </div>
+                    {/* Quick price overlay — daha belirgin */}
+                    {product.avgPrice > 0 && (
+                      <div className="absolute bottom-1.5 right-1.5 sm:bottom-2 sm:right-2 px-2 py-1 sm:px-2.5 sm:py-1.5 rounded-lg bg-black/80 backdrop-blur-md border border-white/15 shadow-lg">
+                        <p className="text-[8px] sm:text-[9px] text-amber-400/80 font-bold uppercase tracking-wide leading-none mb-0.5">ort. fiyat</p>
+                        <p className="text-[12px] sm:text-sm font-black text-white leading-none">₺{product.avgPrice}<span className="text-[8px] sm:text-[9px] text-gray-400 font-normal">/{product.priceUnit}</span></p>
+                      </div>
+                    )}
                   </div>
                   {/* Info */}
                   <div className="p-2.5 sm:p-3">
@@ -1852,6 +1909,59 @@ export function LoginPage() {
                   </div>
                 </div>
               </div>
+
+              {/* ─── İlgili Haberler ───────────────────────────────────────── */}
+              {(() => {
+                const related = pazarlamaAnnouncements.filter(
+                  (a: any) => (a.relatedProducts || []).some(
+                    (rp: string) => rp.toLowerCase().trim() === selectedProduct.name.toLowerCase().trim()
+                  )
+                );
+                if (!related.length) return null;
+                return (
+                  <div className="px-4 sm:px-6 lg:px-8 pb-1">
+                    <h4 className="text-xs sm:text-sm font-bold text-white mb-2.5 flex items-center gap-2">
+                      <Newspaper className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-cyan-400" />
+                      Bu Ürünle İlgili Haberler
+                      <span className="ml-1 px-1.5 py-0.5 text-[9px] font-bold bg-cyan-500/20 text-cyan-400 rounded-md">{related.length}</span>
+                    </h4>
+                    <div className="space-y-2">
+                      {related.map((news: any) => (
+                        <motion.div
+                          key={news.id}
+                          initial={{ opacity: 0, x: -8 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          className="flex gap-3 p-3 rounded-xl bg-cyan-500/5 border border-cyan-500/10 hover:border-cyan-500/20 transition-colors"
+                        >
+                          {news.imageUrl && (
+                            <img
+                              src={news.imageUrl}
+                              alt=""
+                              className="w-12 h-12 sm:w-14 sm:h-14 rounded-lg object-cover flex-shrink-0"
+                            />
+                          )}
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-1.5 mb-0.5">
+                              {news.badge && (
+                                <span className={`px-1.5 py-0.5 text-[9px] font-bold rounded ${
+                                  news.badge === 'Onemli' || news.badge === 'Acil' ? 'bg-red-500/20 text-red-400' :
+                                  news.badge === 'Yeni' ? 'bg-blue-500/20 text-blue-400' :
+                                  news.badge === 'Kampanya' ? 'bg-orange-500/20 text-orange-400' :
+                                  news.badge === 'Basari' ? 'bg-emerald-500/20 text-emerald-400' :
+                                  'bg-cyan-500/20 text-cyan-400'
+                                }`}>{news.badge}</span>
+                              )}
+                              <span className="text-[9px] sm:text-[10px] text-gray-500">{news.date}</span>
+                            </div>
+                            <p className="text-[11px] sm:text-xs font-semibold text-white leading-snug mb-0.5">{news.title}</p>
+                            <p className="text-[10px] sm:text-[11px] text-gray-400 line-clamp-2 leading-relaxed">{news.text}</p>
+                          </div>
+                        </motion.div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })()}
 
               {/* Footer */}
               <div className="px-4 py-3 sm:px-6 sm:py-4 border-t border-white/5 bg-black/30">

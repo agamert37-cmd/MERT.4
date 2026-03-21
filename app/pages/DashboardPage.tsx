@@ -11,6 +11,7 @@ import {
   CreditCard, Landmark, Flame, ArrowLeftRight, Factory
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { staggerContainer, staggerItem, hover, tap } from '../utils/animations';
 import { useNavigate } from 'react-router';
 import { toast } from 'sonner';
 import {
@@ -115,10 +116,12 @@ export function DashboardPage() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [chartView, setChartView] = useState<'area' | 'bar' | 'composed'>('composed');
 
-  // Sayfa ziyaretini logla
+  // Sayfa ziyaretini logla (kullanıcı yüklenince bir kez)
   useEffect(() => {
-    logActivity('page_visit', 'Dashboard sayfası görüntülendi', { employeeName: user?.name });
-  }, []);
+    if (user?.name) {
+      logActivity('page_visit', 'Dashboard sayfası görüntülendi', { employeeName: user.name });
+    }
+  }, [user?.name]);
 
   useEffect(() => {
     const handler = () => setRefreshCounter(c => c + 1);
@@ -683,7 +686,7 @@ export function DashboardPage() {
             <h3 className="text-sm sm:text-base font-bold text-emerald-400">{t('dashboard.releaseTitle')}</h3>
             <span className="px-2 py-0.5 text-[10px] font-bold bg-emerald-500/20 text-emerald-300 rounded-full border border-emerald-500/30">{t('dashboard.releaseNew')}</span>
           </div>
-          <p className="text-xs sm:text-sm text-gray-400 max-w-3xl leading-relaxed" dangerouslySetInnerHTML={{ __html: t('dashboard.releaseDesc') }} />
+          <p className="text-xs sm:text-sm text-gray-400 max-w-3xl leading-relaxed">{t('dashboard.releaseDesc')}</p>
         </div>
       </motion.div>
 
@@ -733,10 +736,18 @@ export function DashboardPage() {
       </div>
 
       {/* ─── Stat Cards Grid ─── */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 lg:gap-6">
+      <motion.div
+        className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 lg:gap-6"
+        variants={staggerContainer(0.07, 0.02)}
+        initial="initial"
+        animate="animate"
+      >
         {/* Günlük Ciro */}
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0 }}
-          className="relative p-4 sm:p-5 lg:p-6 rounded-2xl lg:rounded-3xl bg-gradient-to-br from-blue-500/10 via-[#111] to-[#111] border border-blue-500/20 overflow-hidden group hover:border-blue-500/40 transition-all"
+        <motion.div
+          variants={staggerItem}
+          whileHover={{ scale: 1.028, y: -5, transition: { type: 'spring', stiffness: 420, damping: 28 } }}
+          whileTap={{ scale: 0.97 }}
+          className="relative p-4 sm:p-5 lg:p-6 rounded-2xl lg:rounded-3xl bg-gradient-to-br from-blue-500/10 via-[#111] to-[#111] border border-blue-500/20 overflow-hidden group hover:border-blue-500/40 hover:shadow-xl hover:shadow-blue-500/10 transition-colors cursor-pointer"
         >
           <div className="absolute -top-8 -right-8 w-28 h-28 bg-blue-500/10 rounded-full blur-2xl group-hover:bg-blue-500/20 transition-all" />
           <div className="relative z-10">
@@ -761,8 +772,11 @@ export function DashboardPage() {
         </motion.div>
 
         {/* Satış Adedi */}
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }}
-          className="relative p-4 sm:p-5 lg:p-6 rounded-2xl lg:rounded-3xl bg-gradient-to-br from-emerald-500/10 via-[#111] to-[#111] border border-emerald-500/20 overflow-hidden group hover:border-emerald-500/40 transition-all"
+        <motion.div
+          variants={staggerItem}
+          whileHover={{ scale: 1.028, y: -5, transition: { type: 'spring', stiffness: 420, damping: 28 } }}
+          whileTap={{ scale: 0.97 }}
+          className="relative p-4 sm:p-5 lg:p-6 rounded-2xl lg:rounded-3xl bg-gradient-to-br from-emerald-500/10 via-[#111] to-[#111] border border-emerald-500/20 overflow-hidden group hover:border-emerald-500/40 hover:shadow-xl hover:shadow-emerald-500/10 transition-colors cursor-pointer"
         >
           <div className="absolute -top-8 -right-8 w-28 h-28 bg-emerald-500/10 rounded-full blur-2xl group-hover:bg-emerald-500/20 transition-all" />
           <div className="relative z-10">
@@ -779,8 +793,11 @@ export function DashboardPage() {
         </motion.div>
 
         {/* Kritik Stok */}
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}
-          className={`relative p-4 sm:p-5 lg:p-6 rounded-2xl lg:rounded-3xl overflow-hidden group transition-all ${
+        <motion.div
+          variants={staggerItem}
+          whileHover={{ scale: 1.028, y: -5, transition: { type: 'spring', stiffness: 420, damping: 28 } }}
+          whileTap={{ scale: 0.97 }}
+          className={`relative p-4 sm:p-5 lg:p-6 rounded-2xl lg:rounded-3xl overflow-hidden group cursor-pointer ${
             criticalStockCount > 0
               ? 'bg-gradient-to-br from-red-500/15 via-[#111] to-[#111] border border-red-500/30 hover:border-red-500/50'
               : 'bg-gradient-to-br from-gray-500/5 via-[#111] to-[#111] border border-white/10 hover:border-white/20'
@@ -793,10 +810,21 @@ export function DashboardPage() {
                 <AlertTriangle className="w-4 h-4 sm:w-5 sm:h-5" />
               </div>
               {criticalStockCount > 0 && (
-                <motion.span animate={{ scale: [1, 1.05, 1] }} transition={{ duration: 1.5, repeat: Infinity }}
+                <motion.span
+                  initial={{ scale: 0, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  transition={{ type: 'spring', stiffness: 460, damping: 20 }}
                   className="flex items-center gap-1 sm:gap-1.5 px-1.5 sm:px-2 py-0.5 sm:py-1 bg-red-500/20 text-red-400 text-[8px] sm:text-[9px] font-bold rounded-full border border-red-500/30"
                 >
-                  <span className="w-1.5 h-1.5 rounded-full bg-red-400 animate-pulse" /> KRİTİK
+                  <span className="relative flex w-1.5 h-1.5">
+                    <motion.span
+                      className="absolute inline-flex h-full w-full rounded-full bg-red-400"
+                      animate={{ scale: [1, 2.4, 1], opacity: [0.5, 0, 0.5] }}
+                      transition={{ duration: 1.8, repeat: Infinity, ease: 'easeOut' }}
+                    />
+                    <span className="relative inline-flex rounded-full w-1.5 h-1.5 bg-red-500" />
+                  </span>
+                  KRİTİK
                 </motion.span>
               )}
             </div>
@@ -807,11 +835,14 @@ export function DashboardPage() {
         </motion.div>
 
         {/* Net Kâr */}
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }}
-          className={`relative p-4 sm:p-5 lg:p-6 rounded-2xl lg:rounded-3xl overflow-hidden group transition-all ${
+        <motion.div
+          variants={staggerItem}
+          whileHover={{ scale: 1.028, y: -5, transition: { type: 'spring', stiffness: 420, damping: 28 } }}
+          whileTap={{ scale: 0.97 }}
+          className={`relative p-4 sm:p-5 lg:p-6 rounded-2xl lg:rounded-3xl overflow-hidden group cursor-pointer ${
             todayNetProfit >= 0
-              ? 'bg-gradient-to-br from-purple-500/10 via-[#111] to-[#111] border border-purple-500/20 hover:border-purple-500/40'
-              : 'bg-gradient-to-br from-orange-500/10 via-[#111] to-[#111] border border-orange-500/20 hover:border-orange-500/40'
+              ? 'bg-gradient-to-br from-purple-500/10 via-[#111] to-[#111] border border-purple-500/20 hover:border-purple-500/40 hover:shadow-xl hover:shadow-purple-500/10'
+              : 'bg-gradient-to-br from-orange-500/10 via-[#111] to-[#111] border border-orange-500/20 hover:border-orange-500/40 hover:shadow-xl hover:shadow-orange-500/10'
           }`}
         >
           <div className={`absolute -top-8 -right-8 w-28 h-28 rounded-full blur-2xl transition-all ${todayNetProfit >= 0 ? 'bg-purple-500/10' : 'bg-orange-500/10'}`} />
@@ -829,27 +860,41 @@ export function DashboardPage() {
             <p className="text-[9px] sm:text-[10px] text-gray-500 mt-2">Satış − Alış</p>
           </div>
         </motion.div>
-      </div>
+      </motion.div>
 
       {/* ─── Secondary Stats Row ─── */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 lg:gap-4">
+      <motion.div
+        className="grid grid-cols-2 sm:grid-cols-4 gap-3 lg:gap-4"
+        variants={staggerContainer(0.06, 0.05)}
+        initial="initial"
+        animate="animate"
+      >
         {[
           { label: 'Aktif Personel', value: `${activeEmployeeCount}/${rawPersonel.length}`, icon: <Users className="w-4 h-4 text-cyan-400" />, color: '#06b6d4' },
           { label: 'Stok Değeri', value: `₺${totalStockValue >= 1000 ? `${(totalStockValue/1000).toFixed(0)}k` : totalStockValue.toLocaleString('tr-TR')}`, icon: <Package className="w-4 h-4 text-amber-400" />, color: '#f59e0b' },
           { label: 'Kasa Bakiye', value: `₺${kasaStats.kasaBalance.toLocaleString('tr-TR')}`, icon: <Wallet className="w-4 h-4 text-emerald-400" />, color: '#10b981' },
           { label: 'Aktif Cariler', value: `${cariStats.toplam}`, icon: <Users className="w-4 h-4 text-purple-400" />, color: '#8b5cf6' },
         ].map((item, i) => (
-          <motion.div key={i} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 + i * 0.05 }}
-            className="flex items-center gap-2 sm:gap-3 p-3 sm:p-3.5 rounded-xl bg-white/[0.03] border border-white/[0.06] hover:border-white/[0.12] transition-all"
+          <motion.div
+            key={i}
+            variants={staggerItem}
+            whileHover={{ scale: 1.04, y: -2, borderColor: `${item.color}40`, transition: { type: 'spring', stiffness: 500, damping: 28 } }}
+            whileTap={{ scale: 0.96 }}
+            className="flex items-center gap-2 sm:gap-3 p-3 sm:p-3.5 rounded-xl bg-white/[0.03] border border-white/[0.06] cursor-pointer transition-colors"
           >
-            <div className="p-1.5 sm:p-2 rounded-lg shrink-0" style={{ background: `${item.color}15` }}>{item.icon}</div>
+            <motion.div
+              className="p-1.5 sm:p-2 rounded-lg shrink-0"
+              style={{ background: `${item.color}15` }}
+              whileHover={{ scale: 1.15, rotate: 8 }}
+              transition={{ type: 'spring', stiffness: 600, damping: 24 }}
+            >{item.icon}</motion.div>
             <div className="min-w-0">
               <p className="text-[9px] sm:text-[10px] font-semibold text-muted-foreground uppercase tracking-wider truncate">{item.label}</p>
               <p className="text-xs sm:text-sm font-bold text-white truncate">{item.value}</p>
             </div>
           </motion.div>
         ))}
-      </div>
+      </motion.div>
 
       {/* ─── Main Chart Section ─── */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 sm:gap-4 lg:gap-6">

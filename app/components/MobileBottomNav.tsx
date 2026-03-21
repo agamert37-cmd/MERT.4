@@ -111,13 +111,23 @@ export function MobileBottomNav() {
   // Check if any "more" page is currently active
   const isMoreActive = moreGroups.some(g => g.items.some(i => isActive(i.path)));
 
-  // Swipe down to close
+  // Hafif dokunma titreşimi (destekleyen cihazlarda)
+  const haptic = (type: 'light' | 'medium' = 'light') => {
+    if ('vibrate' in navigator) {
+      navigator.vibrate(type === 'light' ? 8 : 18);
+    }
+  };
+
+  // Swipe down to close (daha hassas eşik: 60px)
   const handleTouchStart = (e: React.TouchEvent) => {
     startY.current = e.touches[0].clientY;
   };
   const handleTouchEnd = (e: React.TouchEvent) => {
     const diff = e.changedTouches[0].clientY - startY.current;
-    if (diff > 80) setIsMoreOpen(false);
+    if (diff > 60) {
+      haptic('light');
+      setIsMoreOpen(false);
+    }
   };
 
   return (
@@ -175,7 +185,7 @@ export function MobileBottomNav() {
                           <motion.button
                             key={item.path}
                             whileTap={{ scale: 0.92 }}
-                            onClick={() => navigate(item.path)}
+                            onClick={() => { haptic('light'); navigate(item.path); }}
                             className={`flex flex-col items-center gap-1.5 py-3.5 px-2 rounded-2xl border transition-all ${
                               active
                                 ? `${colors.bg} ${colors.border} border`
@@ -216,7 +226,7 @@ export function MobileBottomNav() {
             return (
               <button
                 key={item.path}
-                onClick={() => navigate(item.path)}
+                onClick={() => { haptic('light'); navigate(item.path); }}
                 className="flex-1 flex flex-col items-center gap-0.5 py-2 pt-2.5 relative min-w-0"
               >
                 {/* Active indicator */}
@@ -253,7 +263,7 @@ export function MobileBottomNav() {
 
           {/* More button */}
           <button
-            onClick={() => setIsMoreOpen(true)}
+            onClick={() => { haptic('medium'); setIsMoreOpen(true); }}
             className="flex-1 flex flex-col items-center gap-0.5 py-2 pt-2.5 relative min-w-0"
           >
             {isMoreActive && (

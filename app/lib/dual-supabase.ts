@@ -1046,7 +1046,7 @@ export async function createLocalBackup(type: 'manual' | 'auto' = 'manual'): Pro
     for (const r of localRows) merged.set(r.key, r.value); // yerel üzerine yazar
 
     const timestamp = new Date().toISOString();
-    const backupId = `bkp_${Date.now()}`;
+    const backupId = `bkp_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
     const backupKey = `backup_${backupId}`;
 
     // Tek bir buyuk JSON olarak yerel'e yaz

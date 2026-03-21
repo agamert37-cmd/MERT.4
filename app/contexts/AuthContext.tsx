@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
 import { StorageKey, getFromStorage, setInStorage, removeFromStorage } from '../utils/storage';
-import { hashString } from '../utils/security';
+import { hashString, hashStringWithSalt } from '../utils/security';
 import { registerSession, removeSession, generateCSRFToken, appendToLogChain, addSecurityThreat, isUnusualHour, recordDeviceLogin, checkPasswordBreach } from '../utils/security';
 import { logActivity } from '../utils/activityLogger';
 import { toast } from 'sonner';
@@ -72,10 +72,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const login = useCallback(async (username: string, password: string): Promise<boolean> => {
     const storedPersonnel = getFromStorage<any[]>(StorageKey.PERSONEL_DATA) || [];
     
-    const trimmedUsername = (username || '').trim();
-    const trimmedPassword = (password || '').trim();
+    const trimmedUsername = (username || '').trim().slice(0, 128);  // max 128 karakter
+    const trimmedPassword = (password || '').trim().slice(0, 256);  // max 256 karakter
 
     if (!trimmedUsername || !trimmedPassword) return false;
+
+    // GÜVENLİK: Aşırı uzun girişleri erken reddet (DoS / timing attack önlemi)
+    if (trimmedUsername.length > 128 || trimmedPassword.length > 256) return false;
 
     // ── Brute Force Koruması ───────────────────────────────────────
     const FAILED_ATTEMPTS_KEY = 'failed_login_attempts';
@@ -128,9 +131,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
 
     // ── İlk kurulum: henüz personel yoksa varsayılan admin girişi ──
-    // GÜVENLİK: Bu giriş yalnızca sistem ilk kurulduğunda (personel listesi boşken) çalışır.
-    // İlk girişten sonra mutlaka şifrenizi değiştirin.
-    if (storedPersonnel.length === 0 && trimmedUsername === 'admin' && trimmedPassword === 'Admin@2024!') {
+    // GÜVENLİK:
+    //  • Bu kod yolu YALNIZCA personel listesi tamamen boşken (ilk kurulum) çalışır.
+    //  • İlk başarılı girişten sonra derhal Personel Yönetimi'nden gerçek bir yönetici
+    //    hesabı oluşturun ve bu varsayılan kimlik bilgilerini kullanmayı bırakın.
+    //  • Üretim ortamında personel listesi hiçbir zaman boş olmamalıdır.
+    const SETUP_USER = 'admin';
+    const SETUP_PASS = 'Admin@2024!';
+    if (
+      storedPersonnel.length === 0 &&
+      trimmedUsername === SETUP_USER &&
+      trimmedPassword === SETUP_PASS
+    ) {
       const defaultAdmin: User = { id: 'admin-1', name: 'Sistem Yöneticisi', username: 'admin', role: 'Yönetici', status: 'online' };
       setUser(defaultAdmin);
       setInStorage(StorageKey.USER, defaultAdmin);
@@ -140,7 +152,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       clearFailedAttempts();
       logActivity('login', 'İlk kurulum admin girisi yapti - sifre degistirmesi gerekiyor', { employeeId: defaultAdmin.id, employeeName: defaultAdmin.name, page: 'login' });
       recordDeviceLogin(defaultAdmin.id, defaultAdmin.name);
-      setTimeout(() => toast.warning('İlk giriş! Lütfen güvenliğiniz için şifrenizi hemen değiştirin.'), 1500);
+      addSecurityThreat({
+        type: 'suspicious_activity',
+        severity: 'high',
+        title: 'Varsayılan Kurulum Şifresiyle Giriş',
+        description: 'Sistem varsayılan admin şifresiyle giriş yapıldı. Hemen yeni bir yönetici hesabı oluşturun ve bu şifreyi kullanmayı bırakın.',
+        source: 'auth',
+        metadata: { username: 'admin' },
+      });
+      setTimeout(() => toast.warning('⚠️ İlk giriş! Güvenliğiniz için hemen yeni bir yönetici hesabı oluşturun ve bu varsayılan şifreyi kullanmayı bırakın.', { duration: 8000 }), 1000);
       return true;
     }
 
@@ -172,14 +192,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // ── Şifre doğrulama ────────────────────────────────────────────
     const userPassword = (foundUser.password || '').trim();
     const userPin = (foundUser.pinCode || foundUser.pin_code || '').trim();
-    const hashedPassword = await hashString(trimmedPassword);
+    // Tuzlu hash (yeni format) — kullanici ID'si tuz olarak kullanilir
+    const saltKey = foundUser.id;
+    const hashedPassword = await hashString(trimmedPassword);              // Eski format (tuzsuz)
+    const hashedPasswordSalted = await hashStringWithSalt(trimmedPassword, saltKey); // Yeni format (tuzlu)
 
+    // Once tuzlu (yeni) hash dene, sonra tuzsuz (eski/migration) hash dene
     const isPasswordValid =
-      (userPassword && userPassword === hashedPassword) ||
-      (userPin && userPin === hashedPassword);
-    // GÜVENLİK: Düz metin şifre karşılaştırması ve varsayılan şifre fallback'i kaldırıldı.
+      (userPassword && (userPassword === hashedPasswordSalted || userPassword === hashedPassword)) ||
+      (userPin && (userPin === hashedPasswordSalted || userPin === hashedPassword));
+    // GÜVENLİK: Düz metin şifre karşılaştırması kaldırıldı.
     // Şifresi/PIN'i olmayan kullanıcılar sisteme giremez.
-    
+
     if (!isPasswordValid) {
       recordFailedAttempt();
       logActivity('security_alert', 'Hatalı şifre girişi', {
@@ -190,8 +214,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return false;
     }
 
-    // Eğer şifre düz metin olarak kayıtlıysa, bunu güvenli (hashed) versiyona geçir
-    const isPlaintextMatch = (userPassword && userPassword === trimmedPassword) || (userPin && userPin === trimmedPassword);
+    // Eski tuzsuz hash ile giriş yapıldıysa tuzlu hash'e migrate et
+    const needsPasswordMigration = !!(userPassword && userPassword === hashedPassword && userPassword !== hashedPasswordSalted);
+    const needsPinMigration = !!(userPin && userPin === hashedPassword && userPin !== hashedPasswordSalted);
 
     const loggedInUser: User = { 
       id: foundUser.id, 
@@ -219,17 +244,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Personel durumunu güncelle
     const updatedPersonnel = storedPersonnel.map(p => {
       if (p.id === foundUser.id) {
-        return { 
-          ...p, 
-          status: 'online', 
-          lastLogin: new Date().toLocaleString('tr-TR'), 
+        return {
+          ...p,
+          status: 'online',
+          lastLogin: new Date().toLocaleString('tr-TR'),
           last_login: new Date().toLocaleString('tr-TR'),
-          // Migration
-          ...(isPlaintextMatch ? {
-            password: p.password ? hashedPassword : p.password,
-            pinCode: p.pinCode ? hashedPassword : p.pinCode,
-            pin_code: p.pin_code ? hashedPassword : p.pin_code
-          } : {})
+          // Migration: tuzsuz hash'i tuzlu hash'e gecir
+          ...(needsPasswordMigration && p.password ? { password: hashedPasswordSalted } : {}),
+          ...(needsPinMigration && p.pinCode  ? { pinCode:  hashedPasswordSalted } : {}),
+          ...(needsPinMigration && p.pin_code ? { pin_code: hashedPasswordSalted } : {}),
         };
       }
       return p;
@@ -243,6 +266,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       else if (Array.isArray(foundUser.permissions)) parsedPermissions = foundUser.permissions;
     } catch {}
 
+    // GÜVENLİK: CURRENT_EMPLOYEE objesine asla şifre veya PIN hash'i saklanmaz.
+    // Kimlik doğrulaması zaten yapıldı; UI yalnızca rol/izin/meta veriye ihtiyaç duyar.
     setInStorage(StorageKey.CURRENT_EMPLOYEE, {
       id: foundUser.id,
       name: foundUser.name,
@@ -250,8 +275,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       role: foundUser.role === 'Yönetici' ? 'Yönetici' : 'Personel',
       department: foundUser.department || foundUser.position || 'Genel',
       permissions: parsedPermissions,
-      pinCode: isPlaintextMatch && userPin ? hashedPassword : (foundUser.pinCode || foundUser.pin_code),
-      password: isPlaintextMatch && userPassword ? hashedPassword : foundUser.password,
     });
 
     // Cihaz izleme ve ihlal tespiti
