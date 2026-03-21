@@ -17,6 +17,7 @@ import {
   Filter
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { staggerContainer, rowItem, hover, tap } from '../utils/animations';
 import * as Dialog from '@radix-ui/react-dialog';
 import { toast } from 'sonner';
 import { useTableSync } from '../hooks/useTableSync';
@@ -497,7 +498,12 @@ export function KasaPage() {
               </div>
 
               {/* Transactions List */}
-              <div className="space-y-3">
+              <motion.div
+                className="space-y-3"
+                variants={staggerContainer(0.04, 0.02)}
+                initial="initial"
+                animate="animate"
+              >
                 {filteredTransactions.length === 0 ? (
                   <div className="text-center py-16">
                     <Wallet className="w-16 h-16 text-gray-700 mx-auto mb-4" />
@@ -508,8 +514,11 @@ export function KasaPage() {
                   filteredTransactions.map((transaction) => (
                     <motion.div
                       key={transaction.id}
-                      initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
-                      className="group flex flex-col md:flex-row items-start md:items-center justify-between p-4 bg-white/5 border border-white/5 hover:border-white/10 rounded-2xl transition-all"
+                      layout
+                      variants={rowItem}
+                      whileHover={{ x: 3, borderColor: 'rgba(255,255,255,0.12)', transition: { duration: 0.15 } }}
+                      whileTap={tap.card}
+                      className="group flex flex-col md:flex-row items-start md:items-center justify-between p-4 bg-white/5 border border-white/5 rounded-2xl transition-colors"
                     >
                       <div className="flex items-center gap-4 w-full md:w-auto mb-4 md:mb-0">
                         <div className={`p-3 rounded-xl flex-shrink-0 ${transaction.type === 'Gelir' ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}>
@@ -540,7 +549,7 @@ export function KasaPage() {
                     </motion.div>
                   ))
                 )}
-              </div>
+              </motion.div>
             </div>
           )}
 

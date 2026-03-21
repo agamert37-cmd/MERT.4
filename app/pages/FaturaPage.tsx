@@ -7,6 +7,7 @@ import {
   Store, Truck, ToggleLeft, ToggleRight,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { staggerContainer, rowItem, hover, tap } from '../utils/animations';
 import * as Dialog from '@radix-ui/react-dialog';
 import { toast } from 'sonner';
 import { getFromStorage, setInStorage, StorageKey } from '../utils/storage';
@@ -693,7 +694,7 @@ export function FaturaPage() {
   };
 
   return (
-    <div className="p-3 sm:p-6 lg:p-10 space-y-6 bg-background min-h-screen text-white font-sans pb-28 sm:pb-6">
+    <div className="p-3 sm:p-6 lg:p-10 space-y-4 sm:space-y-6 lg:space-y-8 bg-background min-h-screen text-white font-sans pb-28 sm:pb-6">
       {/* ─── Header ─── */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
@@ -825,16 +826,22 @@ export function FaturaPage() {
             <p className="text-sm mt-1">{t('fatura.noInvoiceDesc')}</p>
           </div>
         )}
+        <motion.div
+          variants={staggerContainer(0.04, 0.02)}
+          initial="initial"
+          animate="animate"
+        >
         <AnimatePresence>
-          {filtered.map((fatura, idx) => (
+          {filtered.map((fatura) => (
             <motion.div
               key={fatura.id}
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
-              transition={{ delay: idx * 0.03 }}
+              layout
+              variants={rowItem}
+              exit={{ opacity: 0, y: -8, filter: 'blur(4px)', transition: { duration: 0.16 } }}
+              whileHover={{ x: 3, transition: { duration: 0.15 } }}
+              whileTap={tap.card}
               onClick={() => { setSelectedFatura(fatura); setIsDetailOpen(true); }}
-              className={`p-4 rounded-2xl border cursor-pointer transition-all hover:shadow-lg group ${
+              className={`p-4 rounded-2xl border cursor-pointer transition-colors hover:shadow-lg group ${
                 fatura.status === 'iptal'
                   ? 'bg-red-500/5 border-red-500/10 opacity-60'
                   : fatura.type === 'alis'
@@ -931,6 +938,7 @@ export function FaturaPage() {
             </motion.div>
           ))}
         </AnimatePresence>
+        </motion.div>
       </div>
 
       </>)}

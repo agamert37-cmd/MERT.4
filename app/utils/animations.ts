@@ -140,12 +140,55 @@ export const staggerItemFade: Variants = {
   },
 };
 
-/** Liste satırı — scroll-triggered */
+/** Liste satırı — scroll-triggered, blur ile */
 export const listRow: Variants = {
-  initial: { opacity: 0, x: -12 },
+  initial: { opacity: 0, x: -14, filter: 'blur(6px)' },
   animate: {
-    opacity: 1, x: 0,
-    transition: spring.snappy
+    opacity: 1, x: 0, filter: 'blur(0px)',
+    transition: { ...spring.snappy, filter: { duration: 0.25, ease: ease.out } }
+  },
+  exit: {
+    opacity: 0, x: 10, filter: 'blur(4px)',
+    transition: { duration: 0.18, ease: ease.in }
+  },
+};
+
+/** Tablo satırı — HTML <tr> için, soldan kayma + blur */
+export const tableRow: Variants = {
+  initial: { opacity: 0, x: -16, filter: 'blur(8px)' },
+  animate: {
+    opacity: 1, x: 0, filter: 'blur(0px)',
+    transition: { ...spring.smooth, filter: { duration: 0.3, ease: ease.out } }
+  },
+  exit: {
+    opacity: 0, x: 12, filter: 'blur(6px)',
+    transition: { duration: 0.2, ease: ease.in }
+  },
+};
+
+/** Grid kart girişi — scale + blur + y, grid içi kartlar için */
+export const gridCard: Variants = {
+  initial: { opacity: 0, y: 20, scale: 0.96, filter: 'blur(10px)' },
+  animate: {
+    opacity: 1, y: 0, scale: 1, filter: 'blur(0px)',
+    transition: { ...spring.bouncy, filter: { duration: 0.4, ease: ease.out } }
+  },
+  exit: {
+    opacity: 0, y: -10, scale: 0.97, filter: 'blur(6px)',
+    transition: { duration: 0.2, ease: ease.inOut }
+  },
+};
+
+/** Fatura / kasa satırı — soldan hafif + blur */
+export const rowItem: Variants = {
+  initial: { opacity: 0, x: -10, filter: 'blur(6px)' },
+  animate: {
+    opacity: 1, x: 0, filter: 'blur(0px)',
+    transition: { ...spring.smooth, filter: { duration: 0.28, ease: ease.out } }
+  },
+  exit: {
+    opacity: 0, y: -6, filter: 'blur(4px)',
+    transition: { duration: 0.16, ease: ease.in }
   },
 };
 
@@ -154,7 +197,9 @@ export const listRow: Variants = {
 // ═══════════════════════════════════════════════════════════════════
 export const hover = {
   /** Kart kaldırma efekti */
-  lift:   { scale: 1.025, y: -3, transition: spring.snappy } as const,
+  lift:   { scale: 1.025, y: -4, transition: spring.snappy } as const,
+  /** Orta güçlü kaldırma */
+  liftMd: { scale: 1.018, y: -3, transition: spring.smooth } as const,
   /** Hafif büyüme */
   grow:   { scale: 1.04,  transition: spring.micro }  as const,
   /** Küçük kıpırdama */
@@ -165,6 +210,10 @@ export const hover = {
   icon:   { scale: 1.2, rotate: 8, transition: spring.bouncy } as const,
   /** Buton hover */
   button: { scale: 1.03, y: -1, transition: spring.snappy } as const,
+  /** Satır hover — tablolar, listeler */
+  row:    { x: 3, transition: { duration: 0.15, ease: [0.16, 1, 0.3, 1] } } as const,
+  /** Grid kart hover */
+  card:   { y: -5, scale: 1.02, transition: spring.snappy } as const,
 } as const;
 
 export const tap = {
@@ -174,6 +223,8 @@ export const tap = {
   small:  { scale: 0.92, transition: { duration: 0.07 } } as const,
   /** Buton tıklama */
   button: { scale: 0.96, transition: { duration: 0.09 } } as const,
+  /** Kart tıklama */
+  card:   { scale: 0.98, transition: { duration: 0.1 } } as const,
 } as const;
 
 // ═══════════════════════════════════════════════════════════════════
