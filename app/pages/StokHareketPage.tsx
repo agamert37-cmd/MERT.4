@@ -12,7 +12,8 @@ import {
   FileText,
   Download 
 } from 'lucide-react';
-import { motion } from 'motion/react';
+import { motion, AnimatePresence } from 'motion/react';
+import { staggerContainer, gridCard, rowItem, hover, tap } from '../utils/animations';
 import { getFromStorage, StorageKey } from '../utils/storage';
 import { useEmployee } from '../contexts/EmployeeContext';
 import { useAuth } from '../contexts/AuthContext';
@@ -267,7 +268,7 @@ export function StokHareketPage() {
   };
 
   return (
-    <div className="p-3 sm:p-6 lg:p-8 space-y-4 sm:space-y-6 pb-24 sm:pb-6">
+    <div className="p-3 sm:p-6 lg:p-10 space-y-4 sm:space-y-6 lg:space-y-8 pb-24 sm:pb-6">
       {/* Header */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4">
         <div>
@@ -285,20 +286,24 @@ export function StokHareketPage() {
       </div>
 
       {/* Ozet Kartlar */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5 sm:gap-4">
+      <motion.div
+        className="grid grid-cols-2 md:grid-cols-4 gap-2.5 sm:gap-4"
+        variants={staggerContainer(0.06, 0.02)}
+        initial="initial"
+        animate="animate"
+      >
         {[
           { title: 'Toplam Hareket', value: stats.totalHareket.toString(), icon: Package, color: 'from-secondary to-accent' },
           { title: 'Stok Girisi', value: `${stats.totalGiris} AD`, sub: `${stats.totalGirisVal.toLocaleString('tr-TR')} TL`, icon: ArrowDownCircle, color: 'from-green-600 to-green-700' },
           { title: 'Stok Cikisi', value: `${stats.totalCikis} AD`, sub: `${stats.totalCikisVal.toLocaleString('tr-TR')} TL`, icon: ArrowUpCircle, color: 'from-blue-600 to-blue-700' },
           { title: 'Iade', value: `${stats.totalIade} AD`, sub: `${stats.totalIadeVal.toLocaleString('tr-TR')} TL`, icon: RotateCcw, color: 'from-orange-600 to-orange-700' },
-        ].map((card, idx) => {
+        ].map((card) => {
           const Icon = card.icon;
           return (
             <motion.div
               key={card.title}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: idx * 0.08 }}
+              variants={gridCard}
+              whileHover={hover.liftMd}
               className="card-premium rounded-xl p-3 sm:p-5"
             >
               <div className="flex items-center gap-2 sm:gap-3 mb-2 sm:mb-3">
@@ -312,7 +317,7 @@ export function StokHareketPage() {
             </motion.div>
           );
         })}
-      </div>
+      </motion.div>
 
       {/* Filtreler */}
       <div className="card-premium rounded-xl p-3 sm:p-4 space-y-2.5 sm:space-y-3">

@@ -7,7 +7,8 @@ import { reinitializeOpenAI } from '../lib/chatgpt-assistant';
 import { testSupabaseConnection } from '../lib/supabase';
 import { getFromStorage, setInStorage, StorageKey } from '../utils/storage';
 import { toast } from 'sonner';
-import { motion } from 'motion/react';
+import { motion, AnimatePresence } from 'motion/react';
+import { staggerContainer, gridCard, hover } from '../utils/animations';
 import { SERVER_BASE_URL, SUPABASE_ANON_KEY as publicAnonKey } from '../lib/supabase-config';
 import { runIntegrityCheck, getStorageStats, type IntegrityReport } from '../utils/data-integrity';
 import { useAuth } from '../contexts/AuthContext';
@@ -207,7 +208,12 @@ export function SettingsPage() {
     <div className="p-3 sm:p-6 lg:p-10 space-y-4 sm:space-y-6 lg:space-y-8 bg-background min-h-screen text-white font-sans pb-28 sm:pb-6">
       
       {/* Header */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
+      <motion.div
+        className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6"
+        initial={{ opacity: 0, y: -16 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
+      >
         <div>
           <div className="flex items-center gap-3 mb-1">
             <h1 className="text-3xl lg:text-4xl font-extrabold tracking-tight">Sistem Ayarları</h1>
@@ -217,12 +223,16 @@ export function SettingsPage() {
         <button onClick={handleTestAll} disabled={testing} className="flex items-center justify-center gap-2 px-6 py-3 bg-white/5 hover:bg-white/10 border border-white/10 text-white rounded-xl font-bold transition-all disabled:opacity-50">
           {testing ? <Loader2 className="w-5 h-5 animate-spin" /> : <CheckCircle className="w-5 h-5 text-emerald-400" />} Tüm Bağlantıları Test Et
         </button>
-      </div>
+      </motion.div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        
+      <motion.div
+        className="grid grid-cols-1 lg:grid-cols-2 gap-8"
+        variants={staggerContainer(0.1, 0.06)}
+        initial="initial"
+        animate="animate"
+      >
         {/* Şirket Bilgileri */}
-        <div className="p-8 rounded-3xl bg-[#111] border border-white/5">
+        <motion.div variants={gridCard} className="p-8 rounded-3xl bg-[#111] border border-white/5">
           <div className="flex items-center gap-4 mb-6">
             <div className="w-12 h-12 rounded-2xl bg-blue-500/10 flex items-center justify-center border border-blue-500/20"><Building2 className="w-6 h-6 text-blue-400"/></div>
             <div><h2 className="text-xl font-bold">Şirket Profili</h2><p className="text-xs text-gray-500">PDF ve Fişlerde görünecek bilgiler</p></div>
@@ -237,9 +247,9 @@ export function SettingsPage() {
             <div><label className={labelCls}>Vergi Dairesi</label><div className="relative"><FileText className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500"/><input type="text" value={companyInfo.taxOffice} onChange={e => setCompanyInfo(p => ({...p, taxOffice: e.target.value}))} className={`${inputClass} pl-11`} /></div></div>
           </div>
           <button onClick={handleSaveCompanyInfo} className="mt-6 w-full py-4 bg-blue-600 hover:bg-blue-500 text-white rounded-xl font-bold transition-all shadow-lg shadow-blue-600/20 flex items-center justify-center gap-2"><Save className="w-5 h-5"/> Kaydet</button>
-        </div>
+        </motion.div>
 
-        <div className="space-y-8">
+        <motion.div variants={gridCard} className="space-y-8">
           {/* OpenAI Settings */}
           <div className="p-8 rounded-3xl bg-[#111] border border-white/5">
             <div className="flex items-center gap-4 mb-6">
@@ -356,10 +366,17 @@ export function SettingsPage() {
             )}
           </div>
         )}
-      </div>
+        </motion.div>
+
+      </motion.div>
 
       {/* Login Branding Settings */}
-      <div className="p-8 rounded-3xl bg-[#111] border border-white/5">
+      <motion.div
+        className="p-8 rounded-3xl bg-[#111] border border-white/5"
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.45, delay: 0.25, ease: [0.16, 1, 0.3, 1] }}
+      >
         <div className="flex flex-col md:flex-row justify-between md:items-center mb-6 gap-4">
           <div className="flex items-center gap-4">
             <div className="w-12 h-12 rounded-2xl bg-pink-500/10 flex items-center justify-center border border-pink-500/20"><Monitor className="w-6 h-6 text-pink-400"/></div>
@@ -418,11 +435,15 @@ export function SettingsPage() {
             </div>
           </div>
         </div>
-      </div>
+      </motion.div>
 
       {/* ─── SMS Bildirimleri ────────────────────────────────── */}
-      <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}
-        className="bg-[#111] rounded-2xl sm:rounded-3xl p-5 sm:p-8 border border-white/5 space-y-5">
+      <motion.div
+        initial={{ opacity: 0, y: 16 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.45, delay: 0.35, ease: [0.16, 1, 0.3, 1] }}
+        className="bg-[#111] rounded-2xl sm:rounded-3xl p-5 sm:p-8 border border-white/5 space-y-5"
+      >
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-green-500/20 to-emerald-500/20 border border-green-500/20 flex items-center justify-center">

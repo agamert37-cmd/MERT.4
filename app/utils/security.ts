@@ -1069,7 +1069,7 @@ export function generateSecurityAudit(): { items: SecurityAuditItem[]; passRate:
   return { items, passRate, timestamp: new Date().toISOString() };
 }
 
-// ─── 2FA SİMÜLASYONU ───────────────────────────────────────────────────────
+// ─── 2FA ───────────────────────────────────────────────────────────────────────
 
 const TWO_FA_KEY = 'isleyen_et_2fa_config';
 
@@ -1079,6 +1079,7 @@ export interface TwoFAConfig {
   setupComplete: boolean;
   backupCodes: string[];
   lastVerified?: string;
+  secret?: string; // Hex-encoded TOTP secret
 }
 
 export function get2FAConfig(): TwoFAConfig {
@@ -1095,6 +1096,13 @@ export function save2FAConfig(config: Partial<TwoFAConfig>): TwoFAConfig {
   return updated;
 }
 
+/** Rastgele TOTP sirri uret (20 byte / 160-bit) */
+export function generateTOTPSecret(): string {
+  const arr = new Uint8Array(20);
+  crypto.getRandomValues(arr);
+  return Array.from(arr).map(b => b.toString(16).padStart(2, '0')).join('').toUpperCase();
+}
+
 export function generate2FABackupCodes(): string[] {
   const codes: string[] = [];
   for (let i = 0; i < 8; i++) {
@@ -1105,22 +1113,47 @@ export function generate2FABackupCodes(): string[] {
   return codes;
 }
 
-export function verify2FACode(inputCode: string): boolean {
-  // Simulated TOTP verification — in real app this would check against TOTP algorithm
+/** RFC 6238 TOTP hesaplama (HMAC-SHA1) */
+async function computeTOTP(secretHex: string, counter: number): Promise<string> {
+  const keyBytes = new Uint8Array((secretHex.match(/.{1,2}/g) || []).map(b => parseInt(b, 16)));
+  const counterBytes = new Uint8Array(8);
+  let temp = counter;
+  for (let i = 7; i >= 0; i--) {
+    counterBytes[i] = temp & 0xff;
+    temp = Math.floor(temp / 256);
+  }
+  const key = await crypto.subtle.importKey('raw', keyBytes, { name: 'HMAC', hash: 'SHA-1' }, false, ['sign']);
+  const sig = new Uint8Array(await crypto.subtle.sign('HMAC', key, counterBytes));
+  const offset = sig[sig.length - 1] & 0x0f;
+  const code = (
+    ((sig[offset] & 0x7f) << 24) |
+    ((sig[offset + 1] & 0xff) << 16) |
+    ((sig[offset + 2] & 0xff) << 8) |
+    (sig[offset + 3] & 0xff)
+  ) % 1000000;
+  return code.toString().padStart(6, '0');
+}
+
+export async function verify2FACode(inputCode: string): Promise<boolean> {
   const config = get2FAConfig();
   if (!config.enabled) return true;
 
-  // Backup code check
+  // Yedek kod kontrolu
   if (config.backupCodes.includes(inputCode.toUpperCase())) {
-    const newCodes = config.backupCodes.filter(c => c !== inputCode.toUpperCase());
-    save2FAConfig({ backupCodes: newCodes, lastVerified: new Date().toISOString() });
+    save2FAConfig({ backupCodes: config.backupCodes.filter(c => c !== inputCode.toUpperCase()), lastVerified: new Date().toISOString() });
     return true;
   }
 
-  // Simulated: accept any 6-digit code
-  if (/^\d{6}$/.test(inputCode)) {
-    save2FAConfig({ lastVerified: new Date().toISOString() });
-    return true;
+  // TOTP dogrulama — ±1 pencere (30 sn tolerans)
+  if (/^\d{6}$/.test(inputCode) && config.secret) {
+    const counter = Math.floor(Date.now() / 1000 / 30);
+    for (const offset of [-1, 0, 1]) {
+      const expected = await computeTOTP(config.secret, counter + offset);
+      if (expected === inputCode) {
+        save2FAConfig({ lastVerified: new Date().toISOString() });
+        return true;
+      }
+    }
   }
 
   return false;
