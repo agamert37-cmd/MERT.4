@@ -294,8 +294,8 @@ export function SettingsPage() {
               </div>
             )}
           </div>
-        </div>
-      </div>
+        </motion.div>
+      </motion.div>
 
       {/* Data Integrity */}
       <div className="p-8 rounded-3xl bg-[#111] border border-white/5">
@@ -366,9 +366,7 @@ export function SettingsPage() {
             )}
           </div>
         )}
-        </motion.div>
-
-      </motion.div>
+      </div>
 
       {/* Login Branding Settings */}
       <motion.div
