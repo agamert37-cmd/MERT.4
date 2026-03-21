@@ -29,6 +29,7 @@ import { useEmployee } from '../contexts/EmployeeContext';
 import { useModuleBus } from '../hooks/useModuleBus';
 import { getPagePermissions } from '../utils/permissions';
 import { usePageSecurity } from '../hooks/usePageSecurity';
+import { BankWidget } from '../components/BankWidget';
 
 const checkIsDayClosed = (): boolean => {
   try {
@@ -746,6 +747,9 @@ export function KasaPage() {
           </Dialog.Content>
         </Dialog.Portal>
       </Dialog.Root>
+
+      {/* ─── Banka Yönetimi ─── */}
+      <BankWidget canEdit={canAdd} />
 
     </div>
   );
