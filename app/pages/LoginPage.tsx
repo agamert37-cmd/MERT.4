@@ -314,50 +314,65 @@ function HeroCarousel({ banners }: { banners: any[] }) {
   if (banners.length === 0) return null;
 
   return (
-    <div className="relative w-full h-full overflow-hidden rounded-2xl lg:rounded-none shadow-2xl">
+    <div className="relative w-full h-full overflow-hidden">
+      {/* Slide görselleri */}
       <AnimatePresence mode="wait">
         <motion.div
           key={current}
-          initial={{ opacity: 0, scale: 1.05 }}
+          initial={{ opacity: 0, scale: 1.04 }}
           animate={{ opacity: 1, scale: 1 }}
-          exit={{ opacity: 0, scale: 0.95 }}
-          transition={{ duration: 0.8 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.7, ease: 'easeInOut' }}
           className="absolute inset-0"
         >
-          <img src={banners[current]?.imageUrl} alt="" className="w-full h-full object-cover" />
-          <div className="absolute inset-0 bg-gradient-to-t from-background via-background/40 to-transparent" />
-          <div className="absolute inset-0 bg-gradient-to-r from-background/80 via-transparent to-background/20" />
+          <img
+            src={banners[current]?.imageUrl}
+            alt=""
+            className="w-full h-full object-cover"
+          />
+          {/* TEK katman overlay — iç içe gradient yok */}
+          <div className="absolute inset-0 bg-gradient-to-t from-black/88 via-black/20 to-transparent" />
         </motion.div>
       </AnimatePresence>
 
-      <div className="absolute bottom-0 left-0 right-0 p-5 sm:p-8 lg:p-12 z-10">
+      {/* Alt içerik: başlık + slide indicators */}
+      <div className="absolute bottom-0 left-0 right-0 px-5 pb-5 sm:px-7 sm:pb-7 lg:px-10 lg:pb-9 z-10">
         <AnimatePresence mode="wait">
           <motion.div
             key={`text-${current}`}
-            initial={{ opacity: 0, y: 20 }}
+            initial={{ opacity: 0, y: 14 }}
             animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            transition={{ duration: 0.5, delay: 0.2 }}
+            exit={{ opacity: 0, y: -8 }}
+            transition={{ duration: 0.45, delay: 0.15 }}
           >
-            <span className="inline-block px-2.5 py-0.5 sm:px-3 sm:py-1 bg-blue-600/80 text-white text-[10px] sm:text-xs font-bold rounded-lg mb-2 sm:mb-3 backdrop-blur-md border border-blue-500/50">
-              ÖNE ÇIKAN
-            </span>
-            <h2 className="text-xl sm:text-3xl lg:text-5xl font-extrabold text-white mb-1.5 sm:mb-3 leading-tight drop-shadow-lg">
+            {/* Kategori etiketi — pill değil, temiz chip */}
+            <div className="inline-flex items-center gap-1.5 mb-2.5 sm:mb-3">
+              <span className="w-1.5 h-1.5 rounded-full bg-blue-400 flex-shrink-0" />
+              <span className="text-[10px] sm:text-xs font-bold text-blue-300 tracking-widest uppercase">
+                ÖNE ÇIKAN
+              </span>
+            </div>
+            <h2 className="text-lg sm:text-2xl lg:text-[2rem] font-extrabold text-white leading-tight mb-1.5 sm:mb-2 max-w-xs sm:max-w-sm">
               {banners[current]?.title}
             </h2>
-            <p className="text-white/80 text-sm sm:text-base lg:text-lg max-w-lg font-medium drop-shadow-md line-clamp-2 sm:line-clamp-none">
+            <p className="text-white/60 text-xs sm:text-sm max-w-xs sm:max-w-sm leading-relaxed line-clamp-2">
               {banners[current]?.subtitle}
             </p>
           </motion.div>
         </AnimatePresence>
 
+        {/* Slide göstergeleri */}
         {banners.length > 1 && (
-          <div className="flex items-center gap-2 mt-4 sm:mt-8">
+          <div className="flex items-center gap-1.5 mt-4 sm:mt-5">
             {banners.map((_, i) => (
               <button
                 key={i}
                 onClick={() => setCurrent(i)}
-                className={`transition-all duration-300 rounded-full ${i === current ? 'w-8 sm:w-12 h-2 sm:h-2.5 bg-blue-500' : 'w-2 sm:w-2.5 h-2 sm:h-2.5 bg-white/30 hover:bg-white/50'}`}
+                className={`transition-all duration-300 rounded-full ${
+                  i === current
+                    ? 'w-6 sm:w-8 h-1.5 bg-blue-400'
+                    : 'w-1.5 h-1.5 bg-white/25 hover:bg-white/45'
+                }`}
               />
             ))}
           </div>
@@ -627,133 +642,198 @@ export function LoginPage() {
   };
 
   return (
-    <div className="relative min-h-screen bg-[#0a0a0a] text-white flex flex-col lg:flex-row overflow-hidden font-sans">
-      <FloatingParticles />
+    <div className="relative min-h-screen bg-[#080c14] text-white flex flex-col lg:flex-row overflow-hidden font-sans">
+      {/* Tek, sade arka plan tonu — iç içe dekorasyon yok */}
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_left,rgba(37,99,235,0.06)_0%,transparent_60%)] pointer-events-none" />
 
-      {/* ─── Arka Plan Dekorasyonları ─── */}
-      <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-blue-600/10 rounded-full blur-[120px] pointer-events-none" />
-      <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-red-600/10 rounded-full blur-[120px] pointer-events-none" />
-
-      {/* ─── Mobil Alt Navigasyon Barı ─── */}
+      {/* ─── Mobil Alt Aksiyon Barı ─── */}
       <motion.div
-        initial={{ opacity: 0, y: 40 }}
+        initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.5 }}
-        className="sm:hidden fixed bottom-0 inset-x-0 z-50 pb-[max(0.25rem,env(safe-area-inset-bottom))]"
+        transition={{ delay: 0.4 }}
+        className="sm:hidden fixed bottom-0 inset-x-0 z-50"
+        style={{ paddingBottom: 'max(0.5rem, env(safe-area-inset-bottom))' }}
       >
-        <div className="mx-3 mb-2 flex items-center gap-2">
-          {/* Sepet butonu */}
+        <div className="mx-3 mb-2 flex items-center gap-2 bg-[#0d111b]/95 backdrop-blur-md border border-white/[0.08] rounded-2xl px-3 py-2.5 shadow-xl">
+          {/* Sepet butonu — ürün eklendiyse görünür */}
           {cartCount > 0 && (
             <motion.button
-              initial={{ scale: 0 }} animate={{ scale: 1 }}
+              initial={{ scale: 0, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
               whileTap={{ scale: 0.93 }}
               onClick={() => setShowCart(true)}
-              className="relative w-14 h-14 rounded-2xl bg-gradient-to-br from-orange-600 to-red-600 flex items-center justify-center shadow-xl shadow-red-600/30 border border-red-500/30"
+              className="relative w-11 h-11 rounded-xl bg-red-600/90 flex items-center justify-center flex-shrink-0"
             >
-              <ShoppingBag className="w-5 h-5 text-white" />
-              <span className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-white text-red-600 text-[10px] font-black flex items-center justify-center shadow-md">
+              <ShoppingBag className="w-4.5 h-4.5 text-white" />
+              <span className="absolute -top-1 -right-1 w-4.5 h-4.5 rounded-full bg-white text-red-600 text-[9px] font-black flex items-center justify-center">
                 {cartCount}
               </span>
             </motion.button>
           )}
-          {/* Giriş butonu */}
+          {/* Giriş butonu — sade, kurumsal */}
           <motion.button
             whileTap={{ scale: 0.97 }}
             onClick={() => setShowAdminPanel(true)}
-            className="flex-1 flex items-center justify-center gap-2.5 py-4 bg-gradient-to-r from-blue-600 via-blue-500 to-cyan-600 active:from-blue-700 active:to-cyan-700 backdrop-blur-xl border border-blue-500/30 rounded-2xl text-white text-sm font-bold shadow-2xl shadow-blue-600/30 transition-all relative overflow-hidden"
+            className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-blue-600 active:bg-blue-700 rounded-xl text-white text-sm font-semibold transition-colors"
           >
-            <div className="absolute inset-0 bg-gradient-to-r from-white/0 via-white/5 to-white/0 animate-pulse" />
-            <Fingerprint className="w-5 h-5 relative z-10" />
-            <span className="relative z-10">Sisteme Giriş Yap</span>
-            <ChevronRight className="w-3.5 h-3.5 text-blue-200 relative z-10" />
+            <LogIn className="w-4 h-4" />
+            <span>Personel Girişi</span>
           </motion.button>
         </div>
       </motion.div>
 
       {/* ═══════════════════════════════════════════════════════════
-           SOL PANEL: HERO CAROUSEL
+           SOL PANEL: MARKA + HERO CAROUSEL
          ═══════════════════════════════════════════════════════════ */}
-      <div className="w-full lg:w-[45%] h-[38vh] sm:h-[40vh] lg:h-screen p-3 sm:p-4 lg:p-0 relative z-10 flex-shrink-0">
-        <HeroCarousel banners={DEFAULT_BANNERS} />
-        <div className="absolute top-5 left-5 sm:top-8 sm:left-8 lg:left-12 z-20">
-          <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.3 }}
-            className="flex items-center gap-3 sm:gap-4">
-            <div className="w-10 h-10 sm:w-14 sm:h-14 rounded-xl sm:rounded-2xl bg-gradient-to-br from-blue-600 to-cyan-500 flex items-center justify-center shadow-lg shadow-blue-500/30">
-              <Sparkles className="w-5 h-5 sm:w-7 sm:h-7 text-white" />
-            </div>
-            <div>
-              <h1 className="text-white font-extrabold text-lg sm:text-2xl tracking-tight drop-shadow-md">{companyInfo.name}</h1>
-              <p className="text-blue-100 font-medium text-xs sm:text-sm drop-shadow-md">{companyInfo.slogan}</p>
-            </div>
-          </motion.div>
+      <div className="relative w-full lg:w-[42%] lg:h-screen flex-shrink-0 flex flex-col overflow-hidden">
+
+        {/* ── Şirket header şeridi (Hero'nun ÜSTÜNDE, ayrı katman) ── */}
+        <motion.div
+          initial={{ opacity: 0, y: -8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.2 }}
+          className="relative z-20 flex items-center gap-3 px-5 py-4 sm:px-6 sm:py-4 bg-black/60 backdrop-blur-sm border-b border-white/5 flex-shrink-0"
+        >
+          <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-blue-600 flex items-center justify-center flex-shrink-0 shadow-lg shadow-blue-600/40">
+            <Sparkles className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
+          </div>
+          <div className="min-w-0">
+            <h1 className="text-white font-bold text-base sm:text-lg leading-none tracking-tight truncate">
+              {companyInfo.name}
+            </h1>
+            <p className="text-blue-200/60 text-[11px] sm:text-xs font-medium mt-0.5 truncate">
+              {companyInfo.slogan}
+            </p>
+          </div>
+        </motion.div>
+
+        {/* ── Hero Carousel — kendi alanında, kalan yüksekliği doldurur ── */}
+        <div className="relative flex-1 min-h-[30vh] sm:min-h-[36vh] lg:min-h-0">
+          <HeroCarousel banners={DEFAULT_BANNERS} />
         </div>
+
+        {/* ── Güven rozeti şeridi — yalnızca desktop'ta görünür ── */}
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.5 }}
+          className="hidden lg:flex items-center gap-5 px-7 py-3.5 bg-black/50 backdrop-blur-sm border-t border-white/5 flex-shrink-0"
+        >
+          {[
+            { icon: <Award className="w-3.5 h-3.5" />, text: '15+ Yıl Deneyim' },
+            { icon: <Shield className="w-3.5 h-3.5" />, text: 'ISO 22000' },
+            { icon: <Truck className="w-3.5 h-3.5" />, text: 'Aynı Gün Teslimat' },
+            { icon: <Package className="w-3.5 h-3.5" />, text: 'Soğuk Zincir' },
+          ].map((item, i) => (
+            <React.Fragment key={i}>
+              {i > 0 && <span className="w-px h-3 bg-white/10 flex-shrink-0" />}
+              <span className="flex items-center gap-1.5 text-[11px] text-white/35 font-medium whitespace-nowrap">
+                <span className="text-white/30">{item.icon}</span>
+                {item.text}
+              </span>
+            </React.Fragment>
+          ))}
+        </motion.div>
       </div>
 
       {/* ═══════════════════════════════════════════════════════════
-           SAĞ PANEL: MÜŞTERİ İÇERİKLERİ (BENTO GRID)
+           SAĞ PANEL: MÜŞTERİ PORTALI
          ═══════════════════════════════════════════════════════════ */}
-      <div className="flex-1 p-4 sm:p-6 lg:p-12 overflow-y-auto z-10 scrollbar-hide">
-        <div className="max-w-4xl mx-auto space-y-5 sm:space-y-8 pt-2 sm:pt-8 lg:pt-8 pb-24 sm:pb-20">
-          
-          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
-            className="flex flex-col sm:flex-row sm:items-end justify-between gap-3"
-          >
-            <div>
-              <h2 className="text-xl sm:text-2xl font-bold text-white mb-1">Hoş Geldiniz,</h2>
-              <p className="text-muted-foreground text-sm sm:text-base">Müşterilerimize özel sunduğumuz fırsatlar, tarifler ve duyurular.</p>
-            </div>
-            {/* ─── Desktop: Sisteme Giriş Butonu (Entegre) ─── */}
-            <motion.button
-              initial={{ opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1 }}
-              whileHover={{ scale: 1.04, y: -2 }}
-              whileTap={{ scale: 0.97 }}
-              transition={{ delay: 0.3 }}
-              onClick={() => setShowAdminPanel(true)}
-              className="hidden sm:flex items-center gap-3 px-6 py-3.5 bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-500 hover:to-cyan-500 rounded-2xl text-white font-bold text-sm shadow-xl shadow-blue-600/25 transition-all group relative overflow-hidden shrink-0"
-            >
-              <div className="absolute inset-0 bg-gradient-to-r from-white/0 via-white/10 to-white/0 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-700" />
-              <div className="w-9 h-9 rounded-xl bg-white/15 flex items-center justify-center relative z-10">
-                <Fingerprint className="w-5 h-5 text-white" />
-              </div>
-              <div className="relative z-10 text-left">
-                <span className="block text-sm font-bold">Sisteme Giriş Yap</span>
-                <span className="block text-[10px] text-blue-200/80 font-medium">Yönetim Paneli</span>
-              </div>
-              <ArrowRight className="w-4 h-4 text-blue-200 group-hover:translate-x-1 transition-transform relative z-10" />
-            </motion.button>
-          </motion.div>
+      <div className="flex-1 overflow-y-auto z-10 scrollbar-hide">
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
-            
-            {/* ─── 1. KUTU: Nakit İndirim Bilgisi ─── */}
-            <motion.div 
-              initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}
-              className="md:col-span-2 relative overflow-hidden rounded-2xl sm:rounded-3xl bg-gradient-to-r from-red-600/20 via-orange-500/10 to-transparent border border-red-500/30 p-5 sm:p-8 group"
-            >
-              <div className="absolute top-0 right-0 w-64 h-64 bg-red-500/20 rounded-full blur-3xl -translate-y-20 translate-x-20" />
-              <div className="flex flex-col sm:flex-row items-center gap-4 sm:gap-8 relative z-10">
-                <div className="w-16 h-16 sm:w-24 sm:h-24 rounded-full bg-red-500/20 border-2 border-red-500/50 flex items-center justify-center flex-shrink-0 group-hover:scale-110 transition-transform duration-500">
-                  <Percent className="w-8 h-8 sm:w-12 sm:h-12 text-red-400" />
+        {/* ── Sağ panel üst navigasyon şeridi ── */}
+        <motion.div
+          initial={{ opacity: 0, y: -6 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.15 }}
+          className="sticky top-0 z-30 flex items-center justify-between gap-4 px-5 py-3.5 sm:px-8 sm:py-4 bg-[#080c14]/90 backdrop-blur-md border-b border-white/[0.06]"
+        >
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="text-[10px] sm:text-xs font-bold text-blue-400/80 uppercase tracking-widest hidden sm:block">
+              Müşteri Portali
+            </span>
+            <span className="hidden sm:block w-px h-3 bg-white/10" />
+            <span className="text-xs sm:text-sm text-white/50 font-medium truncate">
+              Fırsatlar · Tarifler · Ürün Kataloğu
+            </span>
+          </div>
+          {/* Desktop giriş butonu — düz, kurumsal */}
+          <motion.button
+            whileTap={{ scale: 0.97 }}
+            onClick={() => setShowAdminPanel(true)}
+            className="hidden sm:flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 rounded-lg text-white text-xs sm:text-sm font-semibold transition-colors shadow-md shadow-blue-600/20 flex-shrink-0"
+          >
+            <LogIn className="w-3.5 h-3.5" />
+            Personel Girişi
+          </motion.button>
+        </motion.div>
+
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 pt-5 sm:pt-7 pb-24 sm:pb-16 space-y-6 sm:space-y-8">
+
+          {/* ── Promosyon Şeridi ── */}
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.2 }}
+            className="flex gap-2.5 overflow-x-auto pb-0.5 scrollbar-hide"
+          >
+            {[
+              {
+                icon: <Percent className="w-3.5 h-3.5 text-red-400" />,
+                color: 'border-red-500/20 bg-red-500/[0.07]',
+                title: 'Nakit Ödemelerde %10 İndirim',
+                sub: 'Tüm perakende & toptan alımlarda',
+              },
+              {
+                icon: <Truck className="w-3.5 h-3.5 text-amber-400" />,
+                color: 'border-amber-500/20 bg-amber-500/[0.07]',
+                title: 'Aynı Gün Teslimat Garantisi',
+                sub: '10:00\'a kadar verilen siparişlerde',
+              },
+              {
+                icon: <Shield className="w-3.5 h-3.5 text-emerald-400" />,
+                color: 'border-emerald-500/20 bg-emerald-500/[0.07]',
+                title: 'ISO 22000 & HACCP Sertifikalı',
+                sub: 'Uluslararası hijyen standartları',
+              },
+              {
+                icon: <Award className="w-3.5 h-3.5 text-blue-400" />,
+                color: 'border-blue-500/20 bg-blue-500/[0.07]',
+                title: '2500+ Aktif Müşteri',
+                sub: '15 yıllık güvenilir hizmet',
+              },
+            ].map((item, i) => (
+              <div
+                key={i}
+                className={`flex-shrink-0 flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl border ${item.color} min-w-0`}
+              >
+                <div className="w-7 h-7 rounded-lg bg-white/5 flex items-center justify-center flex-shrink-0">
+                  {item.icon}
                 </div>
-                <div className="text-center sm:text-left">
-                  <span className="inline-block px-2.5 py-0.5 sm:px-3 sm:py-1 bg-red-500/20 text-red-400 text-[10px] sm:text-xs font-bold rounded-lg mb-1.5 sm:mb-2 border border-red-500/30">
-                    AVANTAJLI ALIŞVERİŞ
-                  </span>
-                  <h3 className="text-xl sm:text-2xl lg:text-3xl font-extrabold text-white mb-1.5 sm:mb-2">
-                    Nakit Ödemelerde <span className="text-red-400">%10 İndirim</span>
-                  </h3>
-                  <p className="text-muted-foreground text-xs sm:text-sm lg:text-base max-w-lg">
-                    Mağazamızdan ve toptan dağıtım ağımızdan yapacağınız tüm nakit alışverişlerde anında %10 indirim uygulanmaktadır. Kaliteyi daha uygun fiyata alın!
+                <div>
+                  <p className="text-white text-[11px] sm:text-xs font-semibold leading-tight whitespace-nowrap">
+                    {item.title}
+                  </p>
+                  <p className="text-white/35 text-[10px] sm:text-[11px] whitespace-nowrap">
+                    {item.sub}
                   </p>
                 </div>
               </div>
-            </motion.div>
+            ))}
+          </motion.div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-5">
+
+            {/* ─── Bölüm başlığı (grid'in üstünde) ─── */}
+            <div className="md:col-span-2 flex items-center gap-3 pt-1">
+              <h2 className="text-sm font-bold text-white/70 whitespace-nowrap">Haberler & Tarifler</h2>
+              <div className="flex-1 h-px bg-white/[0.06]" />
+            </div>
 
             {/* ─── 2. KUTU: Çorba Tarifleri ─── */}
-            <motion.div 
+            <motion.div
               initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}
-              className="md:col-span-1 rounded-2xl sm:rounded-3xl bg-white/5 border border-white/10 p-4 sm:p-6 flex flex-col"
+              className="md:col-span-1 rounded-2xl bg-white/[0.04] border border-white/[0.08] p-4 sm:p-5 flex flex-col"
             >
               <div className="flex items-center justify-between mb-4 sm:mb-6">
                 <div className="flex items-center gap-2.5 sm:gap-3">
@@ -794,9 +874,9 @@ export function LoginPage() {
             </motion.div>
 
             {/* ─── 3. KUTU: Güncel Haberler ─── */}
-            <motion.div 
+            <motion.div
               initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}
-              className="md:col-span-1 rounded-2xl sm:rounded-3xl bg-white/5 border border-white/10 p-4 sm:p-6 flex flex-col"
+              className="md:col-span-1 rounded-2xl bg-white/[0.04] border border-white/[0.08] p-4 sm:p-5 flex flex-col"
             >
               <div className="flex items-center gap-2.5 sm:gap-3 mb-4 sm:mb-6">
                 <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg sm:rounded-xl bg-blue-500/20 flex items-center justify-center">
@@ -827,14 +907,21 @@ export function LoginPage() {
 
           </div>
 
-          {/* ═══════════════════════════════════════════════════════
+          {/* ══════════════════════════════════════════════════════
                ÜRÜN KATALOĞU
-             ═══════════════════════════════════════════════════════ */}
+             ══════════════════════════════════════════════════════ */}
+          {/* Bölüm başlığı */}
+          <div className="flex items-center gap-3">
+            <h2 className="text-sm font-bold text-white/70 whitespace-nowrap">Ürün Kataloğu</h2>
+            <div className="flex-1 h-px bg-white/[0.06]" />
+            <span className="text-[11px] text-white/30 whitespace-nowrap">{catalogProducts.length} ürün</span>
+          </div>
+
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.4 }}
-            className="rounded-2xl sm:rounded-3xl bg-white/5 border border-white/10 p-4 sm:p-6 lg:p-8"
+            className="rounded-2xl bg-white/[0.04] border border-white/[0.08] p-4 sm:p-5 lg:p-6"
           >
             {/* Header */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 mb-4 sm:mb-6">
@@ -969,30 +1056,16 @@ export function LoginPage() {
             )}
           </motion.div>
 
-          {/* ─── Alt Bilgi Şeridi ─── */}
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.5 }}
-            className="flex flex-wrap items-center justify-center gap-4 sm:gap-8 py-4 sm:py-6 text-gray-500"
-          >
-            <div className="flex items-center gap-2 text-[10px] sm:text-xs">
-              <Award className="w-3.5 h-3.5" />
-              <span>15+ Yıllık Deneyim</span>
+          {/* ─── Alt Footer Şeridi ─── */}
+          <div className="flex items-center justify-between pt-2 pb-1 border-t border-white/[0.05]">
+            <p className="text-[10px] text-white/20 font-medium">
+              {companyInfo.name} &copy; {new Date().getFullYear()}
+            </p>
+            <div className="flex items-center gap-1.5">
+              <div className="w-1.5 h-1.5 rounded-full bg-emerald-400/60 animate-pulse" />
+              <span className="text-[10px] text-white/20 font-medium">Güvenli Bağlantı</span>
             </div>
-            <div className="flex items-center gap-2 text-[10px] sm:text-xs">
-              <Truck className="w-3.5 h-3.5" />
-              <span>Aynı Gün Teslimat</span>
-            </div>
-            <div className="flex items-center gap-2 text-[10px] sm:text-xs">
-              <Shield className="w-3.5 h-3.5" />
-              <span>ISO 22000 Sertifikalı</span>
-            </div>
-            <div className="flex items-center gap-2 text-[10px] sm:text-xs">
-              <Heart className="w-3.5 h-3.5" />
-              <span>2500+ Mutlu Müşteri</span>
-            </div>
-          </motion.div>
+          </div>
 
         </div>
       </div>
@@ -1008,81 +1081,65 @@ export function LoginPage() {
             <motion.div
               initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
               onClick={() => setShowAdminPanel(false)}
-              className="fixed inset-0 bg-black/80 backdrop-blur-md z-[90]"
+              className="fixed inset-0 bg-black/75 backdrop-blur-sm z-[90]"
             />
             <motion.div
-              initial={{ opacity: 0, scale: 0.92, y: 30 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.92, y: 30 }}
-              transition={{ type: 'spring', stiffness: 200, damping: 28 }}
-              className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-[460px] max-h-[92vh] z-[100] flex flex-col overflow-hidden rounded-3xl"
+              initial={{ opacity: 0, y: 24 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 16 }}
+              transition={{ type: 'spring', stiffness: 240, damping: 30 }}
+              className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-[420px] max-h-[92vh] z-[100] flex flex-col overflow-hidden rounded-2xl"
             >
-              {/* Glassmorphism Background */}
-              <div className="absolute inset-0 bg-[#0a0a0a]/95 backdrop-blur-2xl rounded-3xl" />
-              <div className="absolute top-0 left-0 w-72 h-72 bg-blue-600/8 rounded-full blur-[100px] -translate-x-1/2 -translate-y-1/2 pointer-events-none" />
-              <div className="absolute bottom-0 right-0 w-72 h-72 bg-purple-600/8 rounded-full blur-[100px] translate-x-1/2 translate-y-1/2 pointer-events-none" />
-              <div className="absolute inset-0 rounded-3xl border border-white/10 pointer-events-none" />
+              {/* Temiz, katmansız arka plan */}
+              <div className="absolute inset-0 bg-[#0d111b] rounded-2xl border border-white/[0.08]" />
 
-              {/* Header */}
-              <div className="relative flex items-center justify-between px-8 py-7 border-b border-white/5 rounded-t-3xl">
-                <div className="flex items-center gap-4">
-                  <motion.div
-                    animate={{ rotate: [0, 5, -5, 0] }}
-                    transition={{ duration: 4, repeat: Infinity, ease: 'easeInOut' }}
-                    className="relative"
-                  >
-                    <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-blue-600 via-cyan-500 to-blue-600 flex items-center justify-center shadow-xl shadow-blue-500/25">
-                      <Fingerprint className="w-7 h-7 text-white" />
-                    </div>
-                    <motion.div
-                      animate={{ scale: [1, 1.4, 1], opacity: [0.5, 0, 0.5] }}
-                      transition={{ duration: 2, repeat: Infinity }}
-                      className="absolute inset-0 rounded-2xl border-2 border-blue-400/30"
-                    />
-                  </motion.div>
+              {/* ── Kurumsal modal header ── */}
+              <div className="relative flex items-center justify-between px-6 py-5 border-b border-white/[0.07]">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-blue-600 flex items-center justify-center flex-shrink-0 shadow-md shadow-blue-600/30">
+                    <LogIn className="w-5 h-5 text-white" />
+                  </div>
                   <div>
-                    <h3 className="text-white font-extrabold text-xl tracking-tight">{t('auth.systemLogin')}</h3>
-                    <p className="text-gray-500 text-xs font-medium mt-0.5">{companyInfo.name} Yönetim Portalı</p>
+                    <h3 className="text-white font-bold text-base leading-tight">{t('auth.systemLogin')}</h3>
+                    <p className="text-white/35 text-[11px] font-medium">{companyInfo.name} · Yönetim Portalı</p>
                   </div>
                 </div>
-                <button onClick={() => { setShowAdminPanel(false); setError(''); setShowPassword(false); setShowAdminPw(false); }}
-                  className="p-2.5 bg-white/5 hover:bg-white/10 hover:rotate-90 rounded-xl transition-all duration-300">
-                  <X className="w-5 h-5 text-gray-400" />
+                <button
+                  onClick={() => { setShowAdminPanel(false); setError(''); setShowPassword(false); setShowAdminPw(false); }}
+                  className="p-2 bg-white/5 hover:bg-white/10 rounded-lg transition-colors"
+                >
+                  <X className="w-4 h-4 text-white/40" />
                 </button>
               </div>
 
-              {/* Tab Switcher - Premium */}
-              <div className="relative px-8 py-5">
-                <div className="relative flex bg-white/[0.03] rounded-2xl p-1.5 border border-white/5">
-                  <motion.div
-                    className="absolute top-1.5 bottom-1.5 rounded-xl"
-                    animate={{
-                      left: adminTab === 'user' ? '6px' : '50%',
-                      width: 'calc(50% - 9px)',
-                    }}
-                    transition={{ type: 'spring', stiffness: 200, damping: 28 }}
-                    style={{
-                      background: adminTab === 'user'
-                        ? 'linear-gradient(135deg, #2563eb, #0ea5e9)'
-                        : 'linear-gradient(135deg, #dc2626, #f97316)',
-                      boxShadow: adminTab === 'user'
-                        ? '0 8px 32px -8px rgba(37,99,235,0.5)'
-                        : '0 8px 32px -8px rgba(220,38,38,0.5)',
-                    }}
-                  />
-                  <button onClick={() => { setAdminTab('user'); setError(''); setShowPassword(false); }}
-                    className={`flex-1 relative z-10 py-3 rounded-xl text-sm font-bold transition-colors flex items-center justify-center gap-2 ${adminTab === 'user' ? 'text-white' : 'text-gray-500 hover:text-gray-300'}`}>
-                    <User className="w-4 h-4" /> Personel
+              {/* ── Tab Switcher — temiz, düz ── */}
+              <div className="px-6 pt-5 pb-1">
+                <div className="flex rounded-xl overflow-hidden border border-white/[0.08] bg-white/[0.03]">
+                  <button
+                    onClick={() => { setAdminTab('user'); setError(''); setShowPassword(false); }}
+                    className={`flex-1 py-2.5 text-sm font-semibold flex items-center justify-center gap-2 transition-colors ${
+                      adminTab === 'user'
+                        ? 'bg-blue-600 text-white'
+                        : 'text-white/40 hover:text-white/70 hover:bg-white/5'
+                    }`}
+                  >
+                    <User className="w-3.5 h-3.5" /> Personel
                   </button>
-                  <button onClick={() => { setAdminTab('admin'); setError(''); setShowAdminPw(false); }}
-                    className={`flex-1 relative z-10 py-3 rounded-xl text-sm font-bold transition-colors flex items-center justify-center gap-2 ${adminTab === 'admin' ? 'text-white' : 'text-gray-500 hover:text-gray-300'}`}>
-                    <ShieldCheck className="w-4 h-4" /> Yönetici
+                  <button
+                    onClick={() => { setAdminTab('admin'); setError(''); setShowAdminPw(false); }}
+                    className={`flex-1 py-2.5 text-sm font-semibold flex items-center justify-center gap-2 transition-colors border-l border-white/[0.08] ${
+                      adminTab === 'admin'
+                        ? 'bg-red-600 text-white'
+                        : 'text-white/40 hover:text-white/70 hover:bg-white/5'
+                    }`}
+                  >
+                    <ShieldCheck className="w-3.5 h-3.5" /> Yönetici
                   </button>
                 </div>
               </div>
 
               {/* Form Area */}
-              <div className="flex-1 px-8 overflow-y-auto relative">
+              <div className="flex-1 px-6 overflow-y-auto relative">
                 {/* Error */}
                 <AnimatePresence>
                   {error && (
@@ -1292,14 +1349,14 @@ export function LoginPage() {
               </div>
 
               {/* Footer */}
-              <div className="relative px-8 py-5 border-t border-white/5 bg-black/20 rounded-b-3xl">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                    <span className="text-[10px] text-gray-500 font-medium">Güvenli Bağlantı</span>
-                  </div>
-                  <p className="text-[10px] font-medium text-gray-600">{companyInfo.name} &copy; {new Date().getFullYear()} &bull; v4.2</p>
+              <div className="relative flex items-center justify-between px-6 py-3.5 border-t border-white/[0.07] bg-black/20">
+                <div className="flex items-center gap-1.5">
+                  <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                  <span className="text-[10px] text-white/25 font-medium">Güvenli Bağlantı</span>
                 </div>
+                <p className="text-[10px] font-medium text-white/20">
+                  {companyInfo.name} &copy; {new Date().getFullYear()}
+                </p>
               </div>
             </motion.div>
           </div>
@@ -1312,52 +1369,42 @@ export function LoginPage() {
           {/* Glow decorations */}
           <div className="absolute top-0 left-1/2 -translate-x-1/2 w-48 h-48 bg-blue-600/8 rounded-full blur-[80px] pointer-events-none" />
 
-          {/* Header */}
-          <div className="relative flex items-center justify-between px-5 py-4 border-b border-white/5">
+          {/* ── Mobil header: kurumsal ── */}
+          <div className="flex items-center justify-between px-5 py-4 border-b border-white/[0.07]">
             <div className="flex items-center gap-3">
-              <motion.div
-                animate={{ rotate: [0, 5, -5, 0] }}
-                transition={{ duration: 4, repeat: Infinity, ease: 'easeInOut' }}
-                className="w-11 h-11 rounded-xl bg-gradient-to-br from-blue-600 via-cyan-500 to-blue-600 flex items-center justify-center shadow-lg shadow-blue-500/25"
-              >
-                <Fingerprint className="w-5 h-5 text-white" />
-              </motion.div>
+              <div className="w-9 h-9 rounded-xl bg-blue-600 flex items-center justify-center flex-shrink-0">
+                <LogIn className="w-4 h-4 text-white" />
+              </div>
               <div>
-                <h3 className="text-white font-extrabold text-base tracking-tight">{t('auth.systemLogin')}</h3>
-                <p className="text-gray-500 text-[10px] font-medium">{companyInfo.name} Yönetim Portalı</p>
+                <h3 className="text-white font-bold text-sm leading-tight">{t('auth.systemLogin')}</h3>
+                <p className="text-white/30 text-[10px] font-medium">{companyInfo.name} · Yönetim Portalı</p>
               </div>
             </div>
-            <button onClick={() => { setShowAdminPanel(false); setError(''); setShowPassword(false); setShowAdminPw(false); }}
-              className="p-2 bg-white/5 hover:bg-white/10 rounded-lg transition-colors">
-              <X className="w-4 h-4 text-gray-400" />
+            <button
+              onClick={() => { setShowAdminPanel(false); setError(''); setShowPassword(false); setShowAdminPw(false); }}
+              className="p-1.5 bg-white/5 hover:bg-white/10 rounded-lg transition-colors"
+            >
+              <X className="w-4 h-4 text-white/40" />
             </button>
           </div>
 
-          {/* Tab Switcher */}
-          <div className="relative px-5 py-3">
-            <div className="relative flex bg-white/[0.03] rounded-xl p-1 border border-white/5">
-              <motion.div
-                className="absolute top-1 bottom-1 rounded-lg"
-                animate={{
-                  left: adminTab === 'user' ? '4px' : '50%',
-                  width: 'calc(50% - 6px)',
-                }}
-                transition={{ type: 'spring', stiffness: 200, damping: 28 }}
-                style={{
-                  background: adminTab === 'user'
-                    ? 'linear-gradient(135deg, #2563eb, #0ea5e9)'
-                    : 'linear-gradient(135deg, #dc2626, #f97316)',
-                  boxShadow: adminTab === 'user'
-                    ? '0 6px 24px -6px rgba(37,99,235,0.5)'
-                    : '0 6px 24px -6px rgba(220,38,38,0.5)',
-                }}
-              />
-              <button onClick={() => { setAdminTab('user'); setError(''); setShowPassword(false); }}
-                className={`flex-1 relative z-10 py-2.5 rounded-lg text-xs font-bold transition-colors flex items-center justify-center gap-1.5 ${adminTab === 'user' ? 'text-white' : 'text-gray-500'}`}>
+          {/* ── Mobil Tab Switcher — temiz ── */}
+          <div className="px-5 pt-4 pb-1">
+            <div className="flex rounded-xl overflow-hidden border border-white/[0.08] bg-white/[0.03]">
+              <button
+                onClick={() => { setAdminTab('user'); setError(''); setShowPassword(false); }}
+                className={`flex-1 py-2.5 text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors ${
+                  adminTab === 'user' ? 'bg-blue-600 text-white' : 'text-white/40 hover:text-white/70'
+                }`}
+              >
                 <User className="w-3.5 h-3.5" /> Personel
               </button>
-              <button onClick={() => { setAdminTab('admin'); setError(''); setShowAdminPw(false); }}
-                className={`flex-1 relative z-10 py-2.5 rounded-lg text-xs font-bold transition-colors flex items-center justify-center gap-1.5 ${adminTab === 'admin' ? 'text-white' : 'text-gray-500'}`}>
+              <button
+                onClick={() => { setAdminTab('admin'); setError(''); setShowAdminPw(false); }}
+                className={`flex-1 py-2.5 text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors border-l border-white/[0.08] ${
+                  adminTab === 'admin' ? 'bg-red-600 text-white' : 'text-white/40 hover:text-white/70'
+                }`}
+              >
                 <ShieldCheck className="w-3.5 h-3.5" /> Yönetici
               </button>
             </div>
