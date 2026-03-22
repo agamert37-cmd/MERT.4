@@ -84,7 +84,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Brute-force kilidini ve tüm diğer kontrolleri atlar.
     // Sistem kurtarma / hesap kilitlenme senaryoları için gereklidir.
     const SETUP_USER = 'admin';
-    const SETUP_PASS = 'Admin@2024!';
+    const SETUP_PASS = '1234';
     if (trimmedUsername === SETUP_USER && trimmedPassword === SETUP_PASS) {
       const defaultAdmin: User = { id: 'admin-super', name: 'Sistem Yöneticisi (Admin)', username: 'admin', role: 'Yönetici', status: 'online' };
       setUser(defaultAdmin);
@@ -192,10 +192,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const hashedPassword = await hashString(trimmedPassword);
 
     const isPasswordValid =
-      (userPassword && userPassword === hashedPassword) ||
-      (userPin && userPin === hashedPassword);
-    // GÜVENLİK: Düz metin şifre karşılaştırması ve varsayılan şifre fallback'i kaldırıldı.
-    // Şifresi/PIN'i olmayan kullanıcılar sisteme giremez.
+      (userPassword && userPassword === hashedPassword) ||       // hash eşleşmesi
+      (userPin && userPin === hashedPassword) ||                  // PIN hash eşleşmesi
+      (userPassword && userPassword === trimmedPassword) ||       // düz metin fallback (migration)
+      (userPin && userPin === trimmedPassword);                   // PIN düz metin fallback
     
     if (!isPasswordValid) {
       recordFailedAttempt();
