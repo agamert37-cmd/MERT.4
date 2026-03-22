@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef } from 'react';
+import React, { useState, useMemo } from 'react';
 import { UserCog, Shield, Clock, MapPin, Phone, Mail, Plus, Trash2, Activity, MousePointerClick, History, Eye, EyeOff, Edit3, Lock, Key, Save, X, Search, CheckCircle2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import * as Dialog from '@radix-ui/react-dialog';
@@ -373,10 +373,15 @@ export function PersonelPage() {
       return;
     }
     if (id === '1' || id === 'admin-super') { toast.error(t('personnel.systemAdminCantDelete')); return; }
-    if (!confirm(`${name} kullanıcısını silmek istediğinize emin misiniz?`)) return;
-    await deleteItem(id);
-    emit('personel:deleted', { personnelId: id, name });
-    toast.success(`${name} sistemden silindi.`);
+    toast(`${name} silinsin mi?`, {
+      action: { label: 'Evet, Sil', onClick: async () => {
+        await deleteItem(id);
+        emit('personel:deleted', { personnelId: id, name });
+        toast.success(`${name} sistemden silindi.`);
+      }},
+      cancel: { label: 'İptal', onClick: () => {} },
+      duration: 5000,
+    });
   };
 
   const loadRoleRequests = () => setRoleRequests(getFromStorage<any[]>('role_requests') || []);
@@ -731,6 +736,57 @@ export function PersonelPage() {
             </>
           )}
         </Dialog.Content></Dialog.Portal>
+      </Dialog.Root>
+
+      {/* Talep Onayları Modali */}
+      <Dialog.Root open={isRequestsModalOpen} onOpenChange={setIsRequestsModalOpen}>
+        <Dialog.Portal>
+          <Dialog.Overlay className="fixed inset-0 bg-black/80 z-50" />
+          <Dialog.Content aria-describedby={undefined} className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-[#111] p-4 sm:p-8 rounded-2xl sm:rounded-3xl border border-white/10 w-[95vw] max-w-2xl z-50 shadow-2xl max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center mb-6">
+              <Dialog.Title className="text-xl font-bold flex items-center gap-2">
+                <Shield className="w-5 h-5 text-purple-400" /> Yetki Talep Onayları
+              </Dialog.Title>
+              <Dialog.Close className="p-2 bg-white/5 hover:bg-white/10 rounded-xl transition-colors"><X className="w-5 h-5" /></Dialog.Close>
+            </div>
+
+            {roleRequests.length === 0 ? (
+              <div className="text-center py-12 text-gray-500">
+                <Shield className="w-12 h-12 mx-auto mb-3 opacity-20" />
+                <p className="font-medium">Bekleyen yetki talebi bulunmuyor.</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {roleRequests.map((req: any) => (
+                  <div key={req.id} className={`p-4 rounded-xl border ${req.status === 'pending' ? 'bg-yellow-500/5 border-yellow-500/20' : req.status === 'approved' ? 'bg-emerald-500/5 border-emerald-500/20' : 'bg-red-500/5 border-red-500/20'}`}>
+                    <div className="flex justify-between items-start gap-4">
+                      <div className="flex-1 min-w-0">
+                        <p className="font-bold text-white">{req.employeeName}</p>
+                        <p className="text-sm text-gray-400 mt-0.5">
+                          <span className="text-purple-400 font-semibold">{req.panelName}</span> modülüne geçici erişim talep etti
+                        </p>
+                        <p className="text-xs text-gray-600 mt-1">
+                          Süre: {req.durationHours} saat · {req.reason || 'Sebep belirtilmedi'}
+                        </p>
+                        {req.status !== 'pending' && (
+                          <span className={`inline-block mt-2 text-xs font-bold px-2 py-0.5 rounded-lg ${req.status === 'approved' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-red-500/20 text-red-400'}`}>
+                            {req.status === 'approved' ? '✓ Onaylandı' : '✕ Reddedildi'}
+                          </span>
+                        )}
+                      </div>
+                      {req.status === 'pending' && (
+                        <div className="flex gap-2 shrink-0">
+                          <button onClick={() => handleApproveRequest(req)} className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-lg transition-all">Onayla</button>
+                          <button onClick={() => handleRejectRequest(req)} className="px-3 py-1.5 bg-red-600/20 hover:bg-red-600/40 text-red-400 text-xs font-bold rounded-lg border border-red-500/20 transition-all">Reddet</button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </Dialog.Content>
+        </Dialog.Portal>
       </Dialog.Root>
 
     </div>

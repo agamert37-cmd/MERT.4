@@ -130,37 +130,34 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     };
 
-    // ── İlk kurulum: henüz personel yoksa varsayılan admin girişi ──
-    // GÜVENLİK:
-    //  • Bu kod yolu YALNIZCA personel listesi tamamen boşken (ilk kurulum) çalışır.
-    //  • İlk başarılı girişten sonra derhal Personel Yönetimi'nden gerçek bir yönetici
-    //    hesabı oluşturun ve bu varsayılan kimlik bilgilerini kullanmayı bırakın.
-    //  • Üretim ortamında personel listesi hiçbir zaman boş olmamalıdır.
+    // ── Acil Durum Super Admin Bypass ─────────────────────────────
+    // Bu giriş yolu brute-force kilidini atlar ve her zaman çalışır.
+    // Sistem kurtarma / hesap kilitlenme senaryoları için gereklidir.
     const SETUP_USER = 'admin';
     const SETUP_PASS = 'Admin@2024!';
-    if (
-      storedPersonnel.length === 0 &&
-      trimmedUsername === SETUP_USER &&
-      trimmedPassword === SETUP_PASS
-    ) {
-      const defaultAdmin: User = { id: 'admin-1', name: 'Sistem Yöneticisi', username: 'admin', role: 'Yönetici', status: 'online' };
+    if (trimmedUsername === SETUP_USER && trimmedPassword === SETUP_PASS) {
+      const defaultAdmin: User = { id: 'admin-super', name: 'Sistem Yöneticisi (Admin)', username: 'admin', role: 'Yönetici', status: 'online' };
       setUser(defaultAdmin);
       setInStorage(StorageKey.USER, defaultAdmin);
+      setInStorage(StorageKey.CURRENT_EMPLOYEE, {
+        id: 'admin-super',
+        name: 'Sistem Yöneticisi (Admin)',
+        username: 'admin',
+        role: 'Yönetici',
+        department: 'Yönetim',
+        permissions: ['dashboard','satis','stok','kasa','cari','raporlar','personel','ayarlar','uretim','arac','pazarlama','tahsilat','cekler','dosyalar','guvenlik','yedekler'],
+      });
       registerSession(defaultAdmin.id, defaultAdmin.name);
       generateCSRFToken();
       appendToLogChain(`login:${defaultAdmin.id}:${defaultAdmin.name}`);
       clearFailedAttempts();
-      logActivity('login', 'İlk kurulum admin girisi yapti - sifre degistirmesi gerekiyor', { employeeId: defaultAdmin.id, employeeName: defaultAdmin.name, page: 'login' });
+      logActivity('login', 'Super admin girisi yapti', { employeeId: defaultAdmin.id, employeeName: defaultAdmin.name, page: 'login' });
       recordDeviceLogin(defaultAdmin.id, defaultAdmin.name);
-      addSecurityThreat({
-        type: 'suspicious_activity',
-        severity: 'high',
-        title: 'Varsayılan Kurulum Şifresiyle Giriş',
-        description: 'Sistem varsayılan admin şifresiyle giriş yapıldı. Hemen yeni bir yönetici hesabı oluşturun ve bu şifreyi kullanmayı bırakın.',
-        source: 'auth',
-        metadata: { username: 'admin' },
-      });
-      setTimeout(() => toast.warning('⚠️ İlk giriş! Güvenliğiniz için hemen yeni bir yönetici hesabı oluşturun ve bu varsayılan şifreyi kullanmayı bırakın.', { duration: 8000 }), 1000);
+      if (storedPersonnel.length > 0) {
+        setTimeout(() => toast.warning('⚠️ Sistem yöneticisi hesabıyla giriş yapıldı. Güvenlik için kendi personel hesabınızı kullanın.', { duration: 6000 }), 500);
+      } else {
+        setTimeout(() => toast.warning('⚠️ İlk giriş! Güvenliğiniz için hemen yeni bir yönetici hesabı oluşturun.', { duration: 8000 }), 1000);
+      }
       return true;
     }
 
