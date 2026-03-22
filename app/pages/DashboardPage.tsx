@@ -115,6 +115,16 @@ export function DashboardPage() {
   const [refreshCounter, setRefreshCounter] = useState(0);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [chartView, setChartView] = useState<'area' | 'bar' | 'composed'>('composed');
+  const [liveCounter, setLiveCounter] = useState(0);
+
+  // Canlı otomatik yenileme - her 15 saniyede veriler güncellenir
+  useEffect(() => {
+    const liveInterval = setInterval(() => {
+      setRefreshCounter(c => c + 1);
+      setLiveCounter(c => c + 1);
+    }, 15_000);
+    return () => clearInterval(liveInterval);
+  }, []);
 
   // Sayfa ziyaretini logla (kullanıcı yüklenince bir kez)
   useEffect(() => {
@@ -428,6 +438,48 @@ export function DashboardPage() {
     return total;
   }, [rawFisler]);
 
+  // ─── Canlı saatlik satış akışı (bugün saat saat) ───
+  const hourlySalesFlow = useMemo(() => {
+    const now = new Date();
+    const hours: { saat: string; ciro: number; adet: number }[] = [];
+    for (let h = 7; h <= Math.min(now.getHours(), 23); h++) {
+      const hourSales = rawFisler.filter(f => {
+        if (f.mode !== 'sale' && f.mode !== 'satis') return false;
+        if (!f.date?.startsWith(todayISO) && f.date !== todayISO) return false;
+        const created = f.createdAt ? new Date(f.createdAt) : null;
+        return created ? created.getHours() === h : false;
+      });
+      const ciro = hourSales.reduce((sum, fis) => {
+        return sum + (fis.items || []).reduce((s: number, p: any) => {
+          return s + Math.abs(safeNum(p.totalPrice) || safeNum(p.total) || 0);
+        }, 0);
+      }, 0);
+      hours.push({ saat: `${h}:00`, ciro, adet: hourSales.length });
+    }
+    return hours;
+  }, [rawFisler, todayISO, liveCounter]);
+
+  // ─── Anlık kârlılık oranı (son 7 gün trend) ───
+  const profitTrend = useMemo(() => {
+    const today = new Date();
+    return Array.from({ length: 7 }).map((_, i) => {
+      const d = new Date(today);
+      d.setDate(d.getDate() - (6 - i));
+      const iso = d.toISOString().split('T')[0];
+      const daySales = rawFisler
+        .filter(f => (f.mode === 'sale' || f.mode === 'satis') && (f.date?.startsWith(iso) || f.date === iso))
+        .reduce((sum, item) => sum + (item.items || []).reduce((s: number, p: any) => s + Math.abs(safeNum(p.totalPrice) || safeNum(p.total) || 0), 0), 0);
+      const dayPurch = rawFisler
+        .filter(f => f.mode === 'alis' && (f.date?.startsWith(iso) || f.date === iso))
+        .reduce((sum, item) => sum + (item.items || []).reduce((s: number, p: any) => s + Math.abs(safeNum(p.totalPrice) || safeNum(p.total) || 0), 0), 0);
+      return {
+        gun: d.toLocaleDateString('tr-TR', { weekday: 'short' }),
+        kar: daySales - dayPurch,
+        oran: daySales > 0 ? Math.round(((daySales - dayPurch) / daySales) * 100) : 0
+      };
+    });
+  }, [rawFisler, liveCounter]);
+
   // ─── Stok akış verileri (fişlerden türetilen giriş/çıkış — son 5 ürün) ───
   const stockFlowData = useMemo(() => {
     const productFlow: Record<string, { inflow: number; outflow: number }> = {};
@@ -731,8 +783,27 @@ export function DashboardPage() {
             </button>
           </div>
         </div>
-        {/* Live Clock Row - isolated component, won't re-render the whole dashboard */}
-        <LiveClockWidget />
+        {/* Live Clock Row + Auto-refresh indicator */}
+        <div className="flex items-center justify-between flex-wrap gap-2">
+          <LiveClockWidget />
+          <motion.div
+            key={liveCounter}
+            initial={{ opacity: 0, scale: 0.8 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20"
+          >
+            <motion.div
+              animate={{ rotate: 360 }}
+              transition={{ duration: 1, ease: "linear" }}
+              key={`spin-${liveCounter}`}
+            >
+              <RefreshCw className="w-3 h-3 text-emerald-400" />
+            </motion.div>
+            <span className="text-[9px] sm:text-[10px] font-bold text-emerald-400">
+              Otomatik Yenileme Aktif · 15s
+            </span>
+          </motion.div>
+        </div>
       </div>
 
       {/* ─── Stat Cards Grid ─── */}
@@ -761,12 +832,25 @@ export function DashboardPage() {
               </div>
             </div>
             <p className="text-[9px] sm:text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1">{t('dashboard.dailyRevenue')}</p>
-            <p className="text-xl sm:text-2xl lg:text-3xl font-black text-white">
+            <motion.p
+              key={`rev-${liveCounter}`}
+              initial={{ opacity: 0.7, scale: 0.98 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ type: 'spring', stiffness: 300, damping: 20 }}
+              className="text-xl sm:text-2xl lg:text-3xl font-black text-white"
+            >
               <AnimatedCounter value={realtimeRevenue} prefix="₺" />
-            </p>
+            </motion.p>
             <div className="mt-2 sm:mt-3 flex items-center gap-2">
-              <Sparkline data={dailySparkData} color="#3b82f6" width={60} height={24} />
-              <span className="text-[9px] sm:text-[10px] text-gray-500">7 gün</span>
+              <Sparkline data={dailySparkData} color="#3b82f6" width={80} height={28} />
+              <div className="flex flex-col">
+                <span className="text-[9px] sm:text-[10px] text-gray-500">7 gün</span>
+                {dailySparkData.length >= 2 && (
+                  <span className={`text-[8px] font-bold ${dailySparkData[dailySparkData.length - 1] >= dailySparkData[dailySparkData.length - 2] ? 'text-emerald-400' : 'text-red-400'}`}>
+                    {dailySparkData[dailySparkData.length - 1] >= dailySparkData[dailySparkData.length - 2] ? '↑' : '↓'} dün vs bugün
+                  </span>
+                )}
+              </div>
             </div>
           </div>
         </motion.div>
@@ -854,10 +938,19 @@ export function DashboardPage() {
               {todayNetProfit !== 0 && <TrendBadge value={todayNetProfit >= 0 ? 8.2 : -3.5} />}
             </div>
             <p className="text-[9px] sm:text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1">Günlük Net Kâr</p>
-            <p className={`text-xl sm:text-2xl lg:text-3xl font-black ${todayNetProfit >= 0 ? 'text-purple-400' : 'text-orange-400'}`}>
+            <motion.p
+              key={`profit-${liveCounter}`}
+              initial={{ opacity: 0.7, scale: 0.98 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ type: 'spring', stiffness: 300, damping: 20 }}
+              className={`text-xl sm:text-2xl lg:text-3xl font-black ${todayNetProfit >= 0 ? 'text-purple-400' : 'text-orange-400'}`}
+            >
               <AnimatedCounter value={todayNetProfit} prefix="₺" />
-            </p>
-            <p className="text-[9px] sm:text-[10px] text-gray-500 mt-2">Satış − Alış</p>
+            </motion.p>
+            <div className="mt-2 flex items-center gap-2">
+              <Sparkline data={profitTrend.map(d => d.kar)} color={todayNetProfit >= 0 ? '#a855f7' : '#f97316'} width={60} height={22} />
+              <span className="text-[9px] sm:text-[10px] text-gray-500">7 gün kâr</span>
+            </div>
           </div>
         </motion.div>
       </motion.div>
@@ -1066,6 +1159,108 @@ export function DashboardPage() {
             </div>
           </motion.div>
         </div>
+      </div>
+
+      {/* ─── Canlı Saatlik Satış + Kârlılık Trend ─── */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-4 lg:gap-6">
+        {/* Saatlik Canlı Ciro Akışı */}
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.32 }}
+          className="p-4 sm:p-5 lg:p-6 rounded-2xl lg:rounded-3xl bg-[#111] border border-white/10 relative overflow-hidden"
+        >
+          <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-bl from-blue-500/5 to-transparent rounded-full blur-2xl" />
+          <div className="flex items-center justify-between mb-4 sm:mb-5">
+            <div className="flex items-center gap-2">
+              <div className="p-2 rounded-lg bg-blue-500/15">
+                <Activity className="w-4 h-4 text-blue-400" />
+              </div>
+              <div>
+                <h2 className="text-sm sm:text-base font-bold text-white">Canlı Ciro Akışı</h2>
+                <p className="text-[9px] sm:text-[10px] text-gray-500">Bugün saat saat · otomatik güncellenir</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <LivePulse color="#3b82f6" />
+              <span className="text-[8px] sm:text-[9px] text-blue-400 font-bold uppercase tracking-wider">Canlı</span>
+            </div>
+          </div>
+          <div className="h-[200px] sm:h-[240px]">
+            {hourlySalesFlow.length > 0 ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={hourlySalesFlow} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id="liveFlowGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#3b82f6" stopOpacity={0.4}/>
+                      <stop offset="100%" stopColor="#3b82f6" stopOpacity={0}/>
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#ffffff06" vertical={false} />
+                  <XAxis dataKey="saat" stroke="#ffffff25" fontSize={10} tickLine={false} axisLine={false} />
+                  <YAxis stroke="#ffffff25" fontSize={10} tickLine={false} axisLine={false} tickFormatter={v => v === 0 ? '0' : `₺${(v/1000).toFixed(0)}k`} />
+                  <Tooltip content={<PremiumTooltip formatter={(v: number) => `₺${v.toLocaleString('tr-TR')}`} />} />
+                  <Area type="monotone" dataKey="ciro" stroke="#3b82f6" strokeWidth={2.5} fillOpacity={1} fill="url(#liveFlowGrad)" name="Ciro"
+                    dot={{ r: 3, fill: '#111', stroke: '#3b82f6', strokeWidth: 2 }}
+                    activeDot={{ r: 6, fill: '#3b82f6', stroke: '#111', strokeWidth: 2 }} />
+                  <Bar dataKey="adet" fill="#3b82f640" name="Fiş Adedi" barSize={8} radius={[3, 3, 0, 0]} />
+                </AreaChart>
+              </ResponsiveContainer>
+            ) : (
+              <EmptyChartState message="Henüz bugünkü satış verisi yok" />
+            )}
+          </div>
+        </motion.div>
+
+        {/* Günlük Kârlılık Trend */}
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.34 }}
+          className="p-4 sm:p-5 lg:p-6 rounded-2xl lg:rounded-3xl bg-[#111] border border-white/10 relative overflow-hidden"
+        >
+          <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-bl from-emerald-500/5 to-transparent rounded-full blur-2xl" />
+          <div className="flex items-center gap-2 mb-4 sm:mb-5">
+            <div className="p-2 rounded-lg bg-emerald-500/15">
+              <TrendingUp className="w-4 h-4 text-emerald-400" />
+            </div>
+            <div>
+              <h2 className="text-sm sm:text-base font-bold text-white">Kârlılık Trendi</h2>
+              <p className="text-[9px] sm:text-[10px] text-gray-500">Son 7 günlük net kâr ve oran</p>
+            </div>
+          </div>
+          <div className="h-[200px] sm:h-[240px]">
+            {profitTrend.some(d => d.kar !== 0) ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <ComposedChart data={profitTrend} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id="profitGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#10b981" stopOpacity={0.3}/>
+                      <stop offset="100%" stopColor="#10b981" stopOpacity={0}/>
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#ffffff06" vertical={false} />
+                  <XAxis dataKey="gun" stroke="#ffffff25" fontSize={10} tickLine={false} axisLine={false} />
+                  <YAxis yAxisId="left" stroke="#ffffff25" fontSize={10} tickLine={false} axisLine={false} tickFormatter={v => v === 0 ? '0' : `₺${(v/1000).toFixed(0)}k`} />
+                  <YAxis yAxisId="right" orientation="right" stroke="#ffffff15" fontSize={9} tickLine={false} axisLine={false} tickFormatter={v => `${v}%`} />
+                  <Tooltip content={<PremiumTooltip formatter={(v: number) => v > 100 ? `₺${v.toLocaleString('tr-TR')}` : `%${v}`} />} />
+                  <Area yAxisId="left" type="monotone" dataKey="kar" stroke="#10b981" strokeWidth={2.5} fillOpacity={1} fill="url(#profitGrad)" name="Net Kâr"
+                    dot={{ r: 4, fill: '#111', stroke: '#10b981', strokeWidth: 2 }}
+                    activeDot={{ r: 6, fill: '#10b981' }} />
+                  <Line yAxisId="right" type="monotone" dataKey="oran" stroke="#f59e0b" strokeWidth={2} strokeDasharray="5 5" dot={{ r: 3, fill: '#f59e0b' }} name="Kâr Oranı %" />
+                </ComposedChart>
+              </ResponsiveContainer>
+            ) : (
+              <EmptyChartState message="Kârlılık verisi hesaplanıyor..." />
+            )}
+          </div>
+          {/* Anlık kâr özet strip */}
+          <div className="flex gap-2 mt-3 overflow-x-auto scrollbar-hide">
+            {profitTrend.slice(-3).map((d, i) => (
+              <div key={i} className={`shrink-0 px-2.5 py-1.5 rounded-lg border ${d.kar >= 0 ? 'bg-emerald-500/10 border-emerald-500/20' : 'bg-red-500/10 border-red-500/20'}`}>
+                <p className="text-[8px] font-bold text-gray-500 uppercase">{d.gun}</p>
+                <p className={`text-xs font-black ${d.kar >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                  {d.kar >= 0 ? '+' : ''}₺{d.kar.toLocaleString('tr-TR')}
+                </p>
+                <p className="text-[8px] text-gray-500">%{d.oran}</p>
+              </div>
+            ))}
+          </div>
+        </motion.div>
       </div>
 
       {/* ─── Middle Row: Finance Chart + Top Products ─── */}
