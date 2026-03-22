@@ -181,11 +181,30 @@ async function flushWrites() {
 
 // Tab gizlendiginde veya sayfa kapanirken bekleyen yazmalari hemen gonder
 if (typeof window !== 'undefined') {
-  // Tab gizlendiginde flush (ornegin baska uygulamaya gecis)
+  // Tab gizlendiginde flush; ön plana gelince yeniden sync (mobil kritik)
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'hidden' && _pendingWrites.size > 0) {
       flushWrites();
     }
+    if (document.visibilityState === 'visible') {
+      // Arka plandan döndüğünde veriyi tazele (30s sınırı ile)
+      syncIfStale();
+    }
+  });
+
+  // Ağ bağlantısı geri gelince zorla sync (offline → online geçişi)
+  window.addEventListener('online', () => {
+    console.log('%c[CloudSync] Ağ bağlantısı geri geldi, yeniden senkronize ediliyor...', 'color: #22c55e');
+    _initialSyncDone = false;
+    _lastSyncTime = 0;
+    syncFromCloud().then(result => {
+      _lastSyncTime = Date.now();
+      if (result.synced > 0) {
+        toast.success('Veriler güncellendi', { id: 'sync-online', duration: 2500 });
+      }
+    }).catch(() => {});
+    stopRealtimeSync();
+    startRealtimeSync();
   });
 
   // Sayfa kapanirken keepalive fetch ile gonder
@@ -296,6 +315,32 @@ export const removeFromStorage = (key: StorageKey | string): boolean => {
 
 let _initialSyncDone = false;
 let _initialSyncPromise: Promise<void> | null = null;
+let _lastSyncTime = 0;
+const MIN_RESYNC_INTERVAL_MS = 30_000; // 30s geçmediyse tekrar sync yapma
+
+/** Belirli bir süre geçmişse buluttan yeniden veri çek (mobil arka plandan dönüş için) */
+async function syncIfStale(): Promise<void> {
+  const now = Date.now();
+  if (now - _lastSyncTime < MIN_RESYNC_INTERVAL_MS) return;
+  _initialSyncDone = false;
+  try {
+    await syncFromCloud();
+    _lastSyncTime = Date.now();
+  } catch {}
+  // Realtime bağlantısı düşmüş olabilir, yeniden başlat
+  if (!_realtimeUnsubscribe) startRealtimeSync();
+}
+
+/** Zorla tam senkronizasyon — mobil sync butonu ve hata durumları için */
+export async function forceSync(): Promise<void> {
+  _initialSyncDone = false;
+  _lastSyncTime = 0;
+  await flushWrites();
+  await syncFromCloud();
+  _lastSyncTime = Date.now();
+  stopRealtimeSync();
+  startRealtimeSync();
+}
 
 /**
  * Uygulama acildiginda buluttan tum senkronize edilebilir verileri cek
@@ -399,6 +444,7 @@ export async function syncFromCloud(): Promise<{ synced: number; errors: string[
   }
 
   _initialSyncDone = true;
+  _lastSyncTime = Date.now();
   return { synced, errors };
 }
 

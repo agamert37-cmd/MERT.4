@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate, useLocation } from 'react-router';
 import { motion, AnimatePresence } from 'motion/react';
 import {
@@ -6,11 +6,13 @@ import {
   MoreHorizontal, X, FileText, Banknote, CalendarCheck,
   UserCog, Factory, ArrowLeftRight, Receipt, FileCheck,
   FolderOpen, Database, MessageSquare, ShieldAlert, Settings,
-  Megaphone, Truck, Search, FileEdit,
+  Megaphone, Truck, Search, FileEdit, RefreshCw, Wifi, WifiOff,
 } from 'lucide-react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useEmployee } from '../contexts/EmployeeContext';
+import { forceSync } from '../utils/storage';
+import { toast } from 'sonner';
 
 interface NavItem {
   path: string;
@@ -91,8 +93,18 @@ export function MobileBottomNav() {
   const { user } = useAuth();
   const { currentEmployee } = useEmployee();
   const [isMoreOpen, setIsMoreOpen] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
   const sheetRef = useRef<HTMLDivElement>(null);
   const startY = useRef(0);
+
+  useEffect(() => {
+    const onOnline  = () => setIsOnline(true);
+    const onOffline = () => setIsOnline(false);
+    window.addEventListener('online',  onOnline);
+    window.addEventListener('offline', onOffline);
+    return () => { window.removeEventListener('online', onOnline); window.removeEventListener('offline', onOffline); };
+  }, []);
 
   // Close on route change
   useEffect(() => {
@@ -117,6 +129,20 @@ export function MobileBottomNav() {
       navigator.vibrate(type === 'light' ? 8 : 18);
     }
   };
+
+  const handleSync = useCallback(async () => {
+    if (isSyncing) return;
+    setIsSyncing(true);
+    haptic('medium');
+    try {
+      await forceSync();
+      toast.success('Veriler güncellendi', { id: 'mobile-sync', duration: 2000 });
+    } catch {
+      toast.error('Senkronizasyon başarısız', { id: 'mobile-sync', duration: 2000 });
+    } finally {
+      setIsSyncing(false);
+    }
+  }, [isSyncing]);
 
   // Swipe down to close (daha hassas eşik: 60px)
   const handleTouchStart = (e: React.TouchEvent) => {
@@ -160,13 +186,36 @@ export function MobileBottomNav() {
 
               {/* Header */}
               <div className="flex items-center justify-between px-5 pb-3">
-                <h3 className="text-white font-bold text-lg">{t('mobileNav.allModules') || 'Tüm Modüller'}</h3>
-                <button
-                  onClick={() => setIsMoreOpen(false)}
-                  className="p-2 rounded-xl bg-white/5 hover:bg-white/10 transition-colors"
-                >
-                  <X className="w-4 h-4 text-gray-400" />
-                </button>
+                <div>
+                  <h3 className="text-white font-bold text-lg">{t('mobileNav.allModules') || 'Tüm Modüller'}</h3>
+                  <div className="flex items-center gap-1.5 mt-0.5">
+                    {isOnline ? (
+                      <Wifi className="w-3 h-3 text-emerald-400" />
+                    ) : (
+                      <WifiOff className="w-3 h-3 text-red-400" />
+                    )}
+                    <span className={`text-[11px] font-medium ${isOnline ? 'text-emerald-400/70' : 'text-red-400/70'}`}>
+                      {isOnline ? 'Çevrimiçi' : 'Çevrimdışı'}
+                    </span>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <motion.button
+                    whileTap={{ scale: 0.9 }}
+                    onClick={handleSync}
+                    disabled={isSyncing || !isOnline}
+                    className="p-2 rounded-xl bg-blue-600/15 border border-blue-500/20 text-blue-400 disabled:opacity-40 transition-colors"
+                    title="Verileri Senkronize Et"
+                  >
+                    <RefreshCw className={`w-4 h-4 ${isSyncing ? 'animate-spin' : ''}`} />
+                  </motion.button>
+                  <button
+                    onClick={() => setIsMoreOpen(false)}
+                    className="p-2 rounded-xl bg-white/5 hover:bg-white/10 transition-colors"
+                  >
+                    <X className="w-4 h-4 text-gray-400" />
+                  </button>
+                </div>
               </div>
 
               {/* Scrollable content */}
@@ -214,6 +263,38 @@ export function MobileBottomNav() {
 
       {/* Bottom Tab Bar */}
       <nav className="fixed bottom-0 left-0 right-0 z-[97] lg:hidden">
+        {/* Çevrimdışı uyarı şeridi */}
+        <AnimatePresence>
+          {!isOnline && (
+            <motion.div
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: 'auto', opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              className="overflow-hidden"
+            >
+              <div className="flex items-center justify-center gap-2 px-4 py-1.5 bg-red-600/20 border-t border-red-500/30">
+                <WifiOff className="w-3 h-3 text-red-400 flex-shrink-0" />
+                <span className="text-[11px] text-red-300 font-medium">Çevrimdışı — değişiklikler bağlantı gelince senkronize edilecek</span>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+        {/* Sync göstergesi */}
+        <AnimatePresence>
+          {isSyncing && (
+            <motion.div
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: 'auto', opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              className="overflow-hidden"
+            >
+              <div className="flex items-center justify-center gap-2 px-4 py-1.5 bg-blue-600/20 border-t border-blue-500/30">
+                <RefreshCw className="w-3 h-3 text-blue-400 animate-spin flex-shrink-0" />
+                <span className="text-[11px] text-blue-300 font-medium">Senkronize ediliyor...</span>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
         {/* Glass background */}
         <div className="absolute inset-0 bg-[#0a0e14]/90 backdrop-blur-2xl border-t border-white/[0.08]" />
 

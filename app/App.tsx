@@ -2,7 +2,7 @@ import { RouterProvider } from 'react-router';
 import { router } from './routes';
 import { Toaster } from 'sonner';
 import { useEffect, useRef } from 'react';
-import { startInitialSync, startRealtimeSync, stopRealtimeSync } from './utils/storage';
+import { startInitialSync, startRealtimeSync, stopRealtimeSync, forceSync } from './utils/storage';
 import {
   getLocalRepoConfig,
   startAutoSync,
@@ -116,12 +116,20 @@ export default function App() {
     // 4. Bulut otomatik yedekleme zamanlayıcısı (YedeklerPage ayarlarına göre)
     cloudBackupCleanupRef.current = scheduleCloudAutoBackup();
 
+    // 5. Uygulama arka plandan döndüğünde zorla yeniden sync
+    //    (supabase-storage'daki syncIfStale ile beraber çalışır, ikinci savunma katmanı)
+    const handleFocus = () => {
+      startRealtimeSync(); // Realtime kopmuşsa yeniden bağlan
+    };
+    window.addEventListener('focus', handleFocus);
+
     return () => {
       stopRealtimeSync();
       stopAutoSync();
       stopAutoBackup();
       stopHealthHeartbeat();
       cloudBackupCleanupRef.current();
+      window.removeEventListener('focus', handleFocus);
     };
   }, []);
 
