@@ -9,7 +9,8 @@ import {
   ShoppingBag, Tag, Star, Weight, Flame, Eye, EyeOff,
   Award, Truck, Package, Search, Beef,
   KeyRound, LogIn, ShieldCheck, Loader2,
-  FileText, Minus, Plus, Send, CheckCircle
+  FileText, Minus, Plus, Send, CheckCircle,
+  History, Zap, Wrench
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { toast } from 'sonner';
@@ -17,6 +18,7 @@ import { getFromStorage, StorageKey } from '../utils/storage';
 import { logActivity } from '../utils/activityLogger';
 import { useLanguage } from '../contexts/LanguageContext';
 import { trackVitrinEvent } from '../utils/vitrinAnalytics';
+import { CHANGELOG, CURRENT_VERSION, type ChangeType } from '../data/changelog';
 
 // ─── Cart Item type ──────────────────────────────────────────────
 interface CartItem {
@@ -274,6 +276,125 @@ function MobileBottomSheet({
   );
 }
 
+// ─── Changelog Modal ─────────────────────────────────────────────
+const CHANGE_META: Record<ChangeType, { label: string; icon: React.ReactNode; classes: string }> = {
+  yenilik:      { label: 'Yenilik',      icon: <Sparkles className="w-3 h-3" />,  classes: 'bg-blue-500/10 text-blue-300 border-blue-500/20' },
+  iyileştirme:  { label: 'İyileştirme',  icon: <Zap className="w-3 h-3" />,       classes: 'bg-amber-500/10 text-amber-300 border-amber-500/20' },
+  düzeltme:     { label: 'Düzeltme',     icon: <Wrench className="w-3 h-3" />,     classes: 'bg-emerald-500/10 text-emerald-300 border-emerald-500/20' },
+  güvenlik:     { label: 'Güvenlik',     icon: <Shield className="w-3 h-3" />,     classes: 'bg-red-500/10 text-red-300 border-red-500/20' },
+};
+
+function ChangelogModal({ onClose }: { onClose: () => void }) {
+  return (
+    <>
+      {/* Backdrop */}
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        onClick={onClose}
+        className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[150]"
+      />
+
+      {/* Panel */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, y: 12 }}
+        transition={{ type: 'spring', stiffness: 260, damping: 32 }}
+        className="fixed inset-4 sm:inset-auto sm:top-1/2 sm:left-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 sm:w-full sm:max-w-lg sm:max-h-[82vh] z-[160] flex flex-col overflow-hidden rounded-2xl bg-[#0d111b] border border-white/[0.08] shadow-2xl"
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 py-4 border-b border-white/[0.07] flex-shrink-0">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-blue-600/20 border border-blue-500/20 flex items-center justify-center flex-shrink-0">
+              <History className="w-4.5 h-4.5 text-blue-400" />
+            </div>
+            <div>
+              <h3 className="text-white font-bold text-sm leading-tight">Sürüm Geçmişi</h3>
+              <p className="text-white/30 text-[10px]">
+                Güncel sürüm: <span className="text-blue-400 font-semibold">v{CURRENT_VERSION.version} {CURRENT_VERSION.codename}</span>
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            className="p-1.5 bg-white/5 hover:bg-white/10 rounded-lg transition-colors"
+          >
+            <X className="w-4 h-4 text-white/40" />
+          </button>
+        </div>
+
+        {/* Legend */}
+        <div className="flex items-center gap-2 px-5 py-2.5 border-b border-white/[0.05] bg-white/[0.02] flex-shrink-0">
+          {(Object.entries(CHANGE_META) as [ChangeType, typeof CHANGE_META[ChangeType]][]).map(([key, meta]) => (
+            <span
+              key={key}
+              className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md border text-[10px] font-semibold ${meta.classes}`}
+            >
+              {meta.icon} {meta.label}
+            </span>
+          ))}
+        </div>
+
+        {/* Changelog list */}
+        <div className="flex-1 overflow-y-auto divide-y divide-white/[0.05]">
+          {CHANGELOG.map((entry, i) => (
+            <div key={entry.version} className="px-5 py-4">
+              {/* Versiyon başlığı */}
+              <div className="flex items-center gap-2.5 mb-3">
+                <div className="flex items-center gap-1.5">
+                  <span className={`px-2 py-0.5 rounded-lg text-[11px] font-black tracking-wide ${
+                    i === 0
+                      ? 'bg-blue-600 text-white'
+                      : 'bg-white/[0.07] text-white/60'
+                  }`}>
+                    v{entry.version}
+                  </span>
+                  <span className="text-[11px] font-bold text-white/40 uppercase tracking-wider">
+                    {entry.codename}
+                  </span>
+                </div>
+                {i === 0 && (
+                  <span className="px-1.5 py-0.5 bg-emerald-500/15 border border-emerald-500/25 rounded-md text-[9px] font-bold text-emerald-400 uppercase tracking-widest">
+                    Güncel
+                  </span>
+                )}
+                <span className="ml-auto text-[10px] text-white/25">{entry.date}</span>
+              </div>
+
+              {/* Özet */}
+              <p className="text-white/50 text-[11px] mb-3 leading-relaxed">{entry.summary}</p>
+
+              {/* Değişiklikler */}
+              <div className="space-y-1.5">
+                {entry.changes.map((change, j) => {
+                  const meta = CHANGE_META[change.type];
+                  return (
+                    <div key={j} className="flex items-start gap-2">
+                      <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded border text-[9px] font-bold flex-shrink-0 mt-0.5 ${meta.classes}`}>
+                        {meta.icon}
+                      </span>
+                      <span className="text-[11px] text-white/55 leading-relaxed">{change.text}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Footer */}
+        <div className="px-5 py-3 border-t border-white/[0.07] bg-black/20 flex-shrink-0">
+          <p className="text-[10px] text-white/20 text-center">
+            Tüm sürümler kayıt altındadır · İŞLEYEN ET Yönetim Sistemi
+          </p>
+        </div>
+      </motion.div>
+    </>
+  );
+}
+
 // ─── Hero Carousel ───────────────────────────────────────────────
 function HeroCarousel({ banners }: { banners: any[] }) {
   const [current, setCurrent] = useState(0);
@@ -362,6 +483,7 @@ export function LoginPage() {
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [showAdminPanel, setShowAdminPanel] = useState(false);
+  const [showChangelog, setShowChangelog] = useState(false);
   const [adminPassword, setAdminPassword] = useState('');
   const [adminTab, setAdminTab] = useState<'admin' | 'user'>('user');
   const [activeRecipe, setActiveRecipe] = useState(0);
@@ -1034,9 +1156,21 @@ export function LoginPage() {
             <p className="text-[10px] text-white/20 font-medium">
               {companyInfo.name} &copy; {new Date().getFullYear()}
             </p>
-            <div className="flex items-center gap-1.5">
-              <div className="w-1.5 h-1.5 rounded-full bg-emerald-400/60 animate-pulse" />
-              <span className="text-[10px] text-white/20 font-medium">Güvenli Bağlantı</span>
+            <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1.5">
+                <div className="w-1.5 h-1.5 rounded-full bg-emerald-400/60 animate-pulse" />
+                <span className="text-[10px] text-white/20 font-medium">Güvenli Bağlantı</span>
+              </div>
+              {/* Tıklanabilir sürüm rozeti */}
+              <button
+                onClick={() => setShowChangelog(true)}
+                className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-blue-600/10 hover:bg-blue-600/20 border border-blue-500/15 transition-colors group"
+              >
+                <History className="w-2.5 h-2.5 text-blue-400/60 group-hover:text-blue-400 transition-colors" />
+                <span className="text-[10px] font-bold text-blue-400/60 group-hover:text-blue-400 transition-colors">
+                  v{CURRENT_VERSION.version}
+                </span>
+              </button>
             </div>
           </div>
 
@@ -1322,14 +1456,21 @@ export function LoginPage() {
               </div>
 
               {/* Footer */}
-              <div className="relative flex items-center justify-between px-6 py-3.5 border-t border-white/[0.07] bg-black/20">
+              <div className="relative flex items-center justify-between px-6 py-3 border-t border-white/[0.07] bg-black/20">
                 <div className="flex items-center gap-1.5">
                   <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
                   <span className="text-[10px] text-white/25 font-medium">Güvenli Bağlantı</span>
                 </div>
-                <p className="text-[10px] font-medium text-white/20">
-                  {companyInfo.name} &copy; {new Date().getFullYear()}
-                </p>
+                {/* Sürüm rozeti */}
+                <button
+                  onClick={() => { setShowAdminPanel(false); setShowChangelog(true); }}
+                  className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-blue-600/10 hover:bg-blue-600/20 border border-blue-500/15 transition-colors group"
+                >
+                  <History className="w-3 h-3 text-blue-400/50 group-hover:text-blue-400 transition-colors" />
+                  <span className="text-[10px] font-bold text-blue-400/50 group-hover:text-blue-400 transition-colors">
+                    v{CURRENT_VERSION.version} {CURRENT_VERSION.codename}
+                  </span>
+                </button>
               </div>
             </motion.div>
           </div>
@@ -1564,14 +1705,24 @@ export function LoginPage() {
           </div>
 
           {/* Footer */}
-          <div className="relative px-5 py-3 border-t border-white/5 bg-black/20 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-1.5">
-                <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                <span className="text-[9px] text-gray-500 font-medium">Güvenli Bağlantı</span>
-              </div>
-              <p className="text-[9px] font-medium text-gray-600">{companyInfo.name} &copy; {new Date().getFullYear()}</p>
+          <div
+            className="flex items-center justify-between px-5 py-3 border-t border-white/5 bg-black/20"
+            style={{ paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))' }}
+          >
+            <div className="flex items-center gap-1.5">
+              <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+              <span className="text-[9px] text-white/25 font-medium">Güvenli Bağlantı</span>
             </div>
+            {/* Sürüm rozeti */}
+            <button
+              onClick={() => { setShowAdminPanel(false); setShowChangelog(true); }}
+              className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-blue-600/10 active:bg-blue-600/20 border border-blue-500/15"
+            >
+              <History className="w-2.5 h-2.5 text-blue-400/50" />
+              <span className="text-[9px] font-bold text-blue-400/50">
+                v{CURRENT_VERSION.version} {CURRENT_VERSION.codename}
+              </span>
+            </button>
           </div>
         </div>
       </MobileBottomSheet>
@@ -2196,6 +2347,15 @@ export function LoginPage() {
               )}
             </motion.div>
           </>
+        )}
+      </AnimatePresence>
+
+      {/* ═══════════════════════════════════════════════════════════
+           SÜRÜM GEÇMİŞİ (CHANGELOG) MODALI
+         ═══════════════════════════════════════════════════════════ */}
+      <AnimatePresence>
+        {showChangelog && (
+          <ChangelogModal onClose={() => setShowChangelog(false)} />
         )}
       </AnimatePresence>
 
