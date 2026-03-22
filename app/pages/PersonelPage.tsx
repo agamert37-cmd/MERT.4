@@ -190,11 +190,17 @@ export function PersonelPage() {
   const [editConfirmPassword, setEditConfirmPassword] = useState('');
   const [editPermissions, setEditPermissions] = useState<string[]>([]);
 
+  const [isSaving, setIsSaving] = useState(false);
   const [isRequestsModalOpen, setIsRequestsModalOpen] = useState(false);
   const [roleRequests, setRoleRequests] = useState<any[]>([]);
 
   const filteredPersonnel = useMemo(() => {
-    return personnelList.filter(p => p.name.toLowerCase().includes(searchTerm.toLowerCase()) || p.username.toLowerCase().includes(searchTerm.toLowerCase()));
+    return personnelList.filter(p => {
+      const name = (p.name || '').toLowerCase();
+      const username = (p.username || '').toLowerCase();
+      const term = searchTerm.toLowerCase();
+      return name.includes(term) || username.includes(term);
+    });
   }, [personnelList, searchTerm]);
 
   const onlineCount = personnelList.filter(p => p.status === 'online').length;
@@ -285,14 +291,15 @@ export function PersonelPage() {
     if (ev) ev.stopPropagation();
     setEditId(person.id); setEditName(person.name); setEditUsername(person.username); setEditPhone(person.phone);
     setEditEmail(person.email); setEditDepartment(person.department || person.position); setEditRole(person.role);
-    setEditSalary(String(person.salary || 0)); setEditPin(person.pinCode || ''); setEditPassword('');
+    setEditSalary(String(person.salary || 0)); setEditPin(''); setEditPassword('');
     setEditConfirmPassword(''); setEditPermissions(person.permissions || []); setIsEditModalOpen(true);
   };
 
   const handleUpdatePersonnel = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    if (isSaving) return;
     if (!canEdit) {
-      toast.error('Personel düzenleme yetkiniz bulunmamaktadır.');
+      toast.error('Personel düzenleme yetkiniz bulunmamaktadır. Yönetici hesabıyla giriş yapın.');
       logActivity('security_alert', 'Yetkisiz Personel Düzenleme', { level: 'high', employeeName: user?.name, description: 'Kullanıcı personel düzenlemeye çalıştı ancak yetkisi yoktu.' });
       return;
     }
@@ -345,11 +352,19 @@ export function PersonelPage() {
     if (editPin.trim()) updates.pinCode = await hashStringWithSalt(editPin.trim(), editId);
     if (editPassword.trim()) updates.password = await hashStringWithSalt(editPassword.trim(), editId);
 
-    await updateItem(editId, updates);
-    appendToLogChain(`personel_update:${editId}:${editName}`);
-    emit('personel:updated', { personnelId: editId, name: editName });
-    toast.success(`${editName} bilgileri güncellendi.`);
-    setIsEditModalOpen(false);
+    setIsSaving(true);
+    try {
+      await updateItem(editId, updates);
+      appendToLogChain(`personel_update:${editId}:${editName}`);
+      emit('personel:updated', { personnelId: editId, name: editName });
+      toast.success(`${editName} bilgileri güncellendi.`);
+      setIsEditModalOpen(false);
+    } catch (err) {
+      console.error('[PersonelPage] updateItem error:', err);
+      toast.error('Kayıt sırasında bir hata oluştu. Lütfen tekrar deneyin.');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const handleDelete = async (e: React.MouseEvent, id: string, name: string) => {
@@ -360,10 +375,15 @@ export function PersonelPage() {
       return;
     }
     if (id === '1' || id === 'admin-super') { toast.error(t('personnel.systemAdminCantDelete')); return; }
-    if (!confirm(`${name} kullanıcısını silmek istediğinize emin misiniz?`)) return;
-    await deleteItem(id);
-    emit('personel:deleted', { personnelId: id, name });
-    toast.success(`${name} sistemden silindi.`);
+    toast(`${name} silinsin mi?`, {
+      action: { label: 'Evet, Sil', onClick: async () => {
+        await deleteItem(id);
+        emit('personel:deleted', { personnelId: id, name });
+        toast.success(`${name} sistemden silindi.`);
+      }},
+      cancel: { label: 'İptal', onClick: () => {} },
+      duration: 5000,
+    });
   };
 
   const loadRoleRequests = () => setRoleRequests(getFromStorage<any[]>('role_requests') || []);
@@ -536,7 +556,7 @@ export function PersonelPage() {
                   <div className="flex items-center gap-4">
                     <div className="relative">
                       <div className={`w-14 h-14 rounded-2xl flex items-center justify-center text-xl font-black shadow-lg ${person.role === 'Yönetici' ? 'bg-gradient-to-br from-orange-500 to-red-600' : 'bg-gradient-to-br from-blue-600 to-purple-600'}`}>
-                        {person.name.charAt(0).toUpperCase()}
+                        {(person.name || '?').charAt(0).toUpperCase()}
                       </div>
                       <div className={`absolute -bottom-1 -right-1 w-4 h-4 rounded-full border-2 border-[#111] ${person.status === 'online' ? 'bg-emerald-500' : 'bg-gray-600'}`} />
                     </div>
@@ -657,8 +677,10 @@ export function PersonelPage() {
             </div>
 
             <div className="flex gap-3 pt-4">
-              <Dialog.Close className="flex-1 py-4 bg-white/5 hover:bg-white/10 rounded-xl font-bold transition-all">İptal</Dialog.Close>
-              <button type="submit" className="flex-1 py-4 bg-orange-600 hover:bg-orange-500 text-white rounded-xl font-bold transition-all shadow-lg shadow-orange-600/20">Güncelle</button>
+              <Dialog.Close disabled={isSaving} className="flex-1 py-4 bg-white/5 hover:bg-white/10 rounded-xl font-bold transition-all disabled:opacity-50">İptal</Dialog.Close>
+              <button type="submit" disabled={isSaving} className="flex-1 py-4 bg-orange-600 hover:bg-orange-500 text-white rounded-xl font-bold transition-all shadow-lg shadow-orange-600/20 disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2">
+                {isSaving ? <><span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />Kaydediliyor...</> : 'Güncelle'}
+              </button>
             </div>
           </form>
         </Dialog.Content></Dialog.Portal>
@@ -672,7 +694,7 @@ export function PersonelPage() {
               <div className="p-4 sm:p-8 border-b border-white/5 bg-gradient-to-b from-blue-900/20 to-transparent flex flex-col sm:flex-row justify-between items-start gap-4">
                 <div className="flex items-center gap-4 sm:gap-6">
                   <div className="w-14 h-14 sm:w-20 sm:h-20 rounded-2xl sm:rounded-3xl bg-blue-600 flex items-center justify-center text-xl sm:text-3xl font-black shadow-xl shadow-blue-600/30">
-                    {selectedEmployee.name.charAt(0)}
+                    {(selectedEmployee.name || '?').charAt(0)}
                   </div>
                   <div>
                     <Dialog.Title className="text-xl sm:text-3xl font-black mb-1">{selectedEmployee.name}</Dialog.Title>
@@ -727,6 +749,57 @@ export function PersonelPage() {
             </>
           )}
         </Dialog.Content></Dialog.Portal>
+      </Dialog.Root>
+
+      {/* Talep Onayları Modali */}
+      <Dialog.Root open={isRequestsModalOpen} onOpenChange={setIsRequestsModalOpen}>
+        <Dialog.Portal>
+          <Dialog.Overlay className="fixed inset-0 bg-black/80 z-50" />
+          <Dialog.Content aria-describedby={undefined} className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-[#111] p-4 sm:p-8 rounded-2xl sm:rounded-3xl border border-white/10 w-[95vw] max-w-2xl z-50 shadow-2xl max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center mb-6">
+              <Dialog.Title className="text-xl font-bold flex items-center gap-2">
+                <Shield className="w-5 h-5 text-purple-400" /> Yetki Talep Onayları
+              </Dialog.Title>
+              <Dialog.Close className="p-2 bg-white/5 hover:bg-white/10 rounded-xl transition-colors"><X className="w-5 h-5" /></Dialog.Close>
+            </div>
+
+            {roleRequests.length === 0 ? (
+              <div className="text-center py-12 text-gray-500">
+                <Shield className="w-12 h-12 mx-auto mb-3 opacity-20" />
+                <p className="font-medium">Bekleyen yetki talebi bulunmuyor.</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {roleRequests.map((req: any) => (
+                  <div key={req.id} className={`p-4 rounded-xl border ${req.status === 'pending' ? 'bg-yellow-500/5 border-yellow-500/20' : req.status === 'approved' ? 'bg-emerald-500/5 border-emerald-500/20' : 'bg-red-500/5 border-red-500/20'}`}>
+                    <div className="flex justify-between items-start gap-4">
+                      <div className="flex-1 min-w-0">
+                        <p className="font-bold text-white">{req.employeeName}</p>
+                        <p className="text-sm text-gray-400 mt-0.5">
+                          <span className="text-purple-400 font-semibold">{req.panelName}</span> modülüne geçici erişim talep etti
+                        </p>
+                        <p className="text-xs text-gray-600 mt-1">
+                          Süre: {req.durationHours} saat · {req.reason || 'Sebep belirtilmedi'}
+                        </p>
+                        {req.status !== 'pending' && (
+                          <span className={`inline-block mt-2 text-xs font-bold px-2 py-0.5 rounded-lg ${req.status === 'approved' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-red-500/20 text-red-400'}`}>
+                            {req.status === 'approved' ? '✓ Onaylandı' : '✕ Reddedildi'}
+                          </span>
+                        )}
+                      </div>
+                      {req.status === 'pending' && (
+                        <div className="flex gap-2 shrink-0">
+                          <button onClick={() => handleApproveRequest(req)} className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-lg transition-all">Onayla</button>
+                          <button onClick={() => handleRejectRequest(req)} className="px-3 py-1.5 bg-red-600/20 hover:bg-red-600/40 text-red-400 text-xs font-bold rounded-lg border border-red-500/20 transition-all">Reddet</button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </Dialog.Content>
+        </Dialog.Portal>
       </Dialog.Root>
 
     </div>

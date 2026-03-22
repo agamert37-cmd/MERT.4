@@ -47,14 +47,15 @@ async function pushAllLocalToSupabase(
     cari_hesaplar:     'cari_data',
     urunler:           'stok_data',
     araclar:           'arac_data',
+    arac_shifts:       'arac_shifts',
     bankalar:          'bank_data',
-    fisler:            'fis_data',
+    fisler:            'fisler',
     kasa_islemleri:    'kasa_data',
-    uretim_kayitlari:  'uretim_data',
-    uretim_profilleri: 'uretim_profil_data',
     cekler:            'cekler_data',
-    tahsilatlar:       'tahsilat_data',
-    stok_hareketleri:  'stok_hareket_data',
+    uretim_profilleri: 'uretim_profiles',
+    uretim_kayitlari:  'uretim_data',
+    faturalar:         'faturalar',
+    fatura_stok:       'fatura_stok',
   };
 
   const storageKey = TABLE_STORAGE_MAP[tableName];

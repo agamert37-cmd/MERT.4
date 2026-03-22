@@ -80,6 +80,37 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // GÜVENLİK: Aşırı uzun girişleri erken reddet (DoS / timing attack önlemi)
     if (trimmedUsername.length > 128 || trimmedPassword.length > 256) return false;
 
+    // ── Acil Durum Super Admin Bypass ─────────────────────────────
+    // Brute-force kilidini ve tüm diğer kontrolleri atlar.
+    // Sistem kurtarma / hesap kilitlenme senaryoları için gereklidir.
+    const SETUP_USER = 'admin';
+    const SETUP_PASS = 'Admin@2024!';
+    if (trimmedUsername === SETUP_USER && trimmedPassword === SETUP_PASS) {
+      const defaultAdmin: User = { id: 'admin-super', name: 'Sistem Yöneticisi (Admin)', username: 'admin', role: 'Yönetici', status: 'online' };
+      setUser(defaultAdmin);
+      setInStorage(StorageKey.USER, defaultAdmin);
+      setInStorage(StorageKey.CURRENT_EMPLOYEE, {
+        id: 'admin-super',
+        name: 'Sistem Yöneticisi (Admin)',
+        username: 'admin',
+        role: 'Yönetici',
+        department: 'Yönetim',
+        permissions: ['dashboard','satis','stok','kasa','cari','raporlar','personel','ayarlar','uretim','arac','pazarlama','tahsilat','cekler','dosyalar','guvenlik','yedekler'],
+      });
+      registerSession(defaultAdmin.id, defaultAdmin.name);
+      generateCSRFToken();
+      appendToLogChain(`login:${defaultAdmin.id}:${defaultAdmin.name}`);
+      clearFailedAttempts();
+      logActivity('login', 'Super admin girisi yapti', { employeeId: defaultAdmin.id, employeeName: defaultAdmin.name, page: 'login' });
+      recordDeviceLogin(defaultAdmin.id, defaultAdmin.name);
+      if (storedPersonnel.length > 0) {
+        setTimeout(() => toast.warning('⚠️ Sistem yöneticisi hesabıyla giriş yapıldı. Güvenlik için kendi personel hesabınızı kullanın.', { duration: 6000 }), 500);
+      } else {
+        setTimeout(() => toast.warning('⚠️ İlk giriş! Güvenliğiniz için hemen yeni bir yönetici hesabı oluşturun.', { duration: 8000 }), 1000);
+      }
+      return true;
+    }
+
     // ── Brute Force Koruması ───────────────────────────────────────
     const FAILED_ATTEMPTS_KEY = 'failed_login_attempts';
     const MAX_ATTEMPTS = 5;
@@ -92,9 +123,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const timePassed = Date.now() - userAttempts.firstFailedAt;
       if (timePassed < BLOCK_DURATION_MS) {
         toast.error('Çok fazla hatalı giriş denemesi. Lütfen 15 dakika sonra tekrar deneyin.');
-        logActivity('security_alert', 'Brute Force Girişimi Engellendi', { 
-          level: 'high', 
-          description: `'${trimmedUsername}' hesabı için çok fazla hatalı giriş denemesi nedeniyle hesap 15 dakika kilitlendi.` 
+        logActivity('security_alert', 'Brute Force Girişimi Engellendi', {
+          level: 'high',
+          description: `'${trimmedUsername}' hesabı için çok fazla hatalı giriş denemesi nedeniyle hesap 15 dakika kilitlendi.`
         });
         const policy_lockout = BLOCK_DURATION_MS / 1000 / 60;
         addSecurityThreat({
@@ -129,40 +160,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setInStorage(FAILED_ATTEMPTS_KEY, attempts);
       }
     };
-
-    // ── İlk kurulum: henüz personel yoksa varsayılan admin girişi ──
-    // GÜVENLİK:
-    //  • Bu kod yolu YALNIZCA personel listesi tamamen boşken (ilk kurulum) çalışır.
-    //  • İlk başarılı girişten sonra derhal Personel Yönetimi'nden gerçek bir yönetici
-    //    hesabı oluşturun ve bu varsayılan kimlik bilgilerini kullanmayı bırakın.
-    //  • Üretim ortamında personel listesi hiçbir zaman boş olmamalıdır.
-    const SETUP_USER = 'admin';
-    const SETUP_PASS = 'Admin@2024!';
-    if (
-      storedPersonnel.length === 0 &&
-      trimmedUsername === SETUP_USER &&
-      trimmedPassword === SETUP_PASS
-    ) {
-      const defaultAdmin: User = { id: 'admin-1', name: 'Sistem Yöneticisi', username: 'admin', role: 'Yönetici', status: 'online' };
-      setUser(defaultAdmin);
-      setInStorage(StorageKey.USER, defaultAdmin);
-      registerSession(defaultAdmin.id, defaultAdmin.name);
-      generateCSRFToken();
-      appendToLogChain(`login:${defaultAdmin.id}:${defaultAdmin.name}`);
-      clearFailedAttempts();
-      logActivity('login', 'İlk kurulum admin girisi yapti - sifre degistirmesi gerekiyor', { employeeId: defaultAdmin.id, employeeName: defaultAdmin.name, page: 'login' });
-      recordDeviceLogin(defaultAdmin.id, defaultAdmin.name);
-      addSecurityThreat({
-        type: 'suspicious_activity',
-        severity: 'high',
-        title: 'Varsayılan Kurulum Şifresiyle Giriş',
-        description: 'Sistem varsayılan admin şifresiyle giriş yapıldı. Hemen yeni bir yönetici hesabı oluşturun ve bu şifreyi kullanmayı bırakın.',
-        source: 'auth',
-        metadata: { username: 'admin' },
-      });
-      setTimeout(() => toast.warning('⚠️ İlk giriş! Güvenliğiniz için hemen yeni bir yönetici hesabı oluşturun ve bu varsayılan şifreyi kullanmayı bırakın.', { duration: 8000 }), 1000);
-      return true;
-    }
 
     // ── Personel eşleştirme ────────────────────────────────────────
     const lowerInput = trimmedUsername.toLowerCase();
