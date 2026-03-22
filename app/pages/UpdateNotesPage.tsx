@@ -1,415 +1,641 @@
-import React, { useState, useMemo, useEffect } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
+import { motion, AnimatePresence, useScroll, useTransform } from 'motion/react';
 import {
   ShieldCheck, Sparkles, Bug, Paintbrush, Zap, BarChart3,
-  Lock, ArrowLeft, Search, ChevronDown,
-  CheckCircle2, AlertTriangle, Info, Star, Wrench,
-  Eye, GitBranch, Calendar, Tag, Bell, X,
+  Lock, ArrowLeft, Search, ChevronRight, CheckCircle2,
+  AlertTriangle, Info, Star, GitCommit, Calendar,
+  Bell, X, Package, TrendingUp, Shield, Rocket,
+  ChevronDown, Hash, Clock, Filter,
 } from 'lucide-react';
 import { useNavigate } from 'react-router';
-import { useLanguage } from '../contexts/LanguageContext';
 import {
   UPDATE_NOTES, CURRENT_VERSION, SEEN_VERSION_KEY,
   getVersionGroups, type UpdateCategory, type UpdateNote,
 } from '../utils/updateNotes';
 
-// ─── Kategori bilgileri ───────────────────────────────────────────────────────
-const CATEGORIES: Record<UpdateCategory, { label: string; icon: React.ElementType; color: string; bg: string; border: string }> = {
-  security:    { label: 'Güvenlik',   icon: Lock,       color: 'text-emerald-400', bg: 'bg-emerald-500/10', border: 'border-emerald-500/20' },
-  feature:     { label: 'Özellik',    icon: Sparkles,   color: 'text-blue-400',    bg: 'bg-blue-500/10',    border: 'border-blue-500/20' },
-  bugfix:      { label: 'Düzeltme',   icon: Bug,        color: 'text-red-400',     bg: 'bg-red-500/10',     border: 'border-red-500/20' },
-  ui:          { label: 'Arayüz',     icon: Paintbrush, color: 'text-cyan-400',    bg: 'bg-cyan-500/10',    border: 'border-cyan-500/20' },
-  performance: { label: 'Performans', icon: Zap,        color: 'text-orange-400',  bg: 'bg-orange-500/10',  border: 'border-orange-500/20' },
-  analytics:   { label: 'Analiz',     icon: BarChart3,  color: 'text-purple-400',  bg: 'bg-purple-500/10',  border: 'border-purple-500/20' },
+// ─── Kategori konfigürasyonu ─────────────────────────────────────────────────
+const CAT: Record<UpdateCategory, {
+  label: string; icon: React.ElementType;
+  color: string; bg: string; border: string; glow: string; gradient: string;
+}> = {
+  security:    { label: 'Güvenlik',   icon: Lock,       color: 'text-emerald-300', bg: 'bg-emerald-500/15', border: 'border-emerald-500/30', glow: 'shadow-emerald-500/20', gradient: 'from-emerald-500 to-teal-500' },
+  feature:     { label: 'Özellik',    icon: Sparkles,   color: 'text-blue-300',    bg: 'bg-blue-500/15',    border: 'border-blue-500/30',    glow: 'shadow-blue-500/20',    gradient: 'from-blue-500 to-indigo-500' },
+  bugfix:      { label: 'Düzeltme',   icon: Bug,        color: 'text-rose-300',    bg: 'bg-rose-500/15',    border: 'border-rose-500/30',    glow: 'shadow-rose-500/20',    gradient: 'from-rose-500 to-red-500' },
+  ui:          { label: 'Arayüz',     icon: Paintbrush, color: 'text-cyan-300',    bg: 'bg-cyan-500/15',    border: 'border-cyan-500/30',    glow: 'shadow-cyan-500/20',    gradient: 'from-cyan-500 to-sky-500' },
+  performance: { label: 'Performans', icon: Zap,        color: 'text-amber-300',   bg: 'bg-amber-500/15',   border: 'border-amber-500/30',   glow: 'shadow-amber-500/20',   gradient: 'from-amber-500 to-orange-500' },
+  analytics:   { label: 'Analiz',     icon: BarChart3,  color: 'text-violet-300',  bg: 'bg-violet-500/15',  border: 'border-violet-500/30',  glow: 'shadow-violet-500/20',  gradient: 'from-violet-500 to-purple-500' },
 };
 
-const IMPACT_CONFIG = {
-  high:   { label: 'Yüksek', color: 'text-red-400',   bg: 'bg-red-500/10',   border: 'border-red-500/20',   icon: AlertTriangle },
-  medium: { label: 'Orta',   color: 'text-amber-400', bg: 'bg-amber-500/10', border: 'border-amber-500/20', icon: Info },
-  low:    { label: 'Düşük',  color: 'text-gray-400',  bg: 'bg-gray-500/10',  border: 'border-gray-500/20',  icon: CheckCircle2 },
+const IMPACT: Record<string, { label: string; color: string; dot: string }> = {
+  high:   { label: 'Kritik',  color: 'text-rose-400',   dot: 'bg-rose-400' },
+  medium: { label: 'Önemli',  color: 'text-amber-400',  dot: 'bg-amber-400' },
+  low:    { label: 'Küçük',   color: 'text-slate-400',  dot: 'bg-slate-400' },
 };
 
-// ─── Ana Bileşen ──────────────────────────────────────────────────────────────
-export function UpdateNotesPage() {
-  const navigate = useNavigate();
-  const { t } = useLanguage();
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState<UpdateCategory | 'all'>('all');
-  const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [selectedImpact, setSelectedImpact] = useState<'all' | 'high' | 'medium' | 'low'>('all');
-  const [hasNewUpdates, setHasNewUpdates] = useState(false);
-
-  // Yeni güncelleme var mı kontrol et
+// ─── Animated counter ────────────────────────────────────────────────────────
+function Counter({ to, duration = 1200 }: { to: number; duration?: number }) {
+  const [val, setVal] = useState(0);
   useEffect(() => {
-    const seen = localStorage.getItem(SEEN_VERSION_KEY);
-    setHasNewUpdates(!seen || seen !== CURRENT_VERSION);
-  }, []);
+    let start = 0;
+    const step = to / (duration / 16);
+    const id = setInterval(() => {
+      start = Math.min(start + step, to);
+      setVal(Math.floor(start));
+      if (start >= to) clearInterval(id);
+    }, 16);
+    return () => clearInterval(id);
+  }, [to, duration]);
+  return <>{val}</>;
+}
 
-  // Sayfayı açınca "görüldü" olarak işaretle
-  const markAllSeen = () => {
-    localStorage.setItem(SEEN_VERSION_KEY, CURRENT_VERSION);
-    setHasNewUpdates(false);
-    window.dispatchEvent(new CustomEvent('update_notes_seen'));
-  };
-
-  const filteredNotes = useMemo(() => {
-    return UPDATE_NOTES.filter(note => {
-      if (selectedCategory !== 'all' && note.category !== selectedCategory) return false;
-      if (selectedImpact !== 'all' && note.impact !== selectedImpact) return false;
-      if (searchQuery) {
-        const q = searchQuery.toLowerCase();
-        return note.title.toLowerCase().includes(q) ||
-          note.description.toLowerCase().includes(q) ||
-          note.details?.some(d => d.toLowerCase().includes(q));
-      }
-      return true;
-    });
-  }, [selectedCategory, selectedImpact, searchQuery]);
-
-  const groupedNotes = useMemo(() => getVersionGroups(filteredNotes), [filteredNotes]);
-
-  const totalNew = UPDATE_NOTES.filter(n => n.isNew).length;
-  const categoryCounts = useMemo(() => {
-    const counts: Record<string, number> = {};
-    UPDATE_NOTES.forEach(n => { counts[n.category] = (counts[n.category] || 0) + 1; });
-    return counts;
-  }, []);
+// ─── Version timeline node ────────────────────────────────────────────────────
+function VersionNode({
+  version, date, notes, isLatest, isFirst,
+}: {
+  version: string; date: string; notes: UpdateNote[]; isLatest: boolean; isFirst: boolean;
+}) {
+  const [open, setOpen] = useState(isFirst);
+  const newCount = notes.filter(n => n.isNew).length;
 
   return (
-    <div className="p-3 sm:p-6 lg:p-10 space-y-4 sm:space-y-6 lg:space-y-8 bg-background min-h-screen text-white font-sans pb-28 sm:pb-6 lg:pb-10">
+    <div className="relative pl-8 sm:pl-10">
+      {/* Timeline line */}
+      <div className="absolute left-[11px] sm:left-[13px] top-0 bottom-0 w-px bg-gradient-to-b from-white/20 via-white/10 to-transparent" />
 
-      {/* ─── Hero Header ─── */}
-      <motion.div
-        initial={{ opacity: 0, y: -20 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="relative overflow-hidden rounded-2xl lg:rounded-3xl bg-gradient-to-br from-emerald-500/[0.08] via-[#111] to-blue-500/[0.06] border border-emerald-500/20 p-4 sm:p-8 lg:p-10"
-      >
-        <div className="absolute top-0 right-0 opacity-[0.04]">
-          <ShieldCheck className="w-64 h-64 text-emerald-400" />
-        </div>
-        <div className="absolute bottom-0 left-0 w-72 h-72 bg-emerald-500/5 rounded-full blur-3xl -translate-x-1/3 translate-y-1/3" />
-        <div className="absolute top-0 right-1/4 w-48 h-48 bg-blue-500/5 rounded-full blur-3xl" />
-
-        <div className="relative z-10">
-          {/* Geri butonu */}
-          <button
-            onClick={() => navigate('/dashboard')}
-            className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-white transition-colors mb-4 group"
-          >
-            <ArrowLeft className="w-3.5 h-3.5 group-hover:-translate-x-0.5 transition-transform" />
-            Dashboard'a Dön
-          </button>
-
-          <div className="flex items-start sm:items-center gap-3 sm:gap-5">
-            <motion.div
-              initial={{ scale: 0, rotate: -180 }}
-              animate={{ scale: 1, rotate: 0 }}
-              transition={{ type: 'spring', stiffness: 200, damping: 15, delay: 0.1 }}
-              className="p-3 sm:p-4 bg-emerald-500/20 rounded-2xl border border-emerald-500/30 shadow-xl shadow-emerald-500/10 flex-shrink-0"
-            >
-              <ShieldCheck className="w-7 h-7 sm:w-10 sm:h-10 text-emerald-400" />
-            </motion.div>
-
-            <div className="flex-1 min-w-0">
-              <h1 className="text-xl sm:text-3xl lg:text-4xl font-black tracking-tight">
-                Güvenlik Kalkanı
-              </h1>
-              <p className="text-xs sm:text-base text-gray-400 mt-0.5">Güncelleme Raporu & Değişiklik Geçmişi</p>
-
-              <div className="flex items-center gap-2 mt-2 sm:mt-3 flex-wrap">
-                <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
-                  <span className="relative flex h-1.5 w-1.5">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-60" />
-                    <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-400" />
-                  </span>
-                  <span className="text-[10px] font-bold text-emerald-400">Koruma Aktif</span>
-                </div>
-                <span className="px-2 py-1 rounded-lg bg-blue-500/10 border border-blue-500/20 text-[10px] font-bold text-blue-400">
-                  <Tag className="w-2.5 h-2.5 inline mr-1" />{CURRENT_VERSION} KALKAN
-                </span>
-                {hasNewUpdates && totalNew > 0 && (
-                  <span className="px-2 py-1 rounded-lg bg-amber-500/10 border border-amber-500/20 text-[10px] font-bold text-amber-400 animate-pulse">
-                    <Star className="w-2.5 h-2.5 inline mr-1" />{totalNew} Yeni Güncelleme
-                  </span>
-                )}
-              </div>
-            </div>
-
-            {/* Tümünü okundu işaretle */}
-            {hasNewUpdates && (
-              <motion.button
-                initial={{ opacity: 0, scale: 0.8 }}
-                animate={{ opacity: 1, scale: 1 }}
-                whileTap={{ scale: 0.95 }}
-                onClick={markAllSeen}
-                className="flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 text-xs font-bold hover:bg-emerald-500/25 transition-colors"
-              >
-                <CheckCircle2 className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">Okundu İşaretle</span>
-              </motion.button>
-            )}
-          </div>
-
-          {/* Kategori istatistik kartları */}
-          <div className="grid grid-cols-3 sm:grid-cols-6 gap-2 sm:gap-3 mt-4 sm:mt-6">
-            {(Object.entries(CATEGORIES) as [UpdateCategory, typeof CATEGORIES[UpdateCategory]][]).map(([key, cat]) => {
-              const CatIcon = cat.icon;
-              const count = categoryCounts[key] || 0;
-              return (
-                <motion.button
-                  key={key}
-                  whileTap={{ scale: 0.95 }}
-                  onClick={() => setSelectedCategory(selectedCategory === key ? 'all' : key)}
-                  className={`p-2 sm:p-3 rounded-xl border text-center transition-all ${
-                    selectedCategory === key
-                      ? `${cat.bg} ${cat.border} ring-1 ring-current/20`
-                      : 'bg-white/[0.02] border-white/[0.06] hover:bg-white/[0.04]'
-                  }`}
-                >
-                  <CatIcon className={`w-3.5 h-3.5 sm:w-4 sm:h-4 mx-auto mb-1 ${selectedCategory === key ? cat.color : 'text-gray-500'}`} />
-                  <p className={`text-base sm:text-xl font-black ${selectedCategory === key ? cat.color : 'text-white'}`}>{count}</p>
-                  <p className="text-[8px] text-gray-500 font-bold uppercase tracking-wider">{cat.label}</p>
-                </motion.button>
-              );
-            })}
-          </div>
-        </div>
-      </motion.div>
-
-      {/* ─── Filtreler ─── */}
-      <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
-        <div className="flex-1 relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
-          <input
-            type="text"
-            placeholder="Güncelleme ara..."
-            value={searchQuery}
-            onChange={e => setSearchQuery(e.target.value)}
-            className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-[#111] border border-white/10 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-blue-500/40 focus:ring-1 focus:ring-blue-500/20 transition-all"
-          />
-          {searchQuery && (
-            <button onClick={() => setSearchQuery('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-white">
-              <X className="w-4 h-4" />
-            </button>
-          )}
-        </div>
-        <div className="flex gap-1.5 overflow-x-auto pb-0.5 sm:pb-0">
-          {(['all', 'high', 'medium', 'low'] as const).map(imp => (
-            <button
-              key={imp}
-              onClick={() => setSelectedImpact(imp)}
-              className={`px-2.5 py-2 rounded-xl text-xs font-bold border transition-all flex-shrink-0 ${
-                selectedImpact === imp
-                  ? imp === 'all'
-                    ? 'bg-white/10 border-white/20 text-white'
-                    : `${IMPACT_CONFIG[imp].bg} ${IMPACT_CONFIG[imp].border} ${IMPACT_CONFIG[imp].color}`
-                  : 'bg-white/[0.02] border-white/[0.06] text-gray-500 hover:text-white'
-              }`}
-            >
-              {imp === 'all' ? 'Tümü' : IMPACT_CONFIG[imp].label}
-            </button>
-          ))}
-        </div>
+      {/* Node dot */}
+      <div className={`absolute left-0 top-1 w-[23px] h-[23px] sm:w-[27px] sm:h-[27px] rounded-full flex items-center justify-center border-2 ${
+        isLatest
+          ? 'bg-emerald-500 border-emerald-400 shadow-lg shadow-emerald-500/40'
+          : 'bg-[#1a1f2e] border-white/20'
+      }`}>
+        {isLatest
+          ? <Shield className="w-3 h-3 text-white" />
+          : <GitCommit className="w-3 h-3 text-white/40" />
+        }
       </div>
 
-      {/* Aktif filtre özeti */}
-      {(selectedCategory !== 'all' || selectedImpact !== 'all' || searchQuery) && (
-        <div className="flex items-center gap-2 flex-wrap">
-          <span className="text-xs text-gray-500">Filtre:</span>
-          {selectedCategory !== 'all' && (
-            <button onClick={() => setSelectedCategory('all')} className={`flex items-center gap-1 px-2 py-0.5 rounded-lg border text-xs font-medium ${CATEGORIES[selectedCategory].bg} ${CATEGORIES[selectedCategory].border} ${CATEGORIES[selectedCategory].color}`}>
-              {CATEGORIES[selectedCategory].label} <X className="w-3 h-3" />
-            </button>
+      {/* Version header — clickable to collapse */}
+      <button
+        onClick={() => !isFirst && setOpen(v => !v)}
+        className={`w-full flex items-center gap-3 mb-3 group ${isFirst ? 'cursor-default' : 'cursor-pointer'}`}
+      >
+        <div className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border transition-all ${
+          isLatest
+            ? 'bg-emerald-500/10 border-emerald-500/30'
+            : 'bg-white/[0.03] border-white/[0.08] group-hover:bg-white/[0.05]'
+        }`}>
+          <span className={`font-black text-sm sm:text-base ${isLatest ? 'text-emerald-300' : 'text-white/70'}`}>
+            {version}
+          </span>
+          {isLatest && (
+            <span className="px-1.5 py-0.5 rounded-full text-[8px] font-black bg-emerald-500/25 text-emerald-300 border border-emerald-500/40 uppercase tracking-wide">
+              Güncel
+            </span>
           )}
-          {selectedImpact !== 'all' && (
-            <button onClick={() => setSelectedImpact('all')} className={`flex items-center gap-1 px-2 py-0.5 rounded-lg border text-xs font-medium ${IMPACT_CONFIG[selectedImpact].bg} ${IMPACT_CONFIG[selectedImpact].border} ${IMPACT_CONFIG[selectedImpact].color}`}>
-              {IMPACT_CONFIG[selectedImpact].label} <X className="w-3 h-3" />
-            </button>
+          {newCount > 0 && (
+            <span className="px-1.5 py-0.5 rounded-full text-[8px] font-black bg-amber-500/20 text-amber-300 border border-amber-500/30 animate-pulse">
+              {newCount} YENİ
+            </span>
           )}
-          {searchQuery && (
-            <button onClick={() => setSearchQuery('')} className="flex items-center gap-1 px-2 py-0.5 rounded-lg border text-xs font-medium bg-white/5 border-white/10 text-gray-400">
-              "{searchQuery}" <X className="w-3 h-3" />
-            </button>
-          )}
-          <button onClick={() => { setSearchQuery(''); setSelectedCategory('all'); setSelectedImpact('all'); }} className="text-xs text-blue-400 hover:text-blue-300 ml-1">
-            Tümünü Temizle
-          </button>
         </div>
-      )}
 
-      {/* ─── Güncelleme Listesi ─── */}
-      {filteredNotes.length === 0 ? (
-        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-center py-16">
-          <Search className="w-12 h-12 text-gray-700 mx-auto mb-4" />
-          <p className="text-gray-500 text-sm">Arama kriterlerinize uygun güncelleme bulunamadı.</p>
-        </motion.div>
-      ) : (
-        <div className="space-y-6 sm:space-y-8">
-          {groupedNotes.map(([version, notes], groupIdx) => {
-            const isLatest = version === CURRENT_VERSION;
+        <div className="flex items-center gap-1 text-[10px] text-white/30">
+          <Calendar className="w-3 h-3" />
+          {new Date(date).toLocaleDateString('tr-TR', { day: 'numeric', month: 'long', year: 'numeric' })}
+        </div>
+
+        <div className="flex-1" />
+
+        {!isFirst && (
+          <motion.div
+            animate={{ rotate: open ? 180 : 0 }}
+            transition={{ type: 'spring', stiffness: 300, damping: 25 }}
+          >
+            <ChevronDown className="w-4 h-4 text-white/30" />
+          </motion.div>
+        )}
+      </button>
+
+      {/* Notes list */}
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ type: 'spring', stiffness: 280, damping: 30 }}
+            className="overflow-hidden"
+          >
+            <div className="space-y-2 pb-8">
+              {notes.map((note, i) => (
+                <NoteCard key={note.id} note={note} index={i} />
+              ))}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+// ─── Note card ────────────────────────────────────────────────────────────────
+function NoteCard({ note, index }: { note: UpdateNote; index: number }) {
+  const [expanded, setExpanded] = useState(false);
+  const cat = CAT[note.category];
+  const CatIcon = cat.icon;
+  const imp = IMPACT[note.impact];
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, x: -12 }}
+      animate={{ opacity: 1, x: 0 }}
+      transition={{ delay: index * 0.04, type: 'spring', stiffness: 320, damping: 28 }}
+      onClick={() => setExpanded(v => !v)}
+      className={`group relative rounded-2xl border overflow-hidden cursor-pointer transition-all duration-200 ${
+        expanded
+          ? 'bg-white/[0.06] border-white/[0.16] shadow-xl'
+          : note.isNew
+            ? `${cat.bg} ${cat.border} hover:shadow-lg ${cat.glow}`
+            : 'bg-white/[0.025] border-white/[0.07] hover:bg-white/[0.04] hover:border-white/[0.12]'
+      }`}
+    >
+      {/* Left accent bar */}
+      <div className={`absolute left-0 top-0 bottom-0 w-[3px] bg-gradient-to-b ${cat.gradient} opacity-${expanded ? '100' : '50'} group-hover:opacity-100 transition-opacity`} />
+
+      <div className="pl-4 pr-3 py-3 sm:pl-5 sm:pr-4 sm:py-3.5">
+        <div className="flex items-start gap-3">
+          {/* Icon */}
+          <div className={`shrink-0 w-8 h-8 sm:w-9 sm:h-9 rounded-xl flex items-center justify-center border ${cat.bg} ${cat.border} mt-0.5`}>
+            {note.emoji
+              ? <span className="text-base leading-none">{note.emoji}</span>
+              : <CatIcon className={`w-4 h-4 ${cat.color}`} />
+            }
+          </div>
+
+          {/* Content */}
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <span className="text-sm font-bold text-white leading-tight">{note.title}</span>
+              {note.isNew && (
+                <span className="shrink-0 px-1.5 py-0.5 rounded-full text-[8px] font-black bg-amber-400/20 text-amber-300 border border-amber-400/30 animate-pulse">
+                  YENİ
+                </span>
+              )}
+            </div>
+            <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+              <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-md border ${cat.bg} ${cat.border} ${cat.color}`}>
+                {cat.label}
+              </span>
+              <span className="flex items-center gap-1 text-[9px]">
+                <span className={`w-1.5 h-1.5 rounded-full ${imp.dot}`} />
+                <span className={imp.color}>{imp.label}</span>
+              </span>
+            </div>
+            <p className="text-[11px] text-white/50 leading-relaxed mt-1 line-clamp-2 group-hover:text-white/70 transition-colors">
+              {note.description}
+            </p>
+          </div>
+
+          {/* Expand chevron */}
+          <motion.div
+            animate={{ rotate: expanded ? 180 : 0 }}
+            className="shrink-0 mt-2"
+          >
+            <ChevronDown className="w-3.5 h-3.5 text-white/25" />
+          </motion.div>
+        </div>
+
+        {/* Expanded details */}
+        <AnimatePresence>
+          {expanded && note.details && (
+            <motion.div
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: 'auto', opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+              className="overflow-hidden"
+            >
+              <div className="mt-3 pt-3 border-t border-white/[0.07] space-y-1.5">
+                {note.details.map((d, i) => (
+                  <motion.div
+                    key={i}
+                    initial={{ opacity: 0, x: -8 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: i * 0.04 }}
+                    className="flex items-start gap-2"
+                  >
+                    <CheckCircle2 className={`w-3.5 h-3.5 ${cat.color} shrink-0 mt-0.5`} />
+                    <span className="text-[11px] text-white/60 leading-relaxed">{d}</span>
+                  </motion.div>
+                ))}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+    </motion.div>
+  );
+}
+
+// ─── Stats strip ─────────────────────────────────────────────────────────────
+function StatsStrip() {
+  const total = UPDATE_NOTES.length;
+  const newCount = UPDATE_NOTES.filter(n => n.isNew).length;
+  const versions = [...new Set(UPDATE_NOTES.map(n => n.version))].length;
+  const highImpact = UPDATE_NOTES.filter(n => n.impact === 'high').length;
+
+  const items = [
+    { icon: Package,    label: 'Güncelleme',  value: total,     color: 'text-blue-400' },
+    { icon: Star,       label: 'Yeni',        value: newCount,  color: 'text-amber-400' },
+    { icon: Hash,       label: 'Versiyon',    value: versions,  color: 'text-emerald-400' },
+    { icon: TrendingUp, label: 'Kritik',      value: highImpact, color: 'text-rose-400' },
+  ];
+
+  return (
+    <div className="grid grid-cols-4 gap-2 sm:gap-3">
+      {items.map((item, i) => {
+        const Icon = item.icon;
+        return (
+          <motion.div
+            key={i}
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.1 + i * 0.06 }}
+            className="flex flex-col items-center gap-1 p-2.5 sm:p-3 rounded-2xl bg-white/[0.03] border border-white/[0.07] hover:bg-white/[0.05] transition-colors"
+          >
+            <Icon className={`w-4 h-4 ${item.color}`} />
+            <p className={`text-lg sm:text-2xl font-black tabular-nums ${item.color}`}>
+              <Counter to={item.value} />
+            </p>
+            <p className="text-[9px] text-white/30 font-semibold uppercase tracking-wider">{item.label}</p>
+          </motion.div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ─── Category pill tabs ───────────────────────────────────────────────────────
+const ALL_CATS = [
+  { id: 'all' as const, label: 'Tümü', icon: Rocket, color: 'text-white', bg: 'bg-white/10', border: 'border-white/20' },
+  ...Object.entries(CAT).map(([k, v]) => ({
+    id: k as UpdateCategory,
+    label: v.label,
+    icon: v.icon,
+    color: v.color,
+    bg: v.bg,
+    border: v.border,
+  })),
+];
+
+function CategoryTabs({
+  selected, onChange,
+}: {
+  selected: UpdateCategory | 'all';
+  onChange: (v: UpdateCategory | 'all') => void;
+}) {
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  return (
+    <div
+      ref={scrollRef}
+      className="flex gap-2 overflow-x-auto pb-1 scroll-smooth no-scrollbar"
+    >
+      {ALL_CATS.map(cat => {
+        const Icon = cat.icon;
+        const active = selected === cat.id;
+        return (
+          <motion.button
+            key={cat.id}
+            whileTap={{ scale: 0.93 }}
+            onClick={() => onChange(cat.id)}
+            className={`shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold border transition-all ${
+              active
+                ? `${cat.bg} ${cat.border} ${cat.color} shadow-md`
+                : 'bg-white/[0.03] border-white/[0.08] text-white/40 hover:text-white/70 hover:bg-white/[0.06]'
+            }`}
+          >
+            <Icon className="w-3.5 h-3.5" />
+            {cat.label}
+          </motion.button>
+        );
+      })}
+    </div>
+  );
+}
+
+// ─── Featured spotlight (latest version) ─────────────────────────────────────
+function FeaturedVersion({ notes }: { notes: UpdateNote[] }) {
+  const newNotes = notes.filter(n => n.isNew);
+  if (newNotes.length === 0) return null;
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: -16 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ type: 'spring', stiffness: 260, damping: 26 }}
+      className="relative overflow-hidden rounded-3xl border border-emerald-500/25 bg-gradient-to-br from-emerald-500/[0.10] via-[#0d1117] to-blue-600/[0.07] p-5 sm:p-6"
+    >
+      {/* Animated blobs */}
+      <div className="pointer-events-none absolute inset-0 overflow-hidden">
+        <motion.div
+          animate={{ x: [0, 20, 0], y: [0, -10, 0] }}
+          transition={{ duration: 8, repeat: Infinity, ease: 'easeInOut' }}
+          className="absolute -top-16 -right-16 w-64 h-64 rounded-full bg-emerald-500/[0.06] blur-3xl"
+        />
+        <motion.div
+          animate={{ x: [0, -14, 0], y: [0, 16, 0] }}
+          transition={{ duration: 11, repeat: Infinity, ease: 'easeInOut' }}
+          className="absolute -bottom-12 -left-12 w-48 h-48 rounded-full bg-blue-500/[0.06] blur-3xl"
+        />
+      </div>
+
+      <div className="relative z-10">
+        {/* Badge row */}
+        <div className="flex items-center gap-2 flex-wrap mb-4">
+          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/15 border border-emerald-500/30">
+            <span className="relative flex h-2 w-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-70" />
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-400" />
+            </span>
+            <span className="text-[10px] font-bold text-emerald-300 uppercase tracking-wider">Canlı</span>
+          </div>
+          <span className="px-2.5 py-1 rounded-full text-[10px] font-black bg-blue-500/15 border border-blue-500/30 text-blue-300">
+            {CURRENT_VERSION} KALKAN
+          </span>
+          <span className="px-2.5 py-1 rounded-full text-[10px] font-black bg-amber-500/15 border border-amber-500/30 text-amber-300 animate-pulse">
+            {newNotes.length} Yeni Güncelleme
+          </span>
+        </div>
+
+        {/* Headline */}
+        <h2 className="text-2xl sm:text-3xl font-black tracking-tight text-white mb-1">
+          Yenilikler
+        </h2>
+        <p className="text-sm text-white/40 mb-5">
+          {new Date().toLocaleDateString('tr-TR', { day: 'numeric', month: 'long', year: 'numeric' })} tarihli güncelleme
+        </p>
+
+        {/* Featured notes grid */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+          {newNotes.map((note, i) => {
+            const cat = CAT[note.category];
+            const CatIcon = cat.icon;
             return (
               <motion.div
-                key={version}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: groupIdx * 0.07 }}
+                key={note.id}
+                initial={{ opacity: 0, scale: 0.96 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ delay: 0.1 + i * 0.07 }}
+                className={`flex items-start gap-3 p-3 rounded-2xl border ${cat.bg} ${cat.border}`}
               >
-                {/* Versiyon başlığı */}
-                <div className="flex items-center gap-3 mb-3">
-                  <div className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border ${
-                    isLatest
-                      ? 'bg-emerald-500/10 border-emerald-500/30'
-                      : 'bg-white/[0.04] border-white/[0.08]'
-                  }`}>
-                    <GitBranch className={`w-3.5 h-3.5 ${isLatest ? 'text-emerald-400' : 'text-blue-400'}`} />
-                    <span className={`text-sm font-black ${isLatest ? 'text-emerald-400' : 'text-white'}`}>{version}</span>
-                    {isLatest && (
-                      <span className="px-1.5 py-0.5 text-[8px] font-black bg-emerald-500/20 text-emerald-300 rounded-full border border-emerald-500/30 uppercase tracking-wider">
-                        Güncel
-                      </span>
-                    )}
-                  </div>
-                  <div className="flex-1 h-px bg-gradient-to-r from-white/10 to-transparent" />
-                  <span className="text-[10px] text-gray-600 font-mono flex items-center gap-1.5">
-                    <Calendar className="w-3 h-3" />
-                    {notes[0]?.date}
-                  </span>
+                <div className={`shrink-0 w-8 h-8 rounded-xl flex items-center justify-center bg-gradient-to-br ${cat.gradient} shadow-lg ${cat.glow}`}>
+                  {note.emoji
+                    ? <span className="text-sm leading-none">{note.emoji}</span>
+                    : <CatIcon className="w-4 h-4 text-white" />
+                  }
                 </div>
-
-                {/* Notlar */}
-                <div className="space-y-2">
-                  {notes.map((note, noteIdx) => {
-                    const cat = CATEGORIES[note.category];
-                    const CatIcon = cat.icon;
-                    const impact = IMPACT_CONFIG[note.impact];
-                    const ImpactIcon = impact.icon;
-                    const isExpanded = expandedId === note.id;
-                    const isUnseen = note.isNew && hasNewUpdates;
-
-                    return (
-                      <motion.div
-                        key={note.id}
-                        initial={{ opacity: 0, x: -15 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        transition={{ delay: groupIdx * 0.07 + noteIdx * 0.04 }}
-                        className={`rounded-2xl border overflow-hidden cursor-pointer transition-all ${
-                          isExpanded
-                            ? 'bg-white/[0.05] border-white/[0.14] shadow-lg'
-                            : isUnseen
-                              ? `${cat.bg} ${cat.border}`
-                              : 'bg-[#111] border-white/[0.06] hover:bg-white/[0.03] hover:border-white/[0.1]'
-                        }`}
-                        onClick={() => setExpandedId(isExpanded ? null : note.id)}
-                      >
-                        <div className="p-3 sm:p-4">
-                          <div className="flex items-start gap-2.5 sm:gap-4">
-                            {/* Kategori ikonu */}
-                            <div className={`p-2 rounded-xl ${cat.bg} border ${cat.border} shrink-0 mt-0.5`}>
-                              {note.emoji
-                                ? <span className="text-base leading-none">{note.emoji}</span>
-                                : <CatIcon className={`w-4 h-4 ${cat.color}`} />
-                              }
-                            </div>
-
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-1.5 flex-wrap mb-1">
-                                <h3 className="text-sm font-bold text-white">{note.title}</h3>
-                                {isUnseen && (
-                                  <motion.span
-                                    initial={{ scale: 0 }}
-                                    animate={{ scale: 1 }}
-                                    className="px-1.5 py-0.5 text-[8px] font-bold bg-amber-500/20 text-amber-300 rounded-full border border-amber-500/30 animate-pulse"
-                                  >
-                                    YENİ
-                                  </motion.span>
-                                )}
-                                <span className={`px-1.5 py-0.5 text-[8px] font-bold rounded-md border ${cat.bg} ${cat.border} ${cat.color}`}>
-                                  {cat.label}
-                                </span>
-                                <span className={`hidden sm:inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[8px] font-bold rounded-md border ${impact.bg} ${impact.border} ${impact.color}`}>
-                                  <ImpactIcon className="w-2.5 h-2.5" />{impact.label}
-                                </span>
-                              </div>
-                              <p className="text-[11px] text-gray-400 leading-relaxed">{note.description}</p>
-                            </div>
-
-                            <motion.div
-                              animate={{ rotate: isExpanded ? 180 : 0 }}
-                              transition={{ type: 'spring', stiffness: 300, damping: 25 }}
-                              className="shrink-0 mt-1"
-                            >
-                              <ChevronDown className="w-4 h-4 text-gray-600" />
-                            </motion.div>
-                          </div>
-
-                          {/* Detaylar */}
-                          <AnimatePresence>
-                            {isExpanded && note.details && (
-                              <motion.div
-                                initial={{ height: 0, opacity: 0 }}
-                                animate={{ height: 'auto', opacity: 1 }}
-                                exit={{ height: 0, opacity: 0 }}
-                                transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-                                className="overflow-hidden"
-                              >
-                                <div className="mt-3 pt-3 border-t border-white/[0.06]">
-                                  <div className="flex items-center gap-1.5 mb-2">
-                                    <Eye className="w-3 h-3 text-gray-500" />
-                                    <span className="text-[9px] font-bold text-gray-500 uppercase tracking-wider">Detaylar</span>
-                                  </div>
-                                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
-                                    {note.details.map((detail, di) => (
-                                      <motion.div
-                                        key={di}
-                                        initial={{ opacity: 0, x: -8 }}
-                                        animate={{ opacity: 1, x: 0 }}
-                                        transition={{ delay: di * 0.04 }}
-                                        className="flex items-start gap-2 p-2 rounded-lg bg-white/[0.02]"
-                                      >
-                                        <CheckCircle2 className={`w-3.5 h-3.5 ${cat.color} shrink-0 mt-0.5`} />
-                                        <span className="text-[10px] text-gray-300 leading-relaxed">{detail}</span>
-                                      </motion.div>
-                                    ))}
-                                  </div>
-                                </div>
-                              </motion.div>
-                            )}
-                          </AnimatePresence>
-                        </div>
-                      </motion.div>
-                    );
-                  })}
+                <div className="min-w-0">
+                  <p className={`text-xs font-bold ${cat.color}`}>{note.title}</p>
+                  <p className="text-[10px] text-white/45 leading-relaxed mt-0.5 line-clamp-2">{note.description}</p>
                 </div>
               </motion.div>
             );
           })}
         </div>
-      )}
+      </div>
+    </motion.div>
+  );
+}
 
-      {/* Alt bilgi */}
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ delay: 0.4 }}
-        className="p-4 rounded-2xl bg-white/[0.02] border border-white/[0.05] text-center space-y-1"
-      >
-        <div className="flex items-center justify-center gap-2">
-          <ShieldCheck className="w-4 h-4 text-emerald-500/60" />
-          <span className="text-xs font-bold text-gray-500">MERT.4 ERP — {CURRENT_VERSION} KALKAN</span>
-        </div>
-        <p className="text-[10px] text-gray-600">
-          Tüm güncellemeler otomatik uygulanır · Sistem güvenliği sürekli izlenmektedir
-        </p>
-        {hasNewUpdates && (
-          <button
-            onClick={markAllSeen}
-            className="mt-1 text-[10px] text-emerald-400 hover:text-emerald-300 font-bold flex items-center gap-1 mx-auto"
+// ─── Ana Bileşen ──────────────────────────────────────────────────────────────
+export function UpdateNotesPage() {
+  const navigate = useNavigate();
+  const [search, setSearch] = useState('');
+  const [selCat, setSelCat] = useState<UpdateCategory | 'all'>('all');
+  const [hasNew, setHasNew] = useState(false);
+  const [showSearch, setShowSearch] = useState(false);
+  const searchRef = useRef<HTMLInputElement>(null);
+  const heroRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const seen = localStorage.getItem(SEEN_VERSION_KEY);
+    setHasNew(!seen || seen !== CURRENT_VERSION);
+  }, []);
+
+  useEffect(() => {
+    if (showSearch) setTimeout(() => searchRef.current?.focus(), 100);
+  }, [showSearch]);
+
+  const markSeen = () => {
+    localStorage.setItem(SEEN_VERSION_KEY, CURRENT_VERSION);
+    setHasNew(false);
+    window.dispatchEvent(new CustomEvent('update_notes_seen'));
+  };
+
+  const filtered = useMemo(() => {
+    return UPDATE_NOTES.filter(note => {
+      if (selCat !== 'all' && note.category !== selCat) return false;
+      if (search) {
+        const q = search.toLowerCase();
+        return (
+          note.title.toLowerCase().includes(q) ||
+          note.description.toLowerCase().includes(q) ||
+          note.details?.some(d => d.toLowerCase().includes(q))
+        );
+      }
+      return true;
+    });
+  }, [selCat, search]);
+
+  const grouped = useMemo(() => getVersionGroups(filtered), [filtered]);
+  const latestNotes = useMemo(() =>
+    UPDATE_NOTES.filter(n => n.version === CURRENT_VERSION),
+    []
+  );
+
+  return (
+    <div className="min-h-screen bg-[#080b11] text-white font-sans pb-28 sm:pb-10">
+
+      {/* ── Sticky Header ── */}
+      <div className="sticky top-0 z-30 bg-[#080b11]/90 backdrop-blur-xl border-b border-white/[0.06]">
+        <div className="flex items-center gap-3 px-4 sm:px-6 py-3">
+          <motion.button
+            whileTap={{ scale: 0.9 }}
+            onClick={() => navigate('/dashboard')}
+            className="p-2 rounded-xl bg-white/[0.05] hover:bg-white/[0.1] border border-white/[0.08] text-white/60 hover:text-white transition-all"
           >
-            <Bell className="w-3 h-3" />
-            Tüm güncellemeleri okundu işaretle
-          </button>
+            <ArrowLeft className="w-4 h-4" />
+          </motion.button>
+
+          <div className="flex-1 min-w-0">
+            <AnimatePresence mode="wait">
+              {showSearch ? (
+                <motion.div
+                  key="search"
+                  initial={{ opacity: 0, x: 10 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: -10 }}
+                  className="flex items-center gap-2 bg-white/[0.07] rounded-xl px-3 py-1.5 border border-white/[0.1]"
+                >
+                  <Search className="w-3.5 h-3.5 text-white/40 shrink-0" />
+                  <input
+                    ref={searchRef}
+                    value={search}
+                    onChange={e => setSearch(e.target.value)}
+                    placeholder="Güncelleme ara..."
+                    className="flex-1 bg-transparent text-sm text-white placeholder-white/30 outline-none"
+                  />
+                  {search && (
+                    <button onClick={() => setSearch('')}>
+                      <X className="w-3.5 h-3.5 text-white/40 hover:text-white" />
+                    </button>
+                  )}
+                </motion.div>
+              ) : (
+                <motion.div
+                  key="title"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                >
+                  <h1 className="text-base font-black text-white leading-none">Güncelleme Notları</h1>
+                  <p className="text-[10px] text-white/30 mt-0.5">{CURRENT_VERSION} KALKAN</p>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+
+          <div className="flex items-center gap-1.5">
+            {hasNew && (
+              <motion.button
+                initial={{ scale: 0 }}
+                animate={{ scale: 1 }}
+                whileTap={{ scale: 0.9 }}
+                onClick={markSeen}
+                className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-xs font-bold hover:bg-emerald-500/25 transition-colors"
+              >
+                <CheckCircle2 className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Okundu</span>
+              </motion.button>
+            )}
+            <motion.button
+              whileTap={{ scale: 0.9 }}
+              onClick={() => setShowSearch(v => !v)}
+              className={`p-2 rounded-xl border transition-all ${
+                showSearch
+                  ? 'bg-blue-500/20 border-blue-500/30 text-blue-300'
+                  : 'bg-white/[0.05] border-white/[0.08] text-white/50 hover:text-white'
+              }`}
+            >
+              <Search className="w-4 h-4" />
+            </motion.button>
+          </div>
+        </div>
+
+        {/* Category pills — below header */}
+        <div className="px-4 sm:px-6 pb-3">
+          <CategoryTabs selected={selCat} onChange={setSelCat} />
+        </div>
+      </div>
+
+      {/* ── Body ── */}
+      <div className="max-w-2xl mx-auto px-4 sm:px-6 space-y-6 pt-6">
+
+        {/* Featured spotlight — only when no search/filter */}
+        {selCat === 'all' && !search && (
+          <FeaturedVersion notes={latestNotes} />
         )}
-      </motion.div>
+
+        {/* Stats strip */}
+        {selCat === 'all' && !search && (
+          <StatsStrip />
+        )}
+
+        {/* Active search info */}
+        {(search || selCat !== 'all') && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="flex items-center gap-2 text-xs text-white/40 flex-wrap"
+          >
+            <Filter className="w-3.5 h-3.5" />
+            <span>{filtered.length} sonuç</span>
+            {selCat !== 'all' && (
+              <button
+                onClick={() => setSelCat('all')}
+                className={`flex items-center gap-1 px-2 py-0.5 rounded-full border text-[10px] font-bold ${CAT[selCat].bg} ${CAT[selCat].border} ${CAT[selCat].color}`}
+              >
+                {CAT[selCat].label} <X className="w-2.5 h-2.5" />
+              </button>
+            )}
+            {search && (
+              <button
+                onClick={() => setSearch('')}
+                className="flex items-center gap-1 px-2 py-0.5 rounded-full border bg-white/[0.05] border-white/10 text-white/50 text-[10px]"
+              >
+                "{search}" <X className="w-2.5 h-2.5" />
+              </button>
+            )}
+          </motion.div>
+        )}
+
+        {/* Timeline */}
+        {grouped.length > 0 ? (
+          <div className="space-y-2">
+            {grouped.map(([version, notes], i) => (
+              <VersionNode
+                key={version}
+                version={version}
+                date={notes[0].date}
+                notes={notes}
+                isLatest={version === CURRENT_VERSION}
+                isFirst={i === 0}
+              />
+            ))}
+          </div>
+        ) : (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="flex flex-col items-center py-20 text-white/30"
+          >
+            <Search className="w-12 h-12 mb-4 opacity-30" />
+            <p className="text-sm">Sonuç bulunamadı</p>
+            <button
+              onClick={() => { setSearch(''); setSelCat('all'); }}
+              className="mt-3 text-xs text-blue-400 hover:text-blue-300"
+            >
+              Filtreleri Temizle
+            </button>
+          </motion.div>
+        )}
+
+        {/* Footer */}
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.4 }}
+          className="text-center py-6 border-t border-white/[0.05] space-y-2"
+        >
+          <div className="flex items-center justify-center gap-2 text-white/20">
+            <ShieldCheck className="w-4 h-4" />
+            <span className="text-xs font-bold">MERT.4 ERP — {CURRENT_VERSION} KALKAN</span>
+          </div>
+          <p className="text-[10px] text-white/15">
+            Tüm güncellemeler otomatik uygulanır · Sistem güvenliği sürekli izlenmektedir
+          </p>
+          {hasNew && (
+            <button
+              onClick={markSeen}
+              className="text-[11px] text-emerald-400/70 hover:text-emerald-300 flex items-center gap-1 mx-auto transition-colors"
+            >
+              <Bell className="w-3 h-3" />
+              Tüm güncellemeleri okundu işaretle
+            </button>
+          )}
+        </motion.div>
+      </div>
     </div>
   );
 }
