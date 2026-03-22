@@ -8,7 +8,7 @@ import {
   Sparkles, CalendarCheck, Banknote, Trash2,
   Activity, Zap, Award, ShieldCheck, ArrowUpRight, ArrowDownRight,
   BarChart3, PieChart, Target, Wallet, RefreshCw, Clock,
-  CreditCard, Landmark, Flame, ArrowLeftRight, Factory
+  CreditCard, Landmark, Flame, ArrowLeftRight, Factory, Bot, X
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useNavigate } from 'react-router';
@@ -33,6 +33,7 @@ import {
   CalendarHeatmap, BarRace, GradientArc
 } from '../components/ChartComponents';
 import { ActivityTimeline } from '../components/ActivityTimeline';
+import { DashboardAIChat } from '../components/DashboardAIChat';
 
 const safeNum = (v: any, fallback = 0): number => {
   if (v === null || v === undefined || v === '') return fallback;
@@ -114,6 +115,7 @@ export function DashboardPage() {
   const [refreshCounter, setRefreshCounter] = useState(0);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [chartView, setChartView] = useState<'area' | 'bar' | 'composed'>('composed');
+  const [showAIChat, setShowAIChat] = useState(false);
 
   // Sayfa ziyaretini logla (kullanıcı yüklenince bir kez)
   useEffect(() => {
@@ -689,18 +691,20 @@ export function DashboardPage() {
         </div>
       </motion.div>
 
-      {/* OpenAI Banner */}
-      {!isOpenAIConfigured() && (
-        <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }}
-          onClick={() => navigate('/settings')}
-          className="flex items-center gap-4 p-4 bg-orange-500/10 border border-orange-500/20 rounded-2xl cursor-pointer hover:bg-orange-500/20 transition-all group"
+      {/* AI Banner — API key eksikse paneli açmaya davet et */}
+      {!isOpenAIConfigured() && !showAIChat && (
+        <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}
+          onClick={() => setShowAIChat(true)}
+          className="flex items-center gap-3 p-3.5 bg-blue-500/8 border border-blue-500/15 rounded-2xl cursor-pointer hover:bg-blue-500/12 transition-all group"
         >
-          <div className="p-2 bg-orange-500/20 rounded-xl"><Sparkles className="w-5 h-5 text-orange-400" /></div>
-          <div className="flex-1">
-            <p className="text-sm font-bold text-orange-400">AI Asistan Devre Dışı</p>
-            <p className="text-xs text-orange-400/80">OpenAI API Key eksik. Ayarlar üzerinden hemen entegre edin.</p>
+          <div className="w-9 h-9 bg-blue-600/20 border border-blue-500/20 rounded-xl flex items-center justify-center flex-shrink-0">
+            <Bot className="w-4.5 h-4.5 text-blue-400" />
           </div>
-          <ArrowRight className="w-5 h-5 text-orange-400 group-hover:translate-x-1 transition-transform" />
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-bold text-white/70">AI Asistanı Etkinleştir</p>
+            <p className="text-xs text-white/30">Tüm sistem verilerine erişebilen asistanı başlatmak için tıklayın.</p>
+          </div>
+          <ArrowRight className="w-4 h-4 text-white/20 group-hover:text-blue-400 group-hover:translate-x-0.5 transition-all" />
         </motion.div>
       )}
 
@@ -723,6 +727,18 @@ export function DashboardPage() {
             >
               <RefreshCw className={`w-4 h-4 sm:w-5 sm:h-5 text-gray-400 ${isRefreshing ? 'animate-spin' : ''}`} />
             </button>
+            {/* AI Chat toggle butonu */}
+            <button
+              onClick={() => setShowAIChat(v => !v)}
+              title="AI Asistan"
+              className={`p-2.5 sm:p-3 rounded-xl border transition-all ${
+                showAIChat
+                  ? 'bg-blue-600 border-blue-500 text-white shadow-lg shadow-blue-600/30'
+                  : 'bg-white/5 hover:bg-white/10 border-white/10 text-gray-400 hover:text-blue-400'
+              }`}
+            >
+              <Bot className="w-4 h-4 sm:w-5 sm:h-5" />
+            </button>
             <button onClick={handleDownloadPDF}
               className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 sm:px-5 py-2.5 sm:py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-xl font-bold transition-all shadow-lg shadow-blue-600/20 text-xs sm:text-sm"
             >
@@ -733,6 +749,22 @@ export function DashboardPage() {
         {/* Live Clock Row - isolated component, won't re-render the whole dashboard */}
         <LiveClockWidget />
       </div>
+
+      {/* ─── AI Sohbet Paneli ─── */}
+      <AnimatePresence>
+        {showAIChat && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={{ type: 'spring', stiffness: 200, damping: 30 }}
+            className="rounded-2xl bg-[#0d111b] border border-white/[0.08] overflow-hidden"
+            style={{ minHeight: '580px' }}
+          >
+            <DashboardAIChat onClose={() => setShowAIChat(false)} />
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* ─── Stat Cards Grid ─── */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 lg:gap-6">
