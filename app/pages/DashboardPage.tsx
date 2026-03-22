@@ -723,22 +723,89 @@ export function DashboardPage() {
   return (
     <div className="p-3 sm:p-6 lg:p-10 space-y-4 sm:space-y-6 lg:space-y-8 bg-background min-h-screen text-white font-sans pb-28 sm:pb-6 lg:pb-10">
       
-      {/* Release Banner */}
+      {/* ─── Güvenlik Kalkanı — Güncelleme Notları ─── */}
       <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }}
-        className="relative overflow-hidden flex items-start sm:items-center gap-4 p-4 bg-gradient-to-r from-emerald-500/10 via-blue-500/10 to-transparent border border-emerald-500/20 rounded-2xl"
+        className="relative overflow-hidden rounded-2xl lg:rounded-3xl bg-gradient-to-br from-emerald-500/[0.07] via-[#111] to-blue-500/[0.05] border border-emerald-500/20"
       >
-        <div className="absolute top-0 right-0 p-4 opacity-10">
-          <ShieldCheck className="w-24 h-24 text-emerald-400" />
+        {/* Dekoratif arka plan */}
+        <div className="absolute top-0 right-0 p-6 opacity-[0.06]">
+          <ShieldCheck className="w-32 h-32 text-emerald-400" />
         </div>
-        <div className="relative z-10 p-2 sm:p-3 bg-emerald-500/20 rounded-xl backdrop-blur-sm border border-emerald-500/30">
-          <ShieldCheck className="w-5 h-5 sm:w-6 sm:h-6 text-emerald-400" />
-        </div>
-        <div className="relative z-10 flex-1">
-          <div className="flex items-center gap-2 mb-1">
-            <h3 className="text-sm sm:text-base font-bold text-emerald-400">{t('dashboard.releaseTitle')}</h3>
-            <span className="px-2 py-0.5 text-[10px] font-bold bg-emerald-500/20 text-emerald-300 rounded-full border border-emerald-500/30">{t('dashboard.releaseNew')}</span>
+        <div className="absolute bottom-0 left-0 w-48 h-48 bg-emerald-500/5 rounded-full blur-3xl -translate-x-1/2 translate-y-1/2" />
+
+        {/* Üst başlık */}
+        <div className="relative z-10 flex items-center gap-3 sm:gap-4 p-4 sm:p-5 pb-3">
+          <div className="p-2.5 sm:p-3 bg-emerald-500/20 rounded-xl backdrop-blur-sm border border-emerald-500/30 shadow-lg shadow-emerald-500/10">
+            <ShieldCheck className="w-5 h-5 sm:w-6 sm:h-6 text-emerald-400" />
           </div>
-          <p className="text-xs sm:text-sm text-gray-400 max-w-3xl leading-relaxed">{t('dashboard.releaseDesc')}</p>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 mb-0.5 flex-wrap">
+              <h3 className="text-sm sm:text-base font-bold text-emerald-400">{t('dashboard.releaseTitle')}</h3>
+              <span className="px-2 py-0.5 text-[9px] font-bold bg-emerald-500/20 text-emerald-300 rounded-full border border-emerald-500/30 animate-pulse">{t('dashboard.releaseNew')}</span>
+            </div>
+            <p className="text-[10px] sm:text-xs text-gray-500">Son güncellemeler ve yapılan iyileştirmeler</p>
+          </div>
+          <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/20 shrink-0">
+            <span className="relative flex h-2 w-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-60" />
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-400" />
+            </span>
+            <span className="text-[9px] font-bold text-emerald-400 uppercase tracking-wider">Koruma Aktif</span>
+          </div>
+        </div>
+
+        {/* Güncelleme notları listesi */}
+        <div className="relative z-10 px-4 sm:px-5 pb-4 sm:pb-5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-2.5">
+            {[
+              { icon: '🛡️', cat: 'Güvenlik', color: 'emerald', text: 'Brute Force koruması ve 15dk otomatik oturum kapatma', ver: 'v4.2' },
+              { icon: '📊', cat: 'Grafik', color: 'blue', text: 'Canlı saatlik ciro akışı ve kârlılık trend grafiği eklendi', ver: 'v4.2.1' },
+              { icon: '🔄', cat: 'Özellik', color: 'purple', text: '15 saniyede otomatik dashboard yenileme sistemi', ver: 'v4.2.1' },
+              { icon: '🔐', cat: 'Güvenlik', color: 'emerald', text: 'Güvenlik Merkezi modülü ve detaylı aktivite loglaması', ver: 'v4.2' },
+              { icon: '🎨', cat: 'Arayüz', color: 'cyan', text: 'Karanlık tema, cam efektleri ve animasyonlu kartlar', ver: 'v4.2' },
+              { icon: '📈', cat: 'Analiz', color: 'amber', text: 'Performans radarı, satış hunisi ve ısı haritası', ver: 'v4.2' },
+              { icon: '🐛', cat: 'Düzeltme', color: 'red', text: 'Stok hesaplama ve fiş tutarı düzeltmeleri', ver: 'v4.2' },
+              { icon: '⚡', cat: 'Performans', color: 'orange', text: 'Dashboard render optimizasyonu, izole canlı saat', ver: 'v4.2.1' },
+            ].map((note, i) => {
+              const colorMap: Record<string, string> = {
+                emerald: 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400',
+                blue: 'bg-blue-500/10 border-blue-500/20 text-blue-400',
+                purple: 'bg-purple-500/10 border-purple-500/20 text-purple-400',
+                cyan: 'bg-cyan-500/10 border-cyan-500/20 text-cyan-400',
+                amber: 'bg-amber-500/10 border-amber-500/20 text-amber-400',
+                red: 'bg-red-500/10 border-red-500/20 text-red-400',
+                orange: 'bg-orange-500/10 border-orange-500/20 text-orange-400',
+              };
+              const cls = colorMap[note.color] || colorMap.blue;
+              return (
+                <motion.div
+                  key={i}
+                  initial={{ opacity: 0, x: -10 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: 0.1 + i * 0.05, type: 'spring', stiffness: 300, damping: 25 }}
+                  className="flex items-start gap-2.5 p-2.5 sm:p-3 rounded-xl bg-white/[0.02] border border-white/[0.05] hover:bg-white/[0.04] hover:border-white/[0.1] transition-all group"
+                >
+                  <span className="text-sm sm:text-base shrink-0 mt-0.5">{note.icon}</span>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-1.5 mb-0.5">
+                      <span className={`px-1.5 py-0.5 text-[8px] sm:text-[9px] font-bold rounded-md border ${cls}`}>{note.cat}</span>
+                      <span className="text-[8px] text-gray-600 font-mono">{note.ver}</span>
+                    </div>
+                    <p className="text-[10px] sm:text-[11px] text-gray-400 leading-relaxed group-hover:text-gray-300 transition-colors">{note.text}</p>
+                  </div>
+                </motion.div>
+              );
+            })}
+          </div>
+
+          {/* Alt açıklama */}
+          <div className="mt-3 pt-3 border-t border-white/[0.05] flex items-center justify-between">
+            <p className="text-[9px] sm:text-[10px] text-gray-600">
+              <ShieldCheck className="w-3 h-3 inline-block mr-1 text-emerald-500/50" />
+              Güvenlik Kalkanı v4.2 KALKAN · Tüm sistemler korunuyor
+            </p>
+            <span className="text-[8px] sm:text-[9px] text-gray-600 font-mono">Son güncelleme: {new Date().toLocaleDateString('tr-TR')}</span>
+          </div>
         </div>
       </motion.div>
 
