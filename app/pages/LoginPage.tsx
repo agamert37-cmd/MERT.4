@@ -26,7 +26,7 @@ interface CartItem {
   quantity: number;
 }
 
-// ─── Default Banners ──────────────────────────────────────────────
+// ─── Default Banners (fallback) ───────────────────────────────────
 const DEFAULT_BANNERS = [
   {
     id: '1',
@@ -40,6 +40,37 @@ const DEFAULT_BANNERS = [
     title: 'Premium Kalite Et Ürünleri',
     subtitle: 'En yüksek hijyen standartlarında, taptaze ve güvenilir üretim.',
   },
+];
+
+// ─── Pazarlama stat renk/ikon eşlemesi ────────────────────────────
+const STAT_COLORS: Record<string, { icon: string; bg: string }> = {
+  blue:    { icon: 'text-blue-400',    bg: 'border-blue-500/20 bg-blue-500/[0.07]' },
+  emerald: { icon: 'text-emerald-400', bg: 'border-emerald-500/20 bg-emerald-500/[0.07]' },
+  purple:  { icon: 'text-purple-400',  bg: 'border-purple-500/20 bg-purple-500/[0.07]' },
+  orange:  { icon: 'text-orange-400',  bg: 'border-orange-500/20 bg-orange-500/[0.07]' },
+  red:     { icon: 'text-red-400',     bg: 'border-red-500/20 bg-red-500/[0.07]' },
+  amber:   { icon: 'text-amber-400',   bg: 'border-amber-500/20 bg-amber-500/[0.07]' },
+};
+
+function getStatIcon(key: string, cls: string) {
+  const p = { className: `w-5 h-5 ${cls}` };
+  switch (key) {
+    case 'users':   return <User {...p} />;
+    case 'package': return <Package {...p} />;
+    case 'truck':   return <Truck {...p} />;
+    case 'shield':  return <Shield {...p} />;
+    case 'star':    return <Star {...p} />;
+    case 'zap':     return <Zap {...p} />;
+    case 'percent': return <Percent {...p} />;
+    default:        return <Award {...p} />;
+  }
+}
+
+const DEFAULT_FEATURE_CARDS = [
+  { icon: <Percent className="w-5 h-5 text-red-400" />,    bg: 'border-red-500/20 bg-red-500/[0.07]',     title: '%10 Nakit İndirim',   sub: 'Tüm alımlarda geçerli' },
+  { icon: <Truck className="w-5 h-5 text-amber-400" />,    bg: 'border-amber-500/20 bg-amber-500/[0.07]', title: 'Aynı Gün Teslimat',   sub: 'Frigofirik araçlarla' },
+  { icon: <Shield className="w-5 h-5 text-emerald-400" />, bg: 'border-emerald-500/20 bg-emerald-500/[0.07]', title: 'ISO 22000 & HACCP', sub: 'Uluslararası standart' },
+  { icon: <Award className="w-5 h-5 text-blue-400" />,     bg: 'border-blue-500/20 bg-blue-500/[0.07]',   title: '2500+ Müşteri',       sub: '15 yıllık deneyim' },
 ];
 
 // ─── Çorba Tarifleri ──────────────────────────────────────────────
@@ -490,7 +521,7 @@ export function LoginPage() {
   const [mobileSlide, setMobileSlide] = useState(0);
 
   useEffect(() => {
-    const timer = setInterval(() => setMobileSlide(i => (i + 1) % DEFAULT_BANNERS.length), 4500);
+    const timer = setInterval(() => setMobileSlide(i => (i + 1) % activeBanners.length), 4500);
     return () => clearInterval(timer);
   }, []);
 
@@ -696,12 +727,26 @@ export function LoginPage() {
   }, [catalogProducts, selectedCategory, productSearch]);
 
   // Pazarlama duyurularını yükle — ürün modalında ilgili haberler için kullanılır
-  const pazarlamaAnnouncements = useMemo(() => {
-    try {
-      const pazarlama = getFromStorage<any>(StorageKey.PAZARLAMA_CONTENT);
-      return (pazarlama?.announcements || []).filter((a: any) => a.active !== false);
-    } catch { return []; }
+  // ── Pazarlama içeriği — banner ve özellik kartları ──────────────
+  const pazarlamaContent = useMemo(() => {
+    try { return getFromStorage<any>(StorageKey.PAZARLAMA_CONTENT); } catch { return null; }
   }, []);
+
+  const activeBanners = useMemo(() => {
+    const banners = pazarlamaContent?.heroBanners?.filter((b: any) => b.active && b.imageUrl);
+    return (banners?.length ? banners : DEFAULT_BANNERS) as { id: string; imageUrl: string; title: string; subtitle: string }[];
+  }, [pazarlamaContent]);
+
+  const featureCards = useMemo(() => {
+    const stats = pazarlamaContent?.stats as Array<{ id: string; icon: string; value: string; label: string; color: string }> | undefined;
+    if (stats?.length && stats.length >= 2) {
+      return stats.slice(0, 4).map(s => {
+        const style = STAT_COLORS[s.color] ?? STAT_COLORS.blue;
+        return { icon: getStatIcon(s.icon, style.icon), bg: style.bg, title: s.value, sub: s.label };
+      });
+    }
+    return DEFAULT_FEATURE_CARDS;
+  }, [pazarlamaContent]);
 
   const companyInfo = useMemo(() => {
     try {
@@ -792,7 +837,7 @@ export function LoginPage() {
 
         {/* Kurumsal Reklam Karüseli */}
         <div className="relative flex-1 overflow-hidden">
-          {DEFAULT_BANNERS.map((slide, i) => (
+          {activeBanners.map((slide, i) => (
             <div
               key={slide.id}
               className={`absolute inset-0 transition-opacity duration-700 ${i === mobileSlide ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
@@ -810,7 +855,7 @@ export function LoginPage() {
           ))}
           {/* Nokta göstergeler */}
           <div className="absolute top-4 right-4 flex gap-1.5 z-10">
-            {DEFAULT_BANNERS.map((_, i) => (
+            {activeBanners.map((_, i) => (
               <button
                 key={i}
                 onClick={() => setMobileSlide(i)}
@@ -873,7 +918,7 @@ export function LoginPage() {
 
           {/* Hero carousel */}
           <div className="relative flex-1">
-            <HeroCarousel banners={DEFAULT_BANNERS} />
+            <HeroCarousel banners={activeBanners} />
           </div>
 
           {/* Güven rozeti şeridi */}
@@ -920,7 +965,7 @@ export function LoginPage() {
 
             {/* Büyük reklam panosu */}
             <div className="relative rounded-2xl overflow-hidden flex-1 min-h-0">
-              {DEFAULT_BANNERS.map((slide, i) => (
+              {activeBanners.map((slide, i) => (
                 <div
                   key={slide.id}
                   className={`absolute inset-0 transition-opacity duration-700 ${i === mobileSlide ? 'opacity-100' : 'opacity-0'}`}
@@ -936,7 +981,7 @@ export function LoginPage() {
                   </div>
                   {/* Slayt göstergesi */}
                   <div className="absolute bottom-4 right-5 flex gap-1.5">
-                    {DEFAULT_BANNERS.map((_, j) => (
+                    {activeBanners.map((_, j) => (
                       <button
                         key={j}
                         onClick={() => setMobileSlide(j)}
@@ -948,14 +993,9 @@ export function LoginPage() {
               ))}
             </div>
 
-            {/* Özellik kartları */}
+            {/* Özellik kartları — Pazarlama > İstatistik Kartlarından */}
             <div className="grid grid-cols-4 gap-4 flex-shrink-0">
-              {[
-                { icon: <Percent className="w-5 h-5 text-red-400" />, bg: 'border-red-500/20 bg-red-500/[0.07]', title: '%10 Nakit İndirim', sub: 'Tüm alımlarda geçerli' },
-                { icon: <Truck className="w-5 h-5 text-amber-400" />, bg: 'border-amber-500/20 bg-amber-500/[0.07]', title: 'Aynı Gün Teslimat', sub: 'Frigofirik araçlarla' },
-                { icon: <Shield className="w-5 h-5 text-emerald-400" />, bg: 'border-emerald-500/20 bg-emerald-500/[0.07]', title: 'ISO 22000 & HACCP', sub: 'Uluslararası standart' },
-                { icon: <Award className="w-5 h-5 text-blue-400" />, bg: 'border-blue-500/20 bg-blue-500/[0.07]', title: '2500+ Müşteri', sub: '15 yıllık deneyim' },
-              ].map((card, i) => (
+              {featureCards.map((card, i) => (
                 <div key={i} className={`rounded-xl border p-4 ${card.bg} flex flex-col gap-2.5`}>
                   <div className="w-9 h-9 rounded-lg bg-white/5 flex items-center justify-center">{card.icon}</div>
                   <div>

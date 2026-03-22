@@ -575,94 +575,99 @@ function TemplatePicker<T>({ templates, onSelect, label, color }: {
 }
 
 // ─── Live Mini Preview ───────────────────────────────────────────
+// Yeni giriş sayfası layout'unu yansıtır: sol panel (carousel) + sağ panel (reklam + kartlar)
 function LivePreview({ content, companyInfo }: { content: PazarlamaContent; companyInfo: any }) {
   const activeBanners = content.heroBanners.filter(b => b.active);
-  const activeAnnouncements = content.announcements.filter(a => a.active);
-  const activeProducts = content.products.filter(p => p.active);
-  const activeTestimonials = content.testimonials.filter(t => t.active);
+  const banner0 = activeBanners[0];
+  const banner1 = activeBanners[1] ?? banner0;
 
   return (
-    <div className="w-full h-full bg-background rounded-xl overflow-hidden border border-border/80 text-[6px] relative">
-      <div className="absolute inset-0 overflow-y-auto">
-        {/* Mini Hero */}
-        {activeBanners.length > 0 && (
-          <div className="relative h-28 overflow-hidden">
-            {activeBanners[0].imageUrl ? (
-              <img src={activeBanners[0].imageUrl} className="w-full h-full object-cover opacity-60" alt="" />
-            ) : (
-              <div className="w-full h-full bg-gradient-to-br from-blue-900 to-background" />
-            )}
-            <div className="absolute inset-0 bg-gradient-to-t from-background via-transparent to-transparent" />
-            <div className="absolute bottom-2 left-2.5 right-2.5">
-              <p className="text-[7px] font-bold text-white leading-tight">{activeBanners[0].title}</p>
-              <p className="text-[5px] text-muted-foreground mt-0.5">{activeBanners[0].subtitle}</p>
+    <div className="w-full h-full bg-[#080c14] rounded-xl overflow-hidden border border-white/10 flex">
+
+      {/* Sol panel: carousel */}
+      <div className="w-[38%] flex-shrink-0 flex flex-col border-r border-white/5">
+        {/* Header */}
+        <div className="flex items-center gap-1 px-1.5 py-1 bg-black/50 border-b border-white/5 flex-shrink-0">
+          <div className="w-3 h-3 rounded-sm bg-blue-600 flex items-center justify-center flex-shrink-0">
+            <Sparkles className="w-1.5 h-1.5 text-white" />
+          </div>
+          <span className="text-[5px] font-bold text-white truncate">{companyInfo.name}</span>
+        </div>
+        {/* Banner */}
+        <div className="relative flex-1">
+          {banner0?.imageUrl ? (
+            <img src={banner0.imageUrl} className="w-full h-full object-cover opacity-70" alt="" />
+          ) : (
+            <div className="w-full h-full bg-gradient-to-b from-blue-900/40 to-[#080c14]" />
+          )}
+          <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent" />
+          {banner0 && (
+            <div className="absolute bottom-1.5 left-1.5 right-1.5">
+              <p className="text-[5px] font-bold text-white leading-tight line-clamp-2">{banner0.title}</p>
             </div>
-          </div>
-        )}
+          )}
+        </div>
+        {/* Trust bar */}
+        <div className="flex items-center gap-1 px-1.5 py-1 bg-black/40 border-t border-white/5 flex-shrink-0">
+          <span className="text-[4px] text-white/30">ISO 22000</span>
+          <span className="w-px h-1.5 bg-white/10" />
+          <span className="text-[4px] text-white/30">15+ Yıl</span>
+          <span className="w-px h-1.5 bg-white/10" />
+          <span className="text-[4px] text-white/30">Aynı Gün</span>
+        </div>
+      </div>
 
-        {/* Mini Stats */}
-        {content.stats.length > 0 && (
-          <div className="flex gap-1 px-2 py-1.5">
-            {content.stats.slice(0, 4).map(s => (
-              <div key={s.id} className="flex-1 text-center p-1 rounded bg-card/50">
-                <p className="text-[6px] font-bold text-white">{s.value}</p>
-                <p className="text-[4px] text-muted-foreground/60">{s.label}</p>
-              </div>
-            ))}
-          </div>
-        )}
+      {/* Sağ panel */}
+      <div className="flex-1 flex flex-col overflow-hidden">
+        {/* Nav */}
+        <div className="flex items-center justify-between px-1.5 py-1 border-b border-white/5 bg-[#080c14]/80 flex-shrink-0">
+          <span className="text-[4px] font-bold text-blue-400/70 uppercase tracking-wider">Müşteri Portali</span>
+          <div className="px-1 py-0.5 rounded bg-blue-600 text-[4px] text-white font-bold">Giriş</div>
+        </div>
 
-        {/* Mini Announcements */}
-        {activeAnnouncements.length > 0 && (
-          <div className="px-2 py-1">
-            <p className="text-[5px] text-muted-foreground/60 uppercase tracking-wider font-bold mb-1">Haberler</p>
-            {activeAnnouncements.slice(0, 2).map(a => (
-              <div key={a.id} className="p-1.5 mb-1 rounded bg-card/30 border border-border/20">
-                <div className="flex items-center gap-1">
-                  <span className="px-1 py-0.5 text-[4px] font-bold bg-blue-500/20 text-blue-400 rounded">{a.badge}</span>
-                  <span className="text-[5px] font-bold text-white truncate">{a.title}</span>
-                </div>
-                <p className="text-[4px] text-muted-foreground/60 line-clamp-1 mt-0.5">{a.text}</p>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* Mini Products */}
-        {activeProducts.length > 0 && (
-          <div className="px-2 py-1">
-            <p className="text-[5px] text-muted-foreground/60 uppercase tracking-wider font-bold mb-1">Urunler</p>
-            <div className="flex gap-1">
-              {activeProducts.slice(0, 3).map(p => (
-                <div key={p.id} className="flex-1 p-1.5 rounded bg-card/30 border border-border/20 text-center">
-                  <div className="w-full h-6 rounded bg-gradient-to-br from-purple-900/30 to-card/30 mb-1 flex items-center justify-center">
-                    <ShoppingBag className="w-2.5 h-2.5 text-purple-400/40" />
-                  </div>
-                  <p className="text-[5px] font-bold text-white truncate">{p.name}</p>
-                  <p className="text-[4px] text-muted-foreground/60">{p.price}</p>
-                </div>
-              ))}
+        {/* Büyük reklam banner */}
+        <div className="relative flex-1 m-1 rounded-lg overflow-hidden min-h-0">
+          {banner1?.imageUrl ? (
+            <img src={banner1.imageUrl} className="w-full h-full object-cover opacity-60" alt="" />
+          ) : (
+            <div className="w-full h-full bg-gradient-to-r from-blue-900/40 to-[#080c14]" />
+          )}
+          <div className="absolute inset-0 bg-gradient-to-r from-black/80 to-transparent" />
+          {banner1 && (
+            <div className="absolute inset-0 flex flex-col justify-center px-2">
+              <span className="text-[4px] font-bold text-blue-400 uppercase tracking-wider mb-0.5">Kampanya</span>
+              <span className="text-[6px] font-bold text-white leading-tight line-clamp-2">{banner1.title}</span>
+              <span className="text-[4px] text-white/50 mt-0.5 line-clamp-1">{banner1.subtitle}</span>
             </div>
-          </div>
-        )}
-
-        {/* Mini Testimonials */}
-        {activeTestimonials.length > 0 && (
-          <div className="px-2 py-1">
-            <p className="text-[5px] text-muted-foreground/60 uppercase tracking-wider font-bold mb-1">Referanslar</p>
-            {activeTestimonials.slice(0, 1).map(t => (
-              <div key={t.id} className="p-1.5 rounded bg-amber-500/5 border border-amber-500/10">
-                <p className="text-[4px] text-amber-400 mb-0.5">{'★'.repeat(t.rating)}</p>
-                <p className="text-[4px] text-muted-foreground/70 italic line-clamp-2">"{t.text}"</p>
-                <p className="text-[4px] text-muted-foreground/50 mt-0.5">- {t.name}</p>
-              </div>
+          )}
+          {/* Dots */}
+          <div className="absolute bottom-1.5 right-1.5 flex gap-0.5">
+            {activeBanners.slice(0, 3).map((_, j) => (
+              <div key={j} className={`rounded-full bg-white ${j === 0 ? 'w-2.5 h-1 opacity-80' : 'w-1 h-1 opacity-30'}`} />
             ))}
           </div>
-        )}
+        </div>
 
-        {/* Mini Footer */}
-        <div className="px-2 py-1.5 mt-1 border-t border-border/30">
-          <p className="text-[4px] text-muted-foreground/40 text-center">{companyInfo.name} &copy; 2026</p>
+        {/* Özellik kartları */}
+        <div className="grid grid-cols-4 gap-0.5 mx-1 mb-1 flex-shrink-0">
+          {content.stats.slice(0, 4).map(s => (
+            <div key={s.id} className="rounded bg-white/[0.04] border border-white/[0.06] p-1">
+              <p className="text-[5px] font-bold text-white leading-tight">{s.value}</p>
+              <p className="text-[3.5px] text-white/30 leading-tight line-clamp-1">{s.label}</p>
+            </div>
+          ))}
+          {content.stats.length === 0 && [1, 2, 3, 4].map(i => (
+            <div key={i} className="rounded bg-white/[0.04] border border-white/[0.06] p-1 h-5" />
+          ))}
+        </div>
+
+        {/* Footer */}
+        <div className="flex items-center justify-between px-1.5 pb-1 flex-shrink-0">
+          <span className="text-[3.5px] text-white/20">{companyInfo.name} © 2026</span>
+          <div className="flex items-center gap-0.5">
+            <div className="w-1 h-1 rounded-full bg-emerald-400/60" />
+            <span className="text-[3.5px] text-white/20">Güvenli</span>
+          </div>
         </div>
       </div>
     </div>
@@ -1092,12 +1097,74 @@ export function PazarlamaPage() {
                   </div>
 
                   {/* Info */}
+                  {/* Giriş Sayfası Eşleme Haritası */}
+                  <div className="bg-[#111] rounded-2xl p-5 border border-white/5">
+                    <div className="flex items-center gap-2 mb-4">
+                      <Monitor className="w-4 h-4 text-blue-400" />
+                      <h3 className="text-sm font-bold text-white">Giriş Sayfasına Yansıyan İçerikler</h3>
+                      <span className="px-2 py-0.5 text-[9px] font-bold bg-blue-500/15 text-blue-400 rounded-full border border-blue-500/20">Canlı Sync</span>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      {[
+                        {
+                          label: 'Hero Carousel',
+                          tab: 'hero' as TabKey,
+                          desc: 'Giriş sayfasının sol panelindeki kayan görsel (masaüstü) ve tam ekran reklam (mobil)',
+                          count: `${content.heroBanners.filter(b => b.active).length} aktif banner`,
+                          color: 'border-blue-500/20 bg-blue-500/[0.05] text-blue-400',
+                          icon: <ImageIcon className="w-4 h-4" />,
+                          mapped: true,
+                        },
+                        {
+                          label: 'İstatistik Kartları',
+                          tab: 'ayarlar' as TabKey,
+                          desc: 'Masaüstü sağ paneldeki 4\'lü özellik kartları (Ayarlar › İstatistik Kartları)',
+                          count: `${content.stats.length} kart`,
+                          color: 'border-emerald-500/20 bg-emerald-500/[0.05] text-emerald-400',
+                          icon: <BarChart3 className="w-4 h-4" />,
+                          mapped: true,
+                        },
+                        {
+                          label: 'Haberler, Ürünler, Referanslar',
+                          tab: 'haberler' as TabKey,
+                          desc: 'Şu anda giriş sayfasında gösterilmiyor (kaldırıldı); ileride kullanılabilir.',
+                          count: 'Yönetilebilir',
+                          color: 'border-white/5 bg-white/[0.02] text-white/30',
+                          icon: <Layers className="w-4 h-4" />,
+                          mapped: false,
+                        },
+                      ].map((item, i) => (
+                        <motion.button
+                          key={i}
+                          whileHover={{ scale: 1.01 }}
+                          whileTap={{ scale: 0.99 }}
+                          onClick={() => setActiveTab(item.tab)}
+                          className={`text-left p-4 rounded-xl border transition-all ${item.color}`}
+                        >
+                          <div className="flex items-center justify-between mb-2">
+                            <div className="flex items-center gap-2">
+                              {item.icon}
+                              <span className="text-sm font-semibold text-white">{item.label}</span>
+                            </div>
+                            {item.mapped && (
+                              <span className="flex items-center gap-1 text-[9px] font-bold text-emerald-400">
+                                <Check className="w-3 h-3" /> Aktif Sync
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-[11px] text-muted-foreground/60 leading-relaxed">{item.desc}</p>
+                          <p className="text-[10px] text-muted-foreground/40 mt-1.5">{item.count}</p>
+                        </motion.button>
+                      ))}
+                    </div>
+                  </div>
+
                   <div className="bg-pink-600/5 border border-pink-500/15 rounded-xl p-4">
                     <div className="flex items-start gap-3">
                       <Rocket className="w-5 h-5 text-pink-400 flex-shrink-0 mt-0.5" />
                       <div className="text-xs text-pink-300/80 space-y-1">
-                        <p className="font-semibold text-pink-300">Hizli Baslangic</p>
-                        <p>Yukaridaki kartlara tiklayarak ilgili bolume gecin. <strong>Sablon</strong> butonlariyla hizli icerik ekleyin. <strong>Onizleme</strong> panelini acarak degisiklikleri anlik gorun.</p>
+                        <p className="font-semibold text-pink-300">Hızlı Başlangıç</p>
+                        <p>Yukarıdaki kartlara tıklayarak ilgili bölüme geçin. <strong>Şablon</strong> butonlarıyla hızlı içerik ekleyin. <strong>Önizleme</strong> panelini açarak değişiklikleri anlık görün.</p>
                       </div>
                     </div>
                   </div>
@@ -1112,10 +1179,15 @@ export function PazarlamaPage() {
                       <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-600 to-blue-700 flex items-center justify-center"><ImageIcon className="w-5 h-5 text-white" /></div>
                       <div>
                         <h2 className="text-lg font-bold text-white">Hero Banner / Carousel</h2>
-                        <p className="text-xs text-muted-foreground/70">Login sayfasinin sol tarafindaki buyuk gorsel alani</p>
+                        <p className="text-xs text-muted-foreground/70">Giriş sayfası sol panel (masaüstü) + tam ekran reklam (mobil)</p>
                       </div>
                     </div>
-                    <span className="text-xs text-muted-foreground/70">{content.heroBanners.length} gorsel</span>
+                    <div className="flex items-center gap-2">
+                      <span className="flex items-center gap-1 px-2 py-1 text-[10px] font-bold bg-emerald-500/10 text-emerald-400 rounded-lg border border-emerald-500/20">
+                        <Check className="w-3 h-3" /> Giriş Sayfasına Yansıyor
+                      </span>
+                      <span className="text-xs text-muted-foreground/70">{content.heroBanners.length} banner</span>
+                    </div>
                   </div>
 
                   {content.heroBanners.map((banner, i) => (
