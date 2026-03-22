@@ -546,6 +546,7 @@ export function LoginPage() {
   // Password visibility
   const [showPassword, setShowPassword] = useState(false);
   const [showAdminPw, setShowAdminPw] = useState(false);
+  const [failedAttemptInfo, setFailedAttemptInfo] = useState<{ ua: string; time: string; ip: string } | null>(null);
 
   // Security Lockout states
   const [attempts, setAttempts] = useState(0);
@@ -601,6 +602,15 @@ export function LoginPage() {
     const newAttempts = attempts + 1;
     setAttempts(newAttempts);
     localStorage.setItem('security_attempts', newAttempts.toString());
+
+    // Cihaz / tarayıcı bilgilerini kaydet
+    const ua = navigator.userAgent;
+    const time = new Date().toLocaleString('tr-TR');
+    // IP adresini asenkron olarak al
+    fetch('https://api.ipify.org?format=json')
+      .then(r => r.json())
+      .then(d => setFailedAttemptInfo({ ua, time, ip: d.ip || '-' }))
+      .catch(() => setFailedAttemptInfo({ ua, time, ip: 'Alınamadı' }));
 
     if (newAttempts >= MAX_ATTEMPTS) {
       const lockTime = Date.now() + LOCKOUT_MINUTES * 60 * 1000;
@@ -1268,6 +1278,13 @@ export function LoginPage() {
                             ))}
                           </div>
                         )}
+                        {failedAttemptInfo && (
+                          <div className="mt-2 pt-2 border-t border-red-500/15 space-y-0.5">
+                            <p className="text-[10px] text-red-300/50 font-mono break-all"><span className="text-red-400/70">IP:</span> {failedAttemptInfo.ip}</p>
+                            <p className="text-[10px] text-red-300/50 font-mono break-all"><span className="text-red-400/70">Cihaz:</span> {failedAttemptInfo.ua.substring(0, 80)}{failedAttemptInfo.ua.length > 80 ? '...' : ''}</p>
+                            <p className="text-[10px] text-red-300/50 font-mono"><span className="text-red-400/70">Zaman:</span> {failedAttemptInfo.time}</p>
+                          </div>
+                        )}
                       </div>
                     </motion.div>
                   )}
@@ -1545,6 +1562,13 @@ export function LoginPage() {
                         {Array.from({ length: MAX_ATTEMPTS }).map((_, i) => (
                           <div key={i} className={`h-0.5 flex-1 rounded-full ${i < attempts ? 'bg-red-500' : 'bg-white/10'}`} />
                         ))}
+                      </div>
+                    )}
+                    {failedAttemptInfo && (
+                      <div className="mt-1.5 pt-1.5 border-t border-red-500/15 space-y-0.5">
+                        <p className="text-[9px] text-red-300/50 font-mono break-all"><span className="text-red-400/70">IP:</span> {failedAttemptInfo.ip}</p>
+                        <p className="text-[9px] text-red-300/50 font-mono break-all"><span className="text-red-400/70">Cihaz:</span> {failedAttemptInfo.ua.substring(0, 60)}{failedAttemptInfo.ua.length > 60 ? '...' : ''}</p>
+                        <p className="text-[9px] text-red-300/50 font-mono"><span className="text-red-400/70">Zaman:</span> {failedAttemptInfo.time}</p>
                       </div>
                     )}
                   </div>
