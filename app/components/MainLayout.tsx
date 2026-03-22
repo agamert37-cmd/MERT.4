@@ -484,7 +484,32 @@ export function MainLayout() {
               </nav>
 
               {/* Mobile User Section */}
-              <div className="p-3 border-t border-border/60">
+              <div className="p-3 border-t border-border/60 space-y-2">
+                {/* Profil kartı */}
+                <div className="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-secondary/30">
+                  <div className={`w-9 h-9 rounded-full flex items-center justify-center text-white font-semibold text-sm shadow-lg flex-shrink-0 ${
+                    user?.id === 'admin-super'
+                      ? 'bg-gradient-to-br from-red-600 to-red-900'
+                      : 'bg-gradient-to-br from-blue-600 to-purple-600'
+                  }`}>
+                    {user?.name?.charAt(0)?.toUpperCase() || 'U'}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className={`text-sm font-medium truncate ${user?.id === 'admin-super' ? 'text-red-400' : 'text-white'}`}>
+                      {user?.name || 'Kullanıcı'}
+                    </p>
+                    <p className="text-xs text-muted-foreground truncate">{user?.role || 'Personel'}</p>
+                  </div>
+                </div>
+                {/* Profili Düzenle */}
+                <button
+                  onClick={() => { setIsMobileSidebarOpen(false); setIsProfileModalOpen(true); }}
+                  className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-foreground hover:bg-secondary/60 hover:text-white transition-colors"
+                >
+                  <UserCircle className="w-[18px] h-[18px]" />
+                  <span>{t('userMenu.editProfile')}</span>
+                </button>
+                {/* Çıkış */}
                 <button
                   onClick={() => { setIsMobileSidebarOpen(false); handleLogout(); }}
                   className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-red-400 hover:bg-red-500/10 transition-colors"
@@ -1049,6 +1074,22 @@ export function MainLayout() {
               </DropdownMenu.Root>
 
               <NotificationPanel />
+
+              {/* Mobile Profile Avatar */}
+              <button
+                onClick={() => setIsProfileModalOpen(true)}
+                className="lg:hidden flex items-center justify-center w-8 h-8 rounded-full flex-shrink-0 shadow-md"
+                style={{
+                  background: user?.id === 'admin-super'
+                    ? 'linear-gradient(135deg, #dc2626, #7f1d1d)'
+                    : 'linear-gradient(135deg, #2563eb, #7c3aed)'
+                }}
+                title="Profili Düzenle"
+              >
+                <span className="text-white font-bold text-xs">
+                  {user?.name?.charAt(0)?.toUpperCase() || 'U'}
+                </span>
+              </button>
             </div>
           </header>
 
