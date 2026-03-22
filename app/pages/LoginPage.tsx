@@ -487,6 +487,12 @@ export function LoginPage() {
   const [adminPassword, setAdminPassword] = useState('');
   const [adminTab, setAdminTab] = useState<'admin' | 'user'>('user');
   const [activeRecipe, setActiveRecipe] = useState(0);
+  const [mobileSlide, setMobileSlide] = useState(0);
+
+  useEffect(() => {
+    const timer = setInterval(() => setMobileSlide(i => (i + 1) % DEFAULT_BANNERS.length), 4500);
+    return () => clearInterval(timer);
+  }, []);
 
   // ── Gizli admin tetikleyici (logo'ya 5 hızlı tıklama) ──────────────────
   const secretTapCount = React.useRef(0);
@@ -764,448 +770,223 @@ export function LoginPage() {
   };
 
   return (
-    <div className="relative min-h-screen bg-[#080c14] text-white flex flex-col lg:flex-row overflow-hidden font-sans">
-      {/* Tek, sade arka plan tonu — iç içe dekorasyon yok */}
+    <div className="relative h-[100dvh] bg-[#080c14] text-white overflow-hidden font-sans">
       <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_left,rgba(37,99,235,0.06)_0%,transparent_60%)] pointer-events-none" />
 
-      {/* ─── Mobil Alt Aksiyon Barı ─── */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.4 }}
-        className="sm:hidden fixed bottom-0 inset-x-0 z-50"
-        style={{ paddingBottom: 'max(0.5rem, env(safe-area-inset-bottom))' }}
-      >
-        <div className="mx-3 mb-2 flex items-center gap-2 bg-[#0d111b]/95 backdrop-blur-md border border-white/[0.08] rounded-2xl px-3 py-2.5 shadow-xl">
-          {/* Sepet butonu — ürün eklendiyse görünür */}
-          {cartCount > 0 && (
-            <motion.button
-              initial={{ scale: 0, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              whileTap={{ scale: 0.93 }}
-              onClick={() => setShowCart(true)}
-              className="relative w-11 h-11 rounded-xl bg-red-600/90 flex items-center justify-center flex-shrink-0"
-            >
-              <ShoppingBag className="w-4.5 h-4.5 text-white" />
-              <span className="absolute -top-1 -right-1 w-4.5 h-4.5 rounded-full bg-white text-red-600 text-[9px] font-black flex items-center justify-center">
-                {cartCount}
-              </span>
-            </motion.button>
-          )}
-          {/* Giriş butonu — sade, kurumsal */}
-          <motion.button
-            whileTap={{ scale: 0.97 }}
-            onClick={() => setShowAdminPanel(true)}
-            className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-blue-600 active:bg-blue-700 rounded-xl text-white text-sm font-semibold transition-colors"
-          >
-            <LogIn className="w-4 h-4" />
-            <span>Personel Girişi</span>
-          </motion.button>
-        </div>
-      </motion.div>
+      {/* ═══════════ MOBİL LAYOUT (lg altı) ═══════════ */}
+      <div className="flex flex-col lg:hidden h-full">
 
-      {/* ═══════════════════════════════════════════════════════════
-           SOL PANEL: MARKA + HERO CAROUSEL
-         ═══════════════════════════════════════════════════════════ */}
-      <div className="relative w-full lg:w-[42%] lg:h-screen flex-shrink-0 flex flex-col overflow-hidden">
-
-        {/* ── Şirket header şeridi (Hero'nun ÜSTÜNDE, ayrı katman) ── */}
-        <motion.div
-          initial={{ opacity: 0, y: -8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.2 }}
-          className="relative z-20 flex items-center gap-3 px-5 py-4 sm:px-6 sm:py-4 bg-black/60 backdrop-blur-sm border-b border-white/5 flex-shrink-0"
-        >
+        {/* Üst header */}
+        <div className="flex items-center gap-3 px-4 py-3.5 border-b border-white/[0.07] bg-black/50 backdrop-blur-sm flex-shrink-0">
           <div
             onClick={handleSecretTap}
-            className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-blue-600 flex items-center justify-center flex-shrink-0 shadow-lg shadow-blue-600/40 cursor-default select-none"
+            className="w-9 h-9 rounded-xl bg-blue-600 flex items-center justify-center flex-shrink-0 shadow-lg shadow-blue-600/40 cursor-default select-none"
           >
-            <Sparkles className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
+            <Sparkles className="w-4 h-4 text-white" />
           </div>
           <div className="min-w-0">
-            <h1 className="text-white font-bold text-base sm:text-lg leading-none tracking-tight truncate">
-              {companyInfo.name}
-            </h1>
-            <p className="text-blue-200/60 text-[11px] sm:text-xs font-medium mt-0.5 truncate">
-              {companyInfo.slogan}
-            </p>
+            <h1 className="text-white font-bold text-[15px] leading-none tracking-tight truncate">{companyInfo.name}</h1>
+            <p className="text-blue-200/50 text-[11px] mt-0.5 truncate">{companyInfo.slogan}</p>
           </div>
-        </motion.div>
-
-        {/* ── Hero Carousel — kendi alanında, kalan yüksekliği doldurur ── */}
-        <div className="relative flex-1 min-h-[30vh] sm:min-h-[36vh] lg:min-h-0">
-          <HeroCarousel banners={DEFAULT_BANNERS} />
         </div>
 
-        {/* ── Güven rozeti şeridi — yalnızca desktop'ta görünür ── */}
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 0.5 }}
-          className="hidden lg:flex items-center gap-5 px-7 py-3.5 bg-black/50 backdrop-blur-sm border-t border-white/5 flex-shrink-0"
-        >
-          {[
-            { icon: <Award className="w-3.5 h-3.5" />, text: '15+ Yıl Deneyim' },
-            { icon: <Shield className="w-3.5 h-3.5" />, text: 'ISO 22000' },
-            { icon: <Truck className="w-3.5 h-3.5" />, text: 'Aynı Gün Teslimat' },
-            { icon: <Package className="w-3.5 h-3.5" />, text: 'Soğuk Zincir' },
-          ].map((item, i) => (
-            <React.Fragment key={i}>
-              {i > 0 && <span className="w-px h-3 bg-white/10 flex-shrink-0" />}
-              <span className="flex items-center gap-1.5 text-[11px] text-white/35 font-medium whitespace-nowrap">
-                <span className="text-white/30">{item.icon}</span>
-                {item.text}
-              </span>
-            </React.Fragment>
-          ))}
-        </motion.div>
-      </div>
-
-      {/* ═══════════════════════════════════════════════════════════
-           SAĞ PANEL: MÜŞTERİ PORTALI
-         ═══════════════════════════════════════════════════════════ */}
-      <div className="flex-1 overflow-y-auto z-10 scrollbar-hide">
-
-        {/* ── Sağ panel üst navigasyon şeridi ── */}
-        <motion.div
-          initial={{ opacity: 0, y: -6 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.15 }}
-          className="sticky top-0 z-30 flex items-center justify-between gap-4 px-5 py-3.5 sm:px-8 sm:py-4 bg-[#080c14]/90 backdrop-blur-md border-b border-white/[0.06]"
-        >
-          <div className="flex items-center gap-2 min-w-0">
-            <span className="text-[10px] sm:text-xs font-bold text-blue-400/80 uppercase tracking-widest hidden sm:block">
-              Müşteri Portali
-            </span>
-            <span className="hidden sm:block w-px h-3 bg-white/10" />
-            <span className="text-xs sm:text-sm text-white/50 font-medium truncate">
-              Fırsatlar · Tarifler · Ürün Kataloğu
-            </span>
-          </div>
-          {/* Desktop giriş butonu — düz, kurumsal */}
-          <motion.button
-            whileTap={{ scale: 0.97 }}
-            onClick={() => setShowAdminPanel(true)}
-            className="hidden sm:flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 rounded-lg text-white text-xs sm:text-sm font-semibold transition-colors shadow-md shadow-blue-600/20 flex-shrink-0"
-          >
-            <LogIn className="w-3.5 h-3.5" />
-            Personel Girişi
-          </motion.button>
-        </motion.div>
-
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 pt-5 sm:pt-7 pb-24 sm:pb-16 space-y-6 sm:space-y-8">
-
-          {/* ── Promosyon Şeridi ── */}
-          <motion.div
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.2 }}
-            className="flex gap-2.5 overflow-x-auto pb-0.5 scrollbar-hide"
-          >
-            {[
-              {
-                icon: <Percent className="w-3.5 h-3.5 text-red-400" />,
-                color: 'border-red-500/20 bg-red-500/[0.07]',
-                title: 'Nakit Ödemelerde %10 İndirim',
-                sub: 'Tüm perakende & toptan alımlarda',
-              },
-              {
-                icon: <Truck className="w-3.5 h-3.5 text-amber-400" />,
-                color: 'border-amber-500/20 bg-amber-500/[0.07]',
-                title: 'Aynı Gün Teslimat Garantisi',
-                sub: '10:00\'a kadar verilen siparişlerde',
-              },
-              {
-                icon: <Shield className="w-3.5 h-3.5 text-emerald-400" />,
-                color: 'border-emerald-500/20 bg-emerald-500/[0.07]',
-                title: 'ISO 22000 & HACCP Sertifikalı',
-                sub: 'Uluslararası hijyen standartları',
-              },
-              {
-                icon: <Award className="w-3.5 h-3.5 text-blue-400" />,
-                color: 'border-blue-500/20 bg-blue-500/[0.07]',
-                title: '2500+ Aktif Müşteri',
-                sub: '15 yıllık güvenilir hizmet',
-              },
-            ].map((item, i) => (
-              <div
-                key={i}
-                className={`flex-shrink-0 flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl border ${item.color} min-w-0`}
-              >
-                <div className="w-7 h-7 rounded-lg bg-white/5 flex items-center justify-center flex-shrink-0">
-                  {item.icon}
-                </div>
-                <div>
-                  <p className="text-white text-[11px] sm:text-xs font-semibold leading-tight whitespace-nowrap">
-                    {item.title}
-                  </p>
-                  <p className="text-white/35 text-[10px] sm:text-[11px] whitespace-nowrap">
-                    {item.sub}
-                  </p>
-                </div>
-              </div>
-            ))}
-          </motion.div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-5">
-
-            {/* ─── Bölüm başlığı (grid'in üstünde) ─── */}
-            <div className="md:col-span-2 flex items-center gap-3 pt-1">
-              <h2 className="text-sm font-bold text-white/70 whitespace-nowrap">Haberler & Tarifler</h2>
-              <div className="flex-1 h-px bg-white/[0.06]" />
-            </div>
-
-            {/* ─── 2. KUTU: Çorba Tarifleri ─── */}
-            <motion.div
-              initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}
-              className="md:col-span-1 rounded-2xl bg-white/[0.04] border border-white/[0.08] p-4 sm:p-5 flex flex-col"
+        {/* Kurumsal Reklam Karüseli */}
+        <div className="relative flex-1 overflow-hidden">
+          {DEFAULT_BANNERS.map((slide, i) => (
+            <div
+              key={slide.id}
+              className={`absolute inset-0 transition-opacity duration-700 ${i === mobileSlide ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
             >
-              <div className="flex items-center justify-between mb-4 sm:mb-6">
-                <div className="flex items-center gap-2.5 sm:gap-3">
-                  <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg sm:rounded-xl bg-orange-500/20 flex items-center justify-center">
-                    <UtensilsCrossed className="w-4 h-4 sm:w-5 sm:h-5 text-orange-400" />
-                  </div>
-                  <h3 className="text-base sm:text-lg font-bold text-white">Günün Çorbaları</h3>
-                </div>
-                <div className="flex gap-1">
-                  {SOUP_RECIPES.map((_, idx) => (
-                    <button 
-                      key={idx}
-                      onClick={() => { setActiveRecipe(idx); trackVitrinEvent('recipe_view', { recipeName: SOUP_RECIPES[idx].name }); }}
-                      className={`w-2 h-2 rounded-full transition-all ${activeRecipe === idx ? 'w-5 sm:w-6 bg-orange-400' : 'bg-white/20 hover:bg-white/40'}`}
-                    />
-                  ))}
-                </div>
-              </div>
-
-              <div className="relative flex-1 rounded-xl sm:rounded-2xl overflow-hidden group">
-                <img src={SOUP_RECIPES[activeRecipe].image} alt={SOUP_RECIPES[activeRecipe].name} className="w-full h-40 sm:h-48 object-cover group-hover:scale-105 transition-transform duration-700" />
-                <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent" />
-                <div className="absolute bottom-0 left-0 right-0 p-4 sm:p-5">
-                  <h4 className="text-lg sm:text-xl font-bold text-white mb-1">{SOUP_RECIPES[activeRecipe].name}</h4>
-                  <div className="flex items-center gap-3 text-[10px] sm:text-xs font-medium text-orange-200 mb-2 sm:mb-3">
-                    <span className="flex items-center gap-1"><Clock className="w-3 h-3 sm:w-3.5 sm:h-3.5" /> {SOUP_RECIPES[activeRecipe].time}</span>
-                    <span className="flex items-center gap-1"><ChefHat className="w-3 h-3 sm:w-3.5 sm:h-3.5" /> {SOUP_RECIPES[activeRecipe].difficulty}</span>
-                  </div>
-                  <p className="text-xs sm:text-sm text-gray-300 line-clamp-2">{SOUP_RECIPES[activeRecipe].description}</p>
-                </div>
-              </div>
-              <div className="mt-3 sm:mt-4 p-3 sm:p-4 rounded-xl sm:rounded-2xl bg-orange-500/10 border border-orange-500/20 flex gap-2.5 sm:gap-3 items-start">
-                <Info className="w-4 h-4 sm:w-5 sm:h-5 text-orange-400 flex-shrink-0 mt-0.5" />
-                <p className="text-[11px] sm:text-xs text-orange-200/80 leading-relaxed">
-                  <strong className="text-orange-400">Şefin Notu:</strong> {SOUP_RECIPES[activeRecipe].tips}
+              <img src={slide.imageUrl} alt={slide.title} className="w-full h-full object-cover" />
+              <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/30 to-transparent" />
+              <div className="absolute bottom-0 left-0 right-0 p-5 pb-4">
+                <p className="text-[11px] font-bold text-blue-400 uppercase tracking-widest mb-1.5">
+                  {i === 0 ? 'Özel Kampanya' : 'Premium Kalite'}
                 </p>
-              </div>
-            </motion.div>
-
-            {/* ─── 3. KUTU: Güncel Haberler ─── */}
-            <motion.div
-              initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}
-              className="md:col-span-1 rounded-2xl bg-white/[0.04] border border-white/[0.08] p-4 sm:p-5 flex flex-col"
-            >
-              <div className="flex items-center gap-2.5 sm:gap-3 mb-4 sm:mb-6">
-                <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg sm:rounded-xl bg-blue-500/20 flex items-center justify-center">
-                  <Newspaper className="w-4 h-4 sm:w-5 sm:h-5 text-blue-400" />
-                </div>
-                <h3 className="text-base sm:text-lg font-bold text-white">Sektörel Haberler</h3>
-              </div>
-              
-              <div className="space-y-3 sm:space-y-4 flex-1">
-                {NEWS_ITEMS.map((news) => (
-                  <div key={news.id} onClick={() => { setSelectedNews(news); trackVitrinEvent('news_view', { newsTitle: news.title }); }} className="flex gap-3 sm:gap-4 p-2.5 sm:p-3 rounded-xl sm:rounded-2xl hover:bg-white/5 active:bg-white/10 transition-colors cursor-pointer group">
-                    <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-lg sm:rounded-xl overflow-hidden flex-shrink-0">
-                      <img src={news.image} alt="" className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
-                    </div>
-                    <div className="flex-1 flex flex-col justify-center min-w-0">
-                      <span className="text-[9px] sm:text-[10px] font-bold text-blue-400 mb-0.5 sm:mb-1 tracking-wider uppercase">{news.category} &bull; {news.date}</span>
-                      <h4 className="text-xs sm:text-sm font-bold text-white mb-0.5 sm:mb-1 group-hover:text-blue-400 transition-colors truncate">{news.title}</h4>
-                      <p className="text-[11px] sm:text-xs text-muted-foreground line-clamp-2">{news.desc}</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              <button onClick={() => setShowAllNews(true)} className="mt-3 sm:mt-4 w-full py-2.5 sm:py-3 rounded-xl bg-white/5 hover:bg-white/10 active:bg-white/15 text-xs sm:text-sm font-semibold text-white flex items-center justify-center gap-2 transition-colors">
-                Tüm Haberleri Gör <ArrowRight className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-              </button>
-            </motion.div>
-
-          </div>
-
-          {/* ══════════════════════════════════════════════════════
-               ÜRÜN KATALOĞU
-             ══════════════════════════════════════════════════════ */}
-          {/* Bölüm başlığı */}
-          <div className="flex items-center gap-3">
-            <h2 className="text-sm font-bold text-white/70 whitespace-nowrap">Ürün Kataloğu</h2>
-            <div className="flex-1 h-px bg-white/[0.06]" />
-            <span className="text-[11px] text-white/30 whitespace-nowrap">{catalogProducts.length} ürün</span>
-          </div>
-
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.4 }}
-            className="rounded-2xl bg-white/[0.04] border border-white/[0.08] p-4 sm:p-5 lg:p-6"
-          >
-            {/* Header */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 mb-4 sm:mb-6">
-              <div className="flex items-center gap-2.5 sm:gap-3">
-                <div className="w-9 h-9 sm:w-11 sm:h-11 rounded-lg sm:rounded-xl bg-gradient-to-br from-red-500/20 to-orange-500/20 flex items-center justify-center border border-red-500/20">
-                  <ShoppingBag className="w-4 h-4 sm:w-5 sm:h-5 text-red-400" />
-                </div>
-                <div>
-                  <h3 className="text-base sm:text-lg font-bold text-white">Ürün Kataloğu</h3>
-                  <p className="text-[10px] sm:text-xs text-muted-foreground">{catalogProducts.length} ürün • <span className="text-amber-400/80 font-semibold">Güncel ortalama fiyatlar</span> • Tıklayın detay görün</p>
-                </div>
-              </div>
-              {/* Search */}
-              <div className="relative w-full sm:w-56 lg:w-64">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 sm:w-4 sm:h-4 text-gray-500" />
-                <input
-                  type="text"
-                  value={productSearch}
-                  onChange={e => setProductSearch(e.target.value)}
-                  placeholder="Ürün ara..."
-                  className="w-full pl-9 pr-3 py-2 sm:py-2.5 bg-black/40 border border-white/10 rounded-xl text-white text-xs sm:text-sm placeholder-gray-600 focus:outline-none focus:border-red-500/50 focus:ring-1 focus:ring-red-500/30 transition-all"
-                />
+                <h2 className="text-[22px] font-bold text-white leading-tight">{slide.title}</h2>
+                <p className="text-sm text-white/55 mt-1.5 leading-relaxed">{slide.subtitle}</p>
               </div>
             </div>
-
-            {/* Category Tabs */}
-            <div className="flex gap-1.5 sm:gap-2 mb-4 sm:mb-6 overflow-x-auto scrollbar-hide pb-1">
-              {CATEGORY_TABS.map(cat => (
-                <button
-                  key={cat.key}
-                  onClick={() => { setSelectedCategory(cat.key); trackVitrinEvent('category_filter', { category: cat.key }); }}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg sm:rounded-xl text-xs sm:text-sm font-semibold whitespace-nowrap transition-all ${
-                    selectedCategory === cat.key
-                      ? 'bg-red-600/90 text-white shadow-lg shadow-red-600/20 border border-red-500/50'
-                      : 'bg-white/5 text-gray-400 hover:bg-white/10 hover:text-white border border-white/5'
-                  }`}
-                >
-                  <span className="text-sm">{cat.emoji}</span>
-                  {cat.label}
-                </button>
-              ))}
-            </div>
-
-            {/* Product Grid - Mobil: Yatay kaydırma / Desktop: Grid */}
-            <div className={`${!showCatalog ? 'flex overflow-x-auto gap-3 pb-2 snap-x snap-mandatory scrollbar-hide sm:grid sm:grid-cols-3 lg:grid-cols-4 sm:gap-4 sm:overflow-visible sm:pb-0' : 'grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4'}`}>
-              {filteredProducts.slice(0, showCatalog ? 999 : 8).map((product, idx) => (
-                <motion.div
-                  key={product.id}
-                  initial={{ opacity: 0, y: 15 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: idx * 0.05 }}
-                  whileHover={{ y: -4, scale: 1.02 }}
-                  whileTap={{ scale: 0.98 }}
-                  onClick={() => { setSelectedProduct(product); trackVitrinEvent('product_click', { productName: product.name, productId: product.id }); }}
-                  className={`group relative rounded-xl sm:rounded-2xl overflow-hidden bg-black/40 border border-white/5 hover:border-white/20 cursor-pointer transition-all ${!showCatalog ? 'min-w-[160px] sm:min-w-0 snap-start flex-shrink-0' : ''}`}
-                >
-                  {/* Image */}
-                  <div className="relative aspect-[4/3] overflow-hidden">
-                    <img src={product.image} alt={product.name} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" />
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
-                    {/* Badge */}
-                    {product.badge && (
-                      <span className={`absolute top-2 left-2 sm:top-2.5 sm:left-2.5 px-1.5 py-0.5 sm:px-2 sm:py-0.5 text-[9px] sm:text-[10px] font-bold rounded-md border ${BADGE_COLORS[product.badgeColor] || BADGE_COLORS.blue}`}>
-                        {product.badge}
-                      </span>
-                    )}
-                    {/* Popular star */}
-                    {product.popular && (
-                      <div className="absolute top-2 right-2 sm:top-2.5 sm:right-2.5 w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-amber-500/20 backdrop-blur-sm flex items-center justify-center border border-amber-500/30">
-                        <Star className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-amber-400 fill-amber-400" />
-                      </div>
-                    )}
-                    {/* Quick price overlay — daha belirgin */}
-                    {product.avgPrice > 0 && (
-                      <div className="absolute bottom-1.5 right-1.5 sm:bottom-2 sm:right-2 px-2 py-1 sm:px-2.5 sm:py-1.5 rounded-lg bg-black/80 backdrop-blur-md border border-white/15 shadow-lg">
-                        <p className="text-[8px] sm:text-[9px] text-amber-400/80 font-bold uppercase tracking-wide leading-none mb-0.5">ort. fiyat</p>
-                        <p className="text-[12px] sm:text-sm font-black text-white leading-none">₺{product.avgPrice}<span className="text-[8px] sm:text-[9px] text-gray-400 font-normal">/{product.priceUnit}</span></p>
-                      </div>
-                    )}
-                  </div>
-                  {/* Info */}
-                  <div className="p-2.5 sm:p-3">
-                    <h4 className="text-xs sm:text-sm font-bold text-white mb-0.5 sm:mb-1 truncate group-hover:text-red-400 transition-colors">{product.name}</h4>
-                    <p className="text-[10px] sm:text-xs text-muted-foreground line-clamp-2 leading-relaxed">{product.description}</p>
-                    {/* Nutrition mini bar */}
-                    {product.protein > 0 && (
-                      <div className="flex items-center gap-2 mt-1.5 sm:mt-2">
-                        <div className="flex items-center gap-0.5 text-[9px] sm:text-[10px]">
-                          <Flame className="w-2.5 h-2.5 text-orange-400" />
-                          <span className="text-gray-400">{product.calories}kcal</span>
-                        </div>
-                        <div className="flex items-center gap-0.5 text-[9px] sm:text-[10px]">
-                          <Beef className="w-2.5 h-2.5 text-red-400" />
-                          <span className="text-gray-400">{product.protein}g</span>
-                        </div>
-                      </div>
-                    )}
-                    {/* Sepete Ekle Button */}
-                    <button
-                      onClick={(e) => addToCart(product, e)}
-                      className="mt-2 w-full py-1.5 sm:py-2 rounded-lg bg-red-600/20 hover:bg-red-600/40 active:bg-red-600/60 border border-red-500/20 text-[10px] sm:text-xs font-bold text-red-400 flex items-center justify-center gap-1.5 transition-all"
-                    >
-                      <ShoppingBag className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
-                      Sepete Ekle
-                    </button>
-                  </div>
-                </motion.div>
-              ))}
-            </div>
-
-            {/* No Results */}
-            {filteredProducts.length === 0 && (
-              <div className="text-center py-8 sm:py-12">
-                <Search className="w-8 h-8 sm:w-10 sm:h-10 text-gray-600 mx-auto mb-2 sm:mb-3" />
-                <p className="text-sm sm:text-base text-gray-500 font-medium">Ürün bulunamadı</p>
-                <p className="text-xs text-gray-600 mt-1">Farklı bir kategori veya arama terimi deneyin</p>
-              </div>
-            )}
-
-            {/* Show More / Show Less */}
-            {filteredProducts.length > 4 && (
+          ))}
+          {/* Nokta göstergeler */}
+          <div className="absolute top-4 right-4 flex gap-1.5 z-10">
+            {DEFAULT_BANNERS.map((_, i) => (
               <button
-                onClick={() => setShowCatalog(!showCatalog)}
-                className="mt-4 sm:mt-5 w-full py-2.5 sm:py-3 rounded-xl bg-white/5 hover:bg-white/10 active:bg-white/15 text-xs sm:text-sm font-semibold text-white flex items-center justify-center gap-2 transition-colors border border-white/5"
-              >
-                {showCatalog ? (
-                  <>Daha Az Göster <ChevronRight className="w-3.5 h-3.5 rotate-[-90deg]" /></>
-                ) : (
-                  <>Tüm Ürünleri Gör ({filteredProducts.length}) <ArrowRight className="w-3.5 h-3.5 sm:w-4 sm:h-4" /></>
-                )}
-              </button>
-            )}
-          </motion.div>
+                key={i}
+                onClick={() => setMobileSlide(i)}
+                className={`rounded-full transition-all bg-white ${i === mobileSlide ? 'w-5 h-1.5 opacity-90' : 'w-1.5 h-1.5 opacity-30'}`}
+              />
+            ))}
+          </div>
+        </div>
 
-          {/* ─── Alt Footer Şeridi ─── */}
-          <div className="flex items-center justify-between pt-2 pb-1 border-t border-white/[0.05]">
-            <p className="text-[10px] text-white/20 font-medium">
-              {companyInfo.name} &copy; {new Date().getFullYear()}
-            </p>
-            <div className="flex items-center gap-2">
-              <div className="flex items-center gap-1.5">
-                <div className="w-1.5 h-1.5 rounded-full bg-emerald-400/60 animate-pulse" />
-                <span className="text-[10px] text-white/20 font-medium">Güvenli Bağlantı</span>
-              </div>
-              {/* Tıklanabilir sürüm rozeti */}
-              <button
-                onClick={() => setShowChangelog(true)}
-                className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-blue-600/10 hover:bg-blue-600/20 border border-blue-500/15 transition-colors group"
-              >
-                <History className="w-2.5 h-2.5 text-blue-400/60 group-hover:text-blue-400 transition-colors" />
-                <span className="text-[10px] font-bold text-blue-400/60 group-hover:text-blue-400 transition-colors">
-                  v{CURRENT_VERSION.version}
+        {/* Alt bar: güven rozeti + giriş butonu */}
+        <div
+          className="flex-shrink-0 bg-[#0a0f1a]/98 backdrop-blur-sm border-t border-white/[0.06] px-4 pt-3.5"
+          style={{ paddingBottom: 'max(1rem, env(safe-area-inset-bottom))' }}
+        >
+          <div className="flex items-center justify-center gap-3 mb-3.5">
+            {[
+              { icon: <Shield className="w-3 h-3" />, text: 'ISO 22000' },
+              { icon: <Award className="w-3 h-3" />, text: '15+ Yıl' },
+              { icon: <Truck className="w-3 h-3" />, text: 'Aynı Gün' },
+              { icon: <Package className="w-3 h-3" />, text: 'Soğuk Zincir' },
+            ].map((item, i) => (
+              <React.Fragment key={i}>
+                {i > 0 && <span className="w-px h-3 bg-white/10" />}
+                <span className="flex items-center gap-1 text-[10px] text-white/35 font-medium whitespace-nowrap">
+                  <span className="text-white/25">{item.icon}</span>
+                  {item.text}
                 </span>
-              </button>
-            </div>
+              </React.Fragment>
+            ))}
           </div>
-
+          <button
+            onClick={() => setShowAdminPanel(true)}
+            className="w-full flex items-center justify-center gap-2 py-3.5 bg-blue-600 active:bg-blue-700 rounded-xl text-white font-bold text-sm transition-colors"
+          >
+            <LogIn className="w-4 h-4" />
+            Personel Girişi
+          </button>
         </div>
       </div>
+
+      {/* ═══════════ DESKTOP LAYOUT (lg+) ═══════════ */}
+      <div className="hidden lg:flex h-full">
+
+        {/* Sol panel: marka + hero carousel */}
+        <div className="w-[42%] h-full flex flex-col flex-shrink-0">
+
+          {/* Şirket header */}
+          <div className="relative z-20 flex items-center gap-3 px-6 py-4 bg-black/60 backdrop-blur-sm border-b border-white/5 flex-shrink-0">
+            <div
+              onClick={handleSecretTap}
+              className="w-10 h-10 rounded-xl bg-blue-600 flex items-center justify-center flex-shrink-0 shadow-lg shadow-blue-600/40 cursor-default select-none"
+            >
+              <Sparkles className="w-5 h-5 text-white" />
+            </div>
+            <div>
+              <h1 className="text-white font-bold text-lg leading-none tracking-tight">{companyInfo.name}</h1>
+              <p className="text-blue-200/60 text-xs mt-0.5">{companyInfo.slogan}</p>
+            </div>
+          </div>
+
+          {/* Hero carousel */}
+          <div className="relative flex-1">
+            <HeroCarousel banners={DEFAULT_BANNERS} />
+          </div>
+
+          {/* Güven rozeti şeridi */}
+          <div className="flex items-center gap-5 px-7 py-3.5 bg-black/50 backdrop-blur-sm border-t border-white/5 flex-shrink-0">
+            {[
+              { icon: <Award className="w-3.5 h-3.5" />, text: '15+ Yıl Deneyim' },
+              { icon: <Shield className="w-3.5 h-3.5" />, text: 'ISO 22000' },
+              { icon: <Truck className="w-3.5 h-3.5" />, text: 'Aynı Gün Teslimat' },
+              { icon: <Package className="w-3.5 h-3.5" />, text: 'Soğuk Zincir' },
+            ].map((item, i) => (
+              <React.Fragment key={i}>
+                {i > 0 && <span className="w-px h-3 bg-white/10 flex-shrink-0" />}
+                <span className="flex items-center gap-1.5 text-[11px] text-white/35 font-medium whitespace-nowrap">
+                  <span className="text-white/30">{item.icon}</span>
+                  {item.text}
+                </span>
+              </React.Fragment>
+            ))}
+          </div>
+        </div>
+
+        {/* Sağ panel: kurumsal reklam panosu */}
+        <div className="flex-1 flex flex-col h-full overflow-hidden border-l border-white/[0.05]">
+
+          {/* Üst nav */}
+          <div className="flex items-center justify-between px-8 py-4 border-b border-white/[0.06] bg-[#080c14]/80 backdrop-blur-sm flex-shrink-0">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold text-blue-400/80 uppercase tracking-widest">Müşteri Portali</span>
+              <span className="w-px h-3 bg-white/10" />
+              <span className="text-sm text-white/40 font-medium">Hoş Geldiniz</span>
+            </div>
+            <motion.button
+              whileTap={{ scale: 0.97 }}
+              onClick={() => setShowAdminPanel(true)}
+              className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 rounded-lg text-white text-sm font-semibold transition-colors shadow-md shadow-blue-600/20"
+            >
+              <LogIn className="w-3.5 h-3.5" />
+              Personel Girişi
+            </motion.button>
+          </div>
+
+          {/* Ana içerik */}
+          <div className="flex-1 flex flex-col px-8 py-6 gap-5 overflow-hidden min-h-0">
+
+            {/* Büyük reklam panosu */}
+            <div className="relative rounded-2xl overflow-hidden flex-1 min-h-0">
+              {DEFAULT_BANNERS.map((slide, i) => (
+                <div
+                  key={slide.id}
+                  className={`absolute inset-0 transition-opacity duration-700 ${i === mobileSlide ? 'opacity-100' : 'opacity-0'}`}
+                >
+                  <img src={slide.imageUrl} alt={slide.title} className="w-full h-full object-cover" />
+                  <div className="absolute inset-0 bg-gradient-to-r from-black/85 via-black/40 to-transparent" />
+                  <div className="absolute left-0 bottom-0 top-0 flex flex-col justify-center px-10 max-w-lg">
+                    <span className="text-xs font-bold text-blue-400 uppercase tracking-widest mb-2">
+                      {i === 0 ? 'Özel Kampanya' : 'Premium Kalite'}
+                    </span>
+                    <h2 className="text-3xl font-bold text-white leading-tight mb-2.5">{slide.title}</h2>
+                    <p className="text-sm text-white/60 leading-relaxed">{slide.subtitle}</p>
+                  </div>
+                  {/* Slayt göstergesi */}
+                  <div className="absolute bottom-4 right-5 flex gap-1.5">
+                    {DEFAULT_BANNERS.map((_, j) => (
+                      <button
+                        key={j}
+                        onClick={() => setMobileSlide(j)}
+                        className={`rounded-full transition-all bg-white ${j === mobileSlide ? 'w-5 h-1.5 opacity-80' : 'w-1.5 h-1.5 opacity-30'}`}
+                      />
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Özellik kartları */}
+            <div className="grid grid-cols-4 gap-4 flex-shrink-0">
+              {[
+                { icon: <Percent className="w-5 h-5 text-red-400" />, bg: 'border-red-500/20 bg-red-500/[0.07]', title: '%10 Nakit İndirim', sub: 'Tüm alımlarda geçerli' },
+                { icon: <Truck className="w-5 h-5 text-amber-400" />, bg: 'border-amber-500/20 bg-amber-500/[0.07]', title: 'Aynı Gün Teslimat', sub: 'Frigofirik araçlarla' },
+                { icon: <Shield className="w-5 h-5 text-emerald-400" />, bg: 'border-emerald-500/20 bg-emerald-500/[0.07]', title: 'ISO 22000 & HACCP', sub: 'Uluslararası standart' },
+                { icon: <Award className="w-5 h-5 text-blue-400" />, bg: 'border-blue-500/20 bg-blue-500/[0.07]', title: '2500+ Müşteri', sub: '15 yıllık deneyim' },
+              ].map((card, i) => (
+                <div key={i} className={`rounded-xl border p-4 ${card.bg} flex flex-col gap-2.5`}>
+                  <div className="w-9 h-9 rounded-lg bg-white/5 flex items-center justify-center">{card.icon}</div>
+                  <div>
+                    <p className="text-white text-sm font-semibold leading-tight">{card.title}</p>
+                    <p className="text-white/40 text-[11px] mt-0.5">{card.sub}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Alt footer */}
+            <div className="flex items-center justify-between flex-shrink-0 pt-1 border-t border-white/[0.05]">
+              <p className="text-[10px] text-white/20 font-medium">{companyInfo.name} &copy; {new Date().getFullYear()}</p>
+              <div className="flex items-center gap-3">
+                <div className="flex items-center gap-1.5">
+                  <div className="w-1.5 h-1.5 rounded-full bg-emerald-400/60 animate-pulse" />
+                  <span className="text-[10px] text-white/20 font-medium">Güvenli Bağlantı</span>
+                </div>
+                <button
+                  onClick={() => setShowChangelog(true)}
+                  className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-blue-600/10 hover:bg-blue-600/20 border border-blue-500/15 transition-colors group"
+                >
+                  <History className="w-2.5 h-2.5 text-blue-400/60 group-hover:text-blue-400 transition-colors" />
+                  <span className="text-[10px] font-bold text-blue-400/60 group-hover:text-blue-400 transition-colors">v{CURRENT_VERSION.version}</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
 
       {/* ═══════════════════════════════════════════════════════════
            GİRİŞ PANELİ - Desktop: Slide-in, Mobile: Bottom Sheet
