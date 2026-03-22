@@ -19,6 +19,26 @@ export interface VersionEntry {
 
 export const CHANGELOG: VersionEntry[] = [
   {
+    version: '4.4',
+    codename: 'KALKAN',
+    date: '22 Mart 2026',
+    summary: 'Arka plan algoritmaları güçlendirmesi & AI dashboard entegrasyonu',
+    changes: [
+      { type: 'yenilik',     text: 'Dashboard\'a inline AI sohbet paneli eklendi; Bot ikonuyla açılır, tüm sistem verilerine erişir.' },
+      { type: 'iyileştirme', text: 'chatgpt-assistant.ts: tüm 12 veri kaynağı (stok, cari, kasa, banka, üretim, çekler, araçlar vb.) AI prompt\'una dahil edildi.' },
+      { type: 'yenilik',     text: 'data-integrity.ts: fiş satır toplamı ↔ fiş.total mali tutarlılık kontrolü eklendi (±%0.1 tolerans).' },
+      { type: 'yenilik',     text: 'data-integrity.ts: stok hareket toplamı ↔ mevcut stok çapraz doğrulama algoritması eklendi.' },
+      { type: 'yenilik',     text: 'data-integrity.ts: DataHealthScore (0–100, A–F not) fonksiyonu — kritik/uyarı/bilgi sayısına göre ağırlıklı hesaplama.' },
+      { type: 'yenilik',     text: 'activityLogger.ts: detectActivityAnomalies() — toplu silme, sık export, mesai dışı bulk işlem, hızlı giriş denemesi ve olağandışı hacim tespiti.' },
+      { type: 'iyileştirme', text: 'activityLogger.ts: maksimum log sınırı 500 → 1000\'e yükseltildi.' },
+      { type: 'iyileştirme', text: 'security.ts: rate limiter sabit pencere → kayan pencere (Sliding Window) algoritmasına yükseltildi; patlama saldırısı açığı kapatıldı.' },
+      { type: 'yenilik',     text: 'security.ts: analyzeInputThreat() — Shannon entropisi + XSS + SQL injection birleşik tehdit skoru (0–100).' },
+      { type: 'iyileştirme', text: 'security.ts: detectRapidActions() kayan pencere ile yeniden yazıldı; false-positive oranı azaldı.' },
+      { type: 'iyileştirme', text: 'useTableSync.ts: WriteQueue adaptif debounce — 20+ işlem varsa anında flush, kritik tablolar (fisler/kasa) için 80ms min gecikme.' },
+      { type: 'iyileştirme', text: 'useTableSync.ts: syncHealth.isHealthy gerçek hata oranı (%20 eşiği) ve anlık bekleyen yazma sayısını izliyor.' },
+    ],
+  },
+  {
     version: '4.3',
     codename: 'KALKAN',
     date: '22 Mart 2026',

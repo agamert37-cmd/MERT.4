@@ -384,6 +384,84 @@ export function runIntegrityCheck(autoFix = true): IntegrityReport {
     });
   }
 
+  // ─── MALİ TUTARLILIK KONTROLÜ ─────────────────────────────────────────────
+  // Fiş satır toplamı → fiş.total karşılaştırması
+  let totalFisMismatch = 0;
+  let totalFisFixed = false;
+  const revalidatedFis = fixedFis.map(fis => {
+    if (!Array.isArray(fis.items) || fis.items.length === 0) return fis;
+    const computed = fis.items.reduce((sum: number, item: any) => {
+      return sum + safeNum(item.quantity) * safeNum(item.price ?? item.unitPrice ?? item.birimFiyat);
+    }, 0);
+    const stored = safeNum(fis.total);
+    // %0.1 tolerans — kayan nokta hatalarını yut
+    if (stored > 0 && Math.abs(computed - stored) / stored > 0.001) {
+      totalFisMismatch++;
+      if (autoFix) {
+        totalFisFixed = true;
+        return { ...fis, total: computed };
+      }
+    }
+    return fis;
+  });
+
+  if (totalFisMismatch > 0) {
+    checks.push({
+      table: 'fisler',
+      issue: `${totalFisMismatch} fişte satır toplamı ≠ fiş.total`,
+      severity: 'warning',
+      fixed: autoFix,
+      details: 'Satır toplam × birim fiyat baz alınarak hesaplandı',
+    });
+    if (totalFisFixed) {
+      setInStorage(StorageKey.FISLER, revalidatedFis);
+    }
+  }
+
+  // ─── STOK HAREKETİ TUTARLILIK KONTROLÜ ────────────────────────────────────
+  // Giriş - Çıkış hareketlerinin toplamı mevcut stokla örtüşüyor mu?
+  let stokMismatch = 0;
+  fixedStok.forEach((prod: any) => {
+    if (!Array.isArray(prod.movements) || prod.movements.length === 0) return;
+    let computed = 0;
+    for (const mv of prod.movements) {
+      const qty = safeNum(mv.quantity);
+      const type = (mv.type || '').toUpperCase();
+      if (type === 'ALIS' || type === 'IN' || type === 'GIRIS') computed += qty;
+      else if (type === 'SATIS' || type === 'OUT' || type === 'CIKIS') computed -= qty;
+    }
+    const current = safeNum(prod.currentStock);
+    // 0 başlangıç stoğu varsayımıyla ≥ %10 sapma — ciddi hata
+    if (current > 5 && Math.abs(computed - current) / current > 0.10) {
+      stokMismatch++;
+    }
+  });
+
+  if (stokMismatch > 0) {
+    checks.push({
+      table: 'stok',
+      issue: `${stokMismatch} üründe hareket toplamı mevcut stokla uyuşmuyor (≥%10 sapma)`,
+      severity: 'info',
+      fixed: false,
+      details: 'Manuel kontrol önerilir — başlangıç stok değeri bilinmiyorsa normaldir',
+    });
+  }
+
+  // ─── CARİ DÖNGÜSEL REFERANS KONTROLÜ ──────────────────────────────────────
+  const cariIdSet = new Set(fixedCari.map((c: any) => c.id));
+  let orphanCount = 0;
+  fixedCari.forEach((c: any) => {
+    if (c.parentId && !cariIdSet.has(c.parentId)) orphanCount++;
+  });
+  if (orphanCount > 0) {
+    checks.push({
+      table: 'cari',
+      issue: `${orphanCount} cari hesabın parent ID'si geçersiz`,
+      severity: 'warning',
+      fixed: false,
+    });
+  }
+
   const report: IntegrityReport = {
     timestamp: new Date().toISOString(),
     checks,
@@ -425,6 +503,57 @@ export function quickHealthCheck(): boolean {
     }
   }
   return true;
+}
+
+/**
+ * Veri sağlık skoru — 0-100 arası puan (100 = mükemmel)
+ * Son integrity check raporunu baz alır, sıfırdan çalıştırır.
+ */
+export interface DataHealthScore {
+  score: number;          // 0–100
+  grade: 'A' | 'B' | 'C' | 'D' | 'F';
+  label: string;
+  color: string;
+  breakdown: { category: string; deduction: number; reason: string }[];
+}
+
+export function getDataHealthScore(): DataHealthScore {
+  const report = runIntegrityCheck(false); // sadece oku, düzeltme yapma
+  const breakdown: DataHealthScore['breakdown'] = [];
+  let score = 100;
+
+  const critical = report.checks.filter(c => c.severity === 'critical').length;
+  const warnings = report.checks.filter(c => c.severity === 'warning').length;
+  const infos    = report.checks.filter(c => c.severity === 'info').length;
+
+  if (critical > 0) {
+    const ded = Math.min(critical * 20, 60);
+    score -= ded;
+    breakdown.push({ category: 'Kritik Hatalar', deduction: ded, reason: `${critical} kritik sorun (yinelenen ID, bozuk veri)` });
+  }
+  if (warnings > 0) {
+    const ded = Math.min(warnings * 5, 30);
+    score -= ded;
+    breakdown.push({ category: 'Uyarılar', deduction: ded, reason: `${warnings} uyarı (eksik alan, mali sapma)` });
+  }
+  if (infos > 0) {
+    const ded = Math.min(infos * 2, 10);
+    score -= ded;
+    breakdown.push({ category: 'Bilgiler', deduction: ded, reason: `${infos} bilgilendirme notu` });
+  }
+
+  score = Math.max(0, score);
+
+  let grade: DataHealthScore['grade'];
+  let label: string;
+  let color: string;
+  if (score >= 90) { grade = 'A'; label = 'Mükemmel'; color = '#22c55e'; }
+  else if (score >= 75) { grade = 'B'; label = 'İyi'; color = '#84cc16'; }
+  else if (score >= 60) { grade = 'C'; label = 'Orta'; color = '#eab308'; }
+  else if (score >= 40) { grade = 'D'; label = 'Zayıf'; color = '#f97316'; }
+  else { grade = 'F'; label = 'Kritik'; color = '#ef4444'; }
+
+  return { score, grade, label, color, breakdown };
 }
 
 /**

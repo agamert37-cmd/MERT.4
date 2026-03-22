@@ -128,15 +128,30 @@ interface WriteOp {
   value?: any;
 }
 
+// Kritik tablolar — bu tablolarda yazma gecikmesi düşük tutulur
+const PRIORITY_TABLES = new Set(['fisler', 'kasa_islemleri', 'kasa', 'bank']);
+
 class WriteQueue {
   private queue = new Map<string, WriteOp>();
   private timer: ReturnType<typeof setTimeout> | null = null;
   private flushFn: (ops: WriteOp[]) => Promise<void>;
-  private debounceMs: number;
+  private readonly minDebounceMs: number;
+  private readonly maxDebounceMs: number;
+  // Sağlık metrikleri
+  totalWrites = 0;
+  failedWrites = 0;
+  private tableName: string;
 
-  constructor(flushFn: (ops: WriteOp[]) => Promise<void>, debounceMs = 300) {
+  constructor(
+    flushFn: (ops: WriteOp[]) => Promise<void>,
+    debounceMs = 300,
+    tableName = '',
+  ) {
     this.flushFn = flushFn;
-    this.debounceMs = debounceMs;
+    this.tableName = tableName;
+    // Kritik tablo → daha kısa min gecikme
+    this.minDebounceMs = PRIORITY_TABLES.has(tableName) ? 80 : debounceMs;
+    this.maxDebounceMs = debounceMs * 3; // burst sırasında maksimum bekle
   }
 
   push(op: WriteOp) {
@@ -146,7 +161,26 @@ class WriteQueue {
 
   private scheduleFlush() {
     if (this.timer) clearTimeout(this.timer);
-    this.timer = setTimeout(() => this.flush(), this.debounceMs);
+
+    // Adaptif debounce: kuyruk büyüdükçe gecikmeyi azalt, hemen flush'a bak
+    const size = this.queue.size;
+    let delay: number;
+    if (size >= 20) {
+      delay = 0; // Büyük burst → hemen gönder
+    } else if (size >= 10) {
+      delay = this.minDebounceMs;
+    } else {
+      // Linear interpolation: 1 item → maxDebounce, 10 item → minDebounce
+      const t = Math.min((size - 1) / 9, 1);
+      delay = Math.round(this.maxDebounceMs + t * (this.minDebounceMs - this.maxDebounceMs));
+    }
+
+    if (delay === 0) {
+      // Mikrotask kuyruğuna at — call stack temizlensin
+      Promise.resolve().then(() => this.flush());
+    } else {
+      this.timer = setTimeout(() => this.flush(), delay);
+    }
   }
 
   async flush() {
@@ -155,14 +189,22 @@ class WriteQueue {
 
     const ops = Array.from(this.queue.values());
     this.queue.clear();
+    this.totalWrites += ops.length;
 
     try {
       await this.flushFn(ops);
     } catch (e) {
-      console.error('[WriteQueue] flush error:', e);
+      console.error(`[WriteQueue:${this.tableName}] flush error (${ops.length} ops):`, e);
+      this.failedWrites += ops.length;
+      // Başarısız işlemleri kuyruğa geri al
       ops.forEach(op => this.queue.set(op.key, op));
-      this.scheduleFlush();
+      // Hata sonrası gecikmeyi artır (back-off)
+      this.timer = setTimeout(() => this.flush(), Math.min(this.maxDebounceMs * 4, 5000));
     }
+  }
+
+  get pendingCount(): number {
+    return this.queue.size;
   }
 
   destroy() {
@@ -316,7 +358,7 @@ export function useTableSync<T extends { id: string }>(
           }
         }
       }
-    }, 300);
+    }, 300, tableName);
   }
 
   // Cleanup write queue on unmount
@@ -746,7 +788,17 @@ export function useTableSync<T extends { id: string }>(
     refresh: fetchData,
     setData,
     syncToSupabase,
-    syncHealth: syncHealth.current,
+    syncHealth: {
+      ...syncHealth.current,
+      // Anlık pending sayısını doğrudan kuyruktan al
+      pendingWrites: writeQueueRef.current?.pendingCount ?? 0,
+      // Hata oranı %20'yi geçiyorsa sağlıksız say
+      isHealthy:
+        syncHealth.current.consecutiveFailures < 3 &&
+        (writeQueueRef.current
+          ? writeQueueRef.current.failedWrites / Math.max(writeQueueRef.current.totalWrites, 1) < 0.2
+          : true),
+    },
     forceResync,
   };
 }
