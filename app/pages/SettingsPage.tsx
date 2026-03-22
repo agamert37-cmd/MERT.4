@@ -1,10 +1,10 @@
 import React, { useState, useRef, useEffect } from 'react';
 import OpenAI from 'openai';
-import { Settings, Database, Sparkles, Save, Trash2, Eye, EyeOff, CheckCircle, XCircle, Shield, ExternalLink, Building2, Phone, MapPin, FileText, Hash, Monitor, Upload, Loader2, RefreshCw, X, Plus } from 'lucide-react';
+import { Settings, Database, Sparkles, Save, Trash2, Eye, EyeOff, CheckCircle, XCircle, Shield, ExternalLink, Building2, Phone, MapPin, FileText, Hash, Monitor, Upload, Loader2, RefreshCw, X, Plus, AlertTriangle } from 'lucide-react';
 import { getOpenAIKey, saveOpenAIKey, clearOpenAIKey, isOpenAIConfigured, getEmbeddedSupabaseConfig } from '../lib/api-config';
 import { reinitializeOpenAI } from '../lib/chatgpt-assistant';
 import { testSupabaseConnection } from '../lib/supabase';
-import { getFromStorage, setInStorage, StorageKey } from '../utils/storage';
+import { getFromStorage, setInStorage, StorageKey, removeFromStorage } from '../utils/storage';
 import { toast } from 'sonner';
 import { motion } from 'motion/react';
 import { SERVER_BASE_URL, SUPABASE_ANON_KEY as publicAnonKey } from '../lib/supabase-config';
@@ -85,6 +85,28 @@ export function SettingsPage() {
   const handleClearOpenAI = () => {
     if (confirm('OpenAI API Key\'i silmek istediğinizden emin misiniz? AI asistan çalışmayacak.')) {
       clearOpenAIKey(); setOpenaiKey(''); reinitializeOpenAI(); toast.success('OpenAI API Key temizlendi');
+    }
+  };
+
+  const [resetting, setResetting] = useState(false);
+  const [resetConfirmText, setResetConfirmText] = useState('');
+
+  const handleSystemReset = async () => {
+    if (resetConfirmText !== 'SİL') {
+      toast.error('Onay için "SİL" yazın!');
+      return;
+    }
+    setResetting(true);
+    try {
+      const keysToDelete = Object.values(StorageKey).filter(k => k !== StorageKey.PERSONEL_DATA);
+      for (const key of keysToDelete) {
+        removeFromStorage(key);
+      }
+      toast.success('Sistem sıfırlandı! Personel verisi korundu. Sayfa yenileniyor...');
+      setTimeout(() => window.location.reload(), 1500);
+    } catch (err: any) {
+      toast.error(`Sıfırlama hatası: ${err.message}`);
+      setResetting(false);
     }
   };
 
@@ -402,6 +424,39 @@ export function SettingsPage() {
               </button>
             </div>
           </div>
+        </div>
+      </div>
+
+      {/* Sistem Sıfırlama */}
+      <div className="p-8 rounded-3xl bg-[#111] border border-red-500/20">
+        <div className="flex items-center gap-4 mb-6">
+          <div className="w-12 h-12 rounded-2xl bg-red-500/10 flex items-center justify-center border border-red-500/20"><AlertTriangle className="w-6 h-6 text-red-400"/></div>
+          <div>
+            <h2 className="text-xl font-bold text-red-400">Sistem Sıfırlama</h2>
+            <p className="text-xs text-gray-500">Personel verisi KORUNUR — tüm diğer veriler silinir</p>
+          </div>
+        </div>
+        <div className="bg-red-500/5 border border-red-500/20 rounded-2xl p-4 mb-6">
+          <p className="text-sm text-red-300 font-medium mb-2">Silinecek veriler:</p>
+          <p className="text-xs text-gray-400">Fişler, Cari, Stok, Kasa, Araçlar, Banka, POS, Çekler, Üretim, Faturalar, Raporlar ve diğer tüm kayıtlar</p>
+          <p className="text-xs text-emerald-400 mt-2 font-bold">✓ Personel listesi ve bilgileri korunacak</p>
+        </div>
+        <div className="flex gap-3 items-center">
+          <input
+            type="text"
+            value={resetConfirmText}
+            onChange={e => setResetConfirmText(e.target.value.toUpperCase())}
+            placeholder='Onaylamak için "SİL" yazın'
+            className="flex-1 bg-black/40 text-white px-4 py-3 rounded-xl border border-red-500/30 focus:outline-none focus:border-red-500/60 text-sm placeholder-white/20"
+          />
+          <button
+            onClick={handleSystemReset}
+            disabled={resetting || resetConfirmText !== 'SİL'}
+            className="px-6 py-3 bg-red-600 hover:bg-red-500 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-xl font-bold transition-all flex items-center gap-2 shadow-lg shadow-red-600/20"
+          >
+            {resetting ? <Loader2 className="w-5 h-5 animate-spin"/> : <Trash2 className="w-5 h-5"/>}
+            Sıfırla
+          </button>
         </div>
       </div>
 
