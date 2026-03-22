@@ -1,6 +1,6 @@
 /**
  * SyncStatusBar - Her sayfada gosterilen Supabase sync durumu paneli
- * KV store bazli senkronizasyon durumunu gercek zamanli gosterir
+ * Gerçek Supabase tablo senkronizasyon durumunu gösterir
  */
 
 import React, { useState } from 'react';
@@ -25,23 +25,21 @@ import {
 import { useSyncContext } from '../contexts/SyncContext';
 import { getSupabaseSQLEditorUrl, getSupabaseTableEditorUrl } from '../lib/auto-setup';
 import { toast } from 'sonner';
-import { SUPABASE_ANON_KEY, SERVER_BASE_URL } from '../lib/supabase-config';
+import { supabase } from '../lib/supabase';
+import { SUPABASE_ANON_KEY } from '../lib/supabase-config';
 
 interface SyncStatusBarProps {
   tableName?: string;
 }
 
-const KV_SERVER_URL = SERVER_BASE_URL;
-
-// localStorage'daki tum verileri KV Store'a gonder
-// Always use server endpoints to bypass RLS (anon key cannot write to kv_store_daadfb0c)
+// localStorage'daki tüm veriyi doğrudan Supabase tablosuna gönder
 async function pushAllLocalToSupabase(
   tableName: string,
   onProgress?: (msg: string) => void
 ): Promise<{ ok: number; fail: number }> {
   const STORAGE_PREFIX = 'isleyen_et_';
 
-  // tableName -> storageKey eslestirmesi
+  // tableName → storageKey eşleştirmesi
   const TABLE_STORAGE_MAP: Record<string, string> = {
     personeller:       'personel_data',
     cari_hesaplar:     'cari_data',
@@ -68,48 +66,37 @@ async function pushAllLocalToSupabase(
   try { items = JSON.parse(raw); } catch { return { ok: 0, fail: 0 }; }
   if (!Array.isArray(items) || items.length === 0) return { ok: 0, fail: 0 };
 
-  onProgress?.(`${items.length} kayit KV Store'a gonderiliyor...`);
+  onProgress?.(`${items.length} kayıt Supabase tablosuna gönderiliyor...`);
 
   let ok = 0;
   let fail = 0;
-
-  // Always use server endpoint for writes (bypasses RLS via service_role_key)
   const chunkSize = 100;
-  for (let i = 0; i < items.length; i += chunkSize) {
-    const chunk = items.slice(i, i + chunkSize);
-    const validItems = chunk.filter((item: any) => item && item.id);
-    
-    if (validItems.length === 0) continue;
 
-    const keys = validItems.map((item: any) => `${tableName}_${item.id}`);
-    const values = validItems.map((item: any) => item);
+  for (let i = 0; i < items.length; i += chunkSize) {
+    const chunk = items.slice(i, i + chunkSize).filter((item: any) => item && item.id);
+    if (chunk.length === 0) continue;
 
     try {
-      const res = await fetch(`${KV_SERVER_URL}/kv/mset`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
-        },
-        body: JSON.stringify({ keys, values }),
-      });
-      if (res.ok) {
-        ok += validItems.length;
-        onProgress?.(`${ok}/${items.length} kayit gonderildi...`);
+      const { error } = await supabase
+        .from(tableName)
+        .upsert(chunk, { onConflict: 'id' });
+
+      if (error) {
+        console.error(`[pushAllLocal] ${tableName} upsert error:`, error.message);
+        fail += chunk.length;
       } else {
-        const text = await res.text().catch(() => 'unknown');
-        console.error(`[pushAllLocalToSupabase] Server mset failed (${res.status}): ${text}`);
-        fail += validItems.length;
+        ok += chunk.length;
+        onProgress?.(`${ok}/${items.length} kayıt gönderildi...`);
       }
     } catch (e: any) {
-      console.error('[pushAllLocalToSupabase] Server mset error:', e);
-      fail += validItems.length;
+      console.error('[pushAllLocal] upsert exception:', e);
+      fail += chunk.length;
     }
   }
 
   return { ok, fail };
 }
-
+    
 export function SyncStatusBar({ tableName }: SyncStatusBarProps) {
   const { setupStatus, isChecking, lastChecked, recheckTables, isSupabaseConfigured } = useSyncContext();
   const [isExpanded, setIsExpanded] = useState(false);

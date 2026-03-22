@@ -420,7 +420,56 @@ CREATE OR REPLACE TRIGGER fatura_stok_updated_at
 ALTER TABLE fatura_stok DISABLE ROW LEVEL SECURITY;
 
 
+-- ─── 15. Tahsilatlar ─────────────────────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS tahsilatlar (
+  id              UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+  cari_id         TEXT        NOT NULL DEFAULT '',
+  cari_name       TEXT        NOT NULL DEFAULT '',
+  amount          NUMERIC(10,2) NOT NULL DEFAULT 0,
+  type            TEXT        NOT NULL DEFAULT 'tahsilat' CHECK (type IN ('tahsilat','odeme')),
+  date            TEXT        NOT NULL DEFAULT '',
+  description     TEXT        DEFAULT '',
+  payment_method  TEXT        DEFAULT '',
+  created_by      TEXT        DEFAULT '',
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE OR REPLACE TRIGGER tahsilatlar_updated_at
+  BEFORE UPDATE ON tahsilatlar
+  FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+
+ALTER TABLE tahsilatlar DISABLE ROW LEVEL SECURITY;
+
+
+-- ─── 16. Araç KM Logları ─────────────────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS arac_km_logs (
+  id              UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+  vehicle_id      TEXT        NOT NULL DEFAULT '',
+  vehicle_plate   TEXT        NOT NULL DEFAULT '',
+  start_km        NUMERIC(10,2) NOT NULL DEFAULT 0,
+  end_km          NUMERIC(10,2),
+  total_km        NUMERIC(10,2),
+  date            TEXT        NOT NULL DEFAULT '',
+  employee        TEXT        DEFAULT '',
+  description     TEXT        DEFAULT '',
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE OR REPLACE TRIGGER arac_km_logs_updated_at
+  BEFORE UPDATE ON arac_km_logs
+  FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+
+ALTER TABLE arac_km_logs DISABLE ROW LEVEL SECURITY;
+
+
 -- ─── Bitti ───────────────────────────────────────────────────────────────────
 -- Tüm tablolar oluşturuldu. Uygulama artık kullanıma hazır.
--- KV Store (kv_store_daadfb0c) tüm uygulama verisini saklar.
--- Diğer tablolar referans amaçlı ve yedekleme için mevcuttur.
+-- Her sayfa kendi tablosuna doğrudan yazar: personeller, cari_hesaplar,
+-- urunler, araclar, fisler, kasa_islemleri, bankalar, cekler,
+-- uretim_profilleri, uretim_kayitlari, faturalar, fatura_stok,
+-- arac_shifts, tahsilatlar, arac_km_logs
+-- KV Store (kv_store_daadfb0c) geriye dönük uyumluluk için korunur.

@@ -1,182 +1,179 @@
+/**
+ * useTableSync — Doğrudan Supabase Tablo Senkronizasyonu
+ *
+ * Her tableName, Supabase'deki gerçek bir tabloya karşılık gelir.
+ * KV store yerine doğrudan tablo operasyonları kullanılır:
+ *   - Okuma  : supabase.from(table).select('*')
+ *   - Yazma  : supabase.from(table).upsert(row, { onConflict: 'id' })
+ *   - Silme  : supabase.from(table).delete().eq('id', id)
+ *   - Gerçek zamanlı: postgres_changes subscription
+ *
+ * Veri kaybı önleme:
+ *   - localStorage önbellek (anlık yükleme + çevrimdışı destek)
+ *   - Optimistik güncelleme + hata durumunda rollback
+ *   - Silinmiş ID tombstone (birden fazla cihaz arası silme çakışması önleme)
+ *   - Bekleyen yazma takibi (kendi değişikliklerimizin realtime echo'sunu atlama)
+ *   - Adaptif yazma kuyruğu (batch, debounce, backoff)
+ */
+
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { SERVER_BASE_URL, SUPABASE_ANON_KEY } from '../lib/supabase-config';
-import {
-  kvGetByPrefix,
-  kvSubscribe,
-  kvTestConnection,
-} from '../lib/supabase-kv';
+import { supabase } from '../lib/supabase';
+import { SUPABASE_ANON_KEY, SERVER_BASE_URL } from '../lib/supabase-config';
 
 const SERVER_URL = SERVER_BASE_URL;
 const STORAGE_PREFIX = 'isleyen_et_';
 
-// ─── Retry utility
-const MAX_RETRIES = 3;
-const BASE_DELAY_MS = 1000;
+// ─── localStorage yardımcıları ───────────────────────────────────────────────
 
-async function fetchWithRetry(
-  url: string,
-  options: RequestInit,
-  retries = MAX_RETRIES
-): Promise<Response> {
-  for (let attempt = 0; attempt <= retries; attempt++) {
-    try {
-      const res = await fetch(url, options);
-      if (res.ok || attempt === retries) return res;
-      if (res.status >= 400 && res.status < 500 && res.status !== 429) return res;
-    } catch (err) {
-      if (attempt === retries) throw err;
-    }
-    const delay = BASE_DELAY_MS * Math.pow(2, attempt);
-    await new Promise(resolve => setTimeout(resolve, delay));
-    console.log(`[useTableSync] Retry attempt ${attempt + 1}/${retries}...`);
-  }
-  throw new Error('fetchWithRetry: exhausted retries');
-}
-
-// Supabase baglanti kontrolu - dogrudan kv_store tablosunu kontrol eder
-let _kvConnectionChecked = false;
-let _kvConnectionResult = false;
-
-async function checkKVConnection(): Promise<boolean> {
-  if (_kvConnectionChecked) return _kvConnectionResult;
-  try {
-    const result = await kvTestConnection();
-    _kvConnectionResult = result.connected;
-    _kvConnectionChecked = true;
-    if (result.connected) {
-      console.log(`%c[KV] Dogrudan baglanti basarili! ${result.totalKeys} key, ${result.latencyMs}ms`, 'color: #22c55e; font-weight: bold');
-    } else {
-      console.warn(`[KV] Baglanti basarisiz: ${result.error}`);
-    }
-    return result.connected;
-  } catch {
-    _kvConnectionChecked = true;
-    _kvConnectionResult = false;
-    return false;
-  }
-}
-
-function isSupabaseConfigured(): boolean {
-  return !!SUPABASE_ANON_KEY && SUPABASE_ANON_KEY.length > 10;
-}
-
-// ─── Version tracking for conflict detection ────────────────────────────────
-const VERSION_SUFFIX = '__version';
-
-function getLocalVersion(storageKey: string): number {
-  try {
-    const raw = localStorage.getItem(STORAGE_PREFIX + storageKey + VERSION_SUFFIX);
-    return raw ? parseInt(raw, 10) : 0;
-  } catch {
-    return 0;
-  }
-}
-
-function bumpLocalVersion(storageKey: string): number {
-  const next = Date.now();
-  try {
-    localStorage.setItem(STORAGE_PREFIX + storageKey + VERSION_SUFFIX, String(next));
-  } catch {}
-  return next;
-}
-
-// ─── localStorage helpers ───────────────────────────────────────────────────
 function loadFromLS<T>(storageKey: string): T | null {
   try {
     const raw = localStorage.getItem(STORAGE_PREFIX + storageKey);
     return raw ? JSON.parse(raw) : null;
-  } catch {
-    return null;
-  }
+  } catch { return null; }
 }
 
 function saveToLS<T>(storageKey: string, data: T): void {
   try {
     localStorage.setItem(STORAGE_PREFIX + storageKey, JSON.stringify(data));
-    bumpLocalVersion(storageKey);
     setTimeout(() => window.dispatchEvent(new Event('storage_update')), 0);
   } catch {}
 }
 
-// ─── Silinmiş ID tombstone (cihazlar arası silinmiş kayıtları takip eder) ──
+// ─── Silinmiş ID tombstone (çakışma önleme) ──────────────────────────────────
 const DELETED_SUFFIX = '__deleted_ids';
 
 function loadDeletedIds(storageKey: string): Set<string> {
   try {
     const raw = localStorage.getItem(STORAGE_PREFIX + storageKey + DELETED_SUFFIX);
-    const arr = raw ? JSON.parse(raw) : [];
-    return new Set<string>(arr);
-  } catch {
-    return new Set<string>();
-  }
+    return new Set<string>(raw ? JSON.parse(raw) : []);
+  } catch { return new Set<string>(); }
 }
 
 function saveDeletedId(storageKey: string, id: string): void {
   try {
     const existing = loadDeletedIds(storageKey);
     existing.add(id);
-    // Max 500 silinmiş ID sakla (eski olanları temizle)
-    const arr = Array.from(existing).slice(-500);
+    const arr = Array.from(existing).slice(-500); // Maksimum 500 tombstone
     localStorage.setItem(STORAGE_PREFIX + storageKey + DELETED_SUFFIX, JSON.stringify(arr));
   } catch {}
 }
 
-// ─── Write queue for debounced writes ────────────────────────────────────
-interface WriteOp {
-  type: 'set' | 'del';
-  key: string;
-  value?: any;
+// ─── Bağlantı hata yönetimi ─────────────────────────────────────────────────
+let _lastConnectionFailure = 0;
+const CONNECTION_COOLDOWN_MS = 15_000; // 15 saniye bekleme sonrası tekrar dene
+
+function isConnectionCoolingDown(): boolean {
+  return Date.now() - _lastConnectionFailure < CONNECTION_COOLDOWN_MS;
 }
 
-// Kritik tablolar — bu tablolarda yazma gecikmesi düşük tutulur
-const PRIORITY_TABLES = new Set(['fisler', 'kasa_islemleri', 'kasa', 'bank']);
+function markConnectionFailure() { _lastConnectionFailure = Date.now(); }
+function clearConnectionCooldown() { _lastConnectionFailure = 0; }
+
+// ─── Supabase doğrudan tablo operasyonları ────────────────────────────────────
+
+/** Tablodan tüm satırları sıraya göre oku */
+async function tableSelect<T>(tableName: string, orderBy: string, orderAsc: boolean): Promise<T[]> {
+  const { data, error } = await supabase
+    .from(tableName)
+    .select('*')
+    .order(orderBy, { ascending: orderAsc });
+
+  if (error) throw new Error(`[tableSelect] ${tableName}: ${error.message} (code: ${error.code})`);
+  return (data ?? []) as T[];
+}
+
+/** Tek veya çoklu satır upsert (id çakışmasında güncelle) */
+async function tableUpsert(tableName: string, rows: any[]): Promise<void> {
+  if (rows.length === 0) return;
+  const { error } = await supabase
+    .from(tableName)
+    .upsert(rows, { onConflict: 'id' });
+  if (error) throw new Error(`[tableUpsert] ${tableName}: ${error.message}`);
+}
+
+/** Satır sil */
+async function tableDelete(tableName: string, id: string): Promise<void> {
+  const { error } = await supabase
+    .from(tableName)
+    .delete()
+    .eq('id', id);
+  if (error) throw new Error(`[tableDelete] ${tableName}: ${error.message}`);
+}
+
+// ─── Server endpoint fallback (RLS sorunlarında yedek) ─────────────────────
+function getAuthHeaders() {
+  return {
+    'Content-Type': 'application/json',
+    'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+  };
+}
+
+async function serverUpsertFallback(tableName: string, rows: any[]): Promise<void> {
+  if (rows.length === 0) return;
+  const keys = rows.map(r => `${tableName}_${r.id}`);
+  const res = await fetch(`${SERVER_URL}/kv/mset`, {
+    method: 'POST',
+    headers: getAuthHeaders(),
+    body: JSON.stringify({ keys, values: rows }),
+  });
+  if (!res.ok) throw new Error(`serverUpsert fallback failed (${res.status})`);
+}
+
+async function serverDeleteFallback(tableName: string, id: string): Promise<void> {
+  const res = await fetch(`${SERVER_URL}/kv/del`, {
+    method: 'POST',
+    headers: getAuthHeaders(),
+    body: JSON.stringify({ key: `${tableName}_${id}` }),
+  });
+  if (!res.ok) throw new Error(`serverDelete fallback failed (${res.status})`);
+}
+
+// ─── Adaptif yazma kuyruğu ────────────────────────────────────────────────────
+const PRIORITY_TABLES = new Set(['fisler', 'kasa_islemleri', 'bankalar', 'cekler']);
+
+interface WriteOp {
+  type: 'upsert' | 'delete';
+  id: string;
+  row?: any; // upsert için
+}
 
 class WriteQueue {
   private queue = new Map<string, WriteOp>();
   private timer: ReturnType<typeof setTimeout> | null = null;
-  private flushFn: (ops: WriteOp[]) => Promise<void>;
+  private readonly flushFnRef: React.MutableRefObject<(ops: WriteOp[]) => Promise<void>>;
   private readonly minDebounceMs: number;
   private readonly maxDebounceMs: number;
-  // Sağlık metrikleri
   totalWrites = 0;
   failedWrites = 0;
-  private tableName: string;
+  private retryCount = 0;
 
   constructor(
-    flushFn: (ops: WriteOp[]) => Promise<void>,
+    flushFnRef: React.MutableRefObject<(ops: WriteOp[]) => Promise<void>>,
     debounceMs = 300,
     tableName = '',
   ) {
-    this.flushFn = flushFn;
-    this.tableName = tableName;
-    // Kritik tablo → daha kısa min gecikme
-    this.minDebounceMs = PRIORITY_TABLES.has(tableName) ? 80 : debounceMs;
-    this.maxDebounceMs = debounceMs * 3; // burst sırasında maksimum bekle
+    this.flushFnRef = flushFnRef;
+    this.minDebounceMs = PRIORITY_TABLES.has(tableName) ? 60 : debounceMs;
+    this.maxDebounceMs = debounceMs * 3;
   }
 
   push(op: WriteOp) {
-    this.queue.set(op.key, op);
+    // Aynı id için önceki işlemi ezeriz (son işlem kazanır)
+    this.queue.set(op.id, op);
     this.scheduleFlush();
   }
 
   private scheduleFlush() {
     if (this.timer) clearTimeout(this.timer);
-
-    // Adaptif debounce: kuyruk büyüdükçe gecikmeyi azalt, hemen flush'a bak
     const size = this.queue.size;
     let delay: number;
-    if (size >= 20) {
-      delay = 0; // Büyük burst → hemen gönder
-    } else if (size >= 10) {
-      delay = this.minDebounceMs;
-    } else {
-      // Linear interpolation: 1 item → maxDebounce, 10 item → minDebounce
+    if (size >= 20)       delay = 0;
+    else if (size >= 10)  delay = this.minDebounceMs;
+    else {
       const t = Math.min((size - 1) / 9, 1);
       delay = Math.round(this.maxDebounceMs + t * (this.minDebounceMs - this.maxDebounceMs));
     }
-
     if (delay === 0) {
-      // Mikrotask kuyruğuna at — call stack temizlensin
       Promise.resolve().then(() => this.flush());
     } else {
       this.timer = setTimeout(() => this.flush(), delay);
@@ -192,20 +189,21 @@ class WriteQueue {
     this.totalWrites += ops.length;
 
     try {
-      await this.flushFn(ops);
+      await this.flushFnRef.current(ops);
+      this.retryCount = 0;
     } catch (e) {
-      console.error(`[WriteQueue:${this.tableName}] flush error (${ops.length} ops):`, e);
+      console.error(`[WriteQueue] flush error (${ops.length} ops):`, e);
       this.failedWrites += ops.length;
       // Başarısız işlemleri kuyruğa geri al
-      ops.forEach(op => this.queue.set(op.key, op));
-      // Hata sonrası gecikmeyi artır (back-off)
-      this.timer = setTimeout(() => this.flush(), Math.min(this.maxDebounceMs * 4, 5000));
+      ops.forEach(op => this.queue.set(op.id, op));
+      // Üstel geri çekilme (max 30 saniye)
+      this.retryCount = Math.min(this.retryCount + 1, 5);
+      const backoff = Math.min(1000 * Math.pow(2, this.retryCount), 30_000);
+      this.timer = setTimeout(() => this.flush(), backoff);
     }
   }
 
-  get pendingCount(): number {
-    return this.queue.size;
-  }
+  get pendingCount(): number { return this.queue.size; }
 
   destroy() {
     if (this.timer) clearTimeout(this.timer);
@@ -213,7 +211,16 @@ class WriteQueue {
   }
 }
 
+// ─── Tipler ────────────────────────────────────────────────────────────────────
 export type SyncState = 'idle' | 'loading' | 'synced' | 'error' | 'offline';
+
+export interface SyncHealthInfo {
+  lastSuccessfulSync: Date | null;
+  consecutiveFailures: number;
+  avgLatencyMs: number;
+  pendingWrites: number;
+  isHealthy: boolean;
+}
 
 export interface UseTableSyncResult<T> {
   data: T[];
@@ -233,14 +240,6 @@ export interface UseTableSyncResult<T> {
   forceResync: () => Promise<void>;
 }
 
-export interface SyncHealthInfo {
-  lastSuccessfulSync: Date | null;
-  consecutiveFailures: number;
-  avgLatencyMs: number;
-  pendingWrites: number;
-  isHealthy: boolean;
-}
-
 export interface TableSyncConfig<T> {
   tableName: string;
   storageKey: string;
@@ -251,11 +250,25 @@ export interface TableSyncConfig<T> {
   fromDb?: (row: any) => T;
 }
 
+function isSupabaseConfigured(): boolean {
+  return !!SUPABASE_ANON_KEY && SUPABASE_ANON_KEY.length > 10;
+}
+
+// ─── Ana Hook ─────────────────────────────────────────────────────────────────
 export function useTableSync<T extends { id: string }>(
   config: TableSyncConfig<T>
 ): UseTableSyncResult<T> {
-  const { tableName, storageKey, initialData = [], orderBy = 'created_at', orderAsc = false, toDb, fromDb } = config;
+  const {
+    tableName,
+    storageKey,
+    initialData = [],
+    orderBy = 'created_at',
+    orderAsc = false,
+    toDb,
+    fromDb,
+  } = config;
 
+  // localStorage'dan anlık yükleme (sayfa açılışında görüntülenecek ilk veri)
   const [data, setDataState] = useState<T[]>(() => {
     const raw = loadFromLS<T[]>(storageKey) || initialData;
     if (fromDb && raw.length > 0) {
@@ -263,11 +276,16 @@ export function useTableSync<T extends { id: string }>(
     }
     return raw;
   });
+
   const [syncState, setSyncState] = useState<SyncState>('idle');
   const [lastSync, setLastSync] = useState<Date | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [consecutiveFailures, setConsecutiveFailures] = useState(0);
+  const [latencyMs, setLatencyMs] = useState(0);
+
   const configured = isSupabaseConfigured();
 
+  // Stabil ref'ler (useCallback bağımlılıklarını minimize eder)
   const toDbRef = useRef(toDb);
   toDbRef.current = toDb;
   const fromDbRef = useRef(fromDb);
@@ -275,101 +293,56 @@ export function useTableSync<T extends { id: string }>(
   const dataRef = useRef(data);
   dataRef.current = data;
   const initialFetchDone = useRef(false);
+  // Kendi yazmalarımızın realtime echo'sunu atlamak için
   const pendingWriteIds = useRef(new Set<string>());
-  // Track whether direct KV READ access works (anon key can SELECT but NOT INSERT/UPDATE/DELETE due to RLS)
-  // Writes MUST always go through the server which uses service_role_key to bypass RLS.
-  const useDirectKVRead = useRef<boolean | null>(null);
 
-  const getHeaders = () => ({
-    'Content-Type': 'application/json',
-    'Authorization': `Bearer ${SUPABASE_ANON_KEY}`
-  });
+  // ─── WriteQueue flush fonksiyonu (her render'da güncellenir) ──────────────
+  const flushFnRef = useRef<(ops: WriteOp[]) => Promise<void>>(async () => {});
+  flushFnRef.current = async (ops: WriteOp[]) => {
+    const upsertOps = ops.filter(o => o.type === 'upsert');
+    const deleteOps = ops.filter(o => o.type === 'delete');
 
-  // ─── Server-side write helpers (bypass RLS via service_role_key) ───────────
-  async function serverSet(key: string, value: any): Promise<void> {
-    const res = await fetchWithRetry(`${SERVER_URL}/kv/set`, {
-      method: 'POST',
-      headers: getHeaders(),
-      body: JSON.stringify({ key, value })
-    });
-    if (!res.ok) {
-      const text = await res.text().catch(() => 'unknown');
-      throw new Error(`server set failed (${res.status}): ${text}`);
+    // ── Upsert işlemleri ─────────────────────────────────────────────────────
+    if (upsertOps.length > 0) {
+      const rows = upsertOps.map(o => o.row);
+      try {
+        await tableUpsert(tableName, rows);
+      } catch (directErr: any) {
+        // Doğrudan yazma başarısız → server KV fallback
+        console.warn(`[WriteQueue:${tableName}] Doğrudan upsert başarısız, server fallback:`, directErr.message);
+        await serverUpsertFallback(tableName, rows);
+      }
+      upsertOps.forEach(op => pendingWriteIds.current.delete(op.id));
     }
-  }
 
-  async function serverMSet(keys: string[], values: any[]): Promise<void> {
-    const res = await fetchWithRetry(`${SERVER_URL}/kv/mset`, {
-      method: 'POST',
-      headers: getHeaders(),
-      body: JSON.stringify({ keys, values })
-    });
-    if (!res.ok) {
-      const text = await res.text().catch(() => 'unknown');
-      throw new Error(`server mset failed (${res.status}): ${text}`);
+    // ── Delete işlemleri ─────────────────────────────────────────────────────
+    for (const op of deleteOps) {
+      try {
+        await tableDelete(tableName, op.id);
+      } catch (directErr: any) {
+        console.warn(`[WriteQueue:${tableName}] Doğrudan delete başarısız, server fallback:`, directErr.message);
+        await serverDeleteFallback(tableName, op.id);
+      }
+      pendingWriteIds.current.delete(op.id);
     }
-  }
+  };
 
-  async function serverDel(key: string): Promise<void> {
-    const res = await fetchWithRetry(`${SERVER_URL}/kv/del`, {
-      method: 'POST',
-      headers: getHeaders(),
-      body: JSON.stringify({ key })
-    });
-    if (!res.ok) {
-      const text = await res.text().catch(() => 'unknown');
-      throw new Error(`server del failed (${res.status}): ${text}`);
-    }
-  }
-
-  // ─── Write queue ─────────────────────────────────────────────────────────
+  // ─── WriteQueue (ilk render'da bir kez oluşturulur) ──────────────────────
   const writeQueueRef = useRef<WriteQueue | null>(null);
-
   if (!writeQueueRef.current && configured) {
-    writeQueueRef.current = new WriteQueue(async (ops) => {
-      const setOps = ops.filter(o => o.type === 'set');
-      const delOps = ops.filter(o => o.type === 'del');
-
-      // Batch set — always via server to bypass RLS
-      if (setOps.length > 0) {
-        const keys = setOps.map(o => o.key);
-        const values = setOps.map(o => o.value);
-        try {
-          await serverMSet(keys, values);
-          keys.forEach(k => {
-            const id = k.replace(`${tableName}_`, '');
-            pendingWriteIds.current.delete(id);
-          });
-        } catch (e) {
-          console.error(`[WriteQueue] mset error for ${tableName}:`, e);
-          throw e;
-        }
-      }
-
-      // Batch delete — always via server to bypass RLS
-      if (delOps.length > 0) {
-        for (const op of delOps) {
-          try {
-            await serverDel(op.key);
-            const id = op.key.replace(`${tableName}_`, '');
-            pendingWriteIds.current.delete(id);
-          } catch (e) {
-            console.error(`[WriteQueue] del error for ${op.key}:`, e);
-          }
-        }
-      }
-    }, 300, tableName);
+    writeQueueRef.current = new WriteQueue(flushFnRef, 300, tableName);
   }
 
-  // Cleanup write queue on unmount
+  // Unmount'ta bekleyen yazmaları flush et
   useEffect(() => {
     return () => {
       if (writeQueueRef.current) {
-        writeQueueRef.current.flush();
+        writeQueueRef.current.flush().catch(() => {});
       }
     };
   }, []);
 
+  // ─── Veriyi sırala ───────────────────────────────────────────────────────
   const sortData = useCallback((items: T[]): T[] => {
     if (!orderBy) return items;
     return [...items].sort((a: any, b: any) => {
@@ -384,193 +357,166 @@ export function useTableSync<T extends { id: string }>(
     saveToLS(storageKey, newData);
   }, [storageKey]);
 
-  // ─── Smart merge: KV data + LS pending/unsynced changes ────────────────────
-  const smartMerge = useCallback((kvItems: T[], lsItems: T[]): T[] => {
-    const kvMap = new Map(kvItems.map(i => [i.id, i]));
-    const merged = new Map<string, T>();
-
-    // KV store is authoritative — start with KV data
-    kvItems.forEach(item => merged.set(item.id, item));
-
-    // Load tombstone of explicitly deleted IDs (persisted across sessions)
-    const deletedIds = loadDeletedIds(storageKey);
-
-    lsItems.forEach(item => {
-      // Pending write from THIS session → local version takes priority
-      if (pendingWriteIds.current.has(item.id)) {
-        merged.set(item.id, item);
-        return;
-      }
-      // Item in KV → KV is authoritative, already set above
-      if (kvMap.has(item.id)) return;
-      // Item NOT in KV and was explicitly deleted (tombstone) → skip (keeps it gone)
-      if (deletedIds.has(item.id)) return;
-      // Item NOT in KV and NOT deleted → it was added locally but not yet synced → keep it
-      merged.set(item.id, item);
-    });
-
-    return Array.from(merged.values());
-  }, [storageKey]);
-
-  // Sync state between tabs/windows locally
+  // ─── Sekmeler arası senkronizasyon ────────────────────────────────────────
   useEffect(() => {
     const handleStorage = (e: StorageEvent) => {
       if (e.key === STORAGE_PREFIX + storageKey && e.newValue) {
-        try {
-          const parsed = JSON.parse(e.newValue);
-          setDataState(parsed);
-        } catch {}
+        try { setDataState(JSON.parse(e.newValue)); } catch {}
       }
     };
-    const handleCustomEvent = () => {
+    const handleCustom = () => {
       const fresh = loadFromLS<T[]>(storageKey);
       if (fresh) setDataState(fresh);
     };
     window.addEventListener('storage', handleStorage);
-    window.addEventListener('storage_update', handleCustomEvent);
+    window.addEventListener('storage_update', handleCustom);
     return () => {
       window.removeEventListener('storage', handleStorage);
-      window.removeEventListener('storage_update', handleCustomEvent);
+      window.removeEventListener('storage_update', handleCustom);
     };
   }, [storageKey]);
 
-  // ─── FETCH: Dogrudan Supabase veya Server uzerinden ───────────────────────
+  // ─── Veri getir: Doğrudan Supabase tablo okuma ─────────────────────────────
   const fetchData = useCallback(async () => {
-    if (!configured) {
-      setSyncState('offline');
-      return;
-    }
+    if (!configured) { setSyncState('offline'); return; }
+    if (isConnectionCoolingDown()) return;
 
     setSyncState('loading');
     setError(null);
 
+    const start = performance.now();
     try {
-      // Oncelikle dogrudan Supabase client ile dene (daha hizli)
-      let rows: any[] = [];
-      let directWorked = false;
+      const rows = await tableSelect<any>(tableName, orderBy, orderAsc);
+      const elapsed = Math.round(performance.now() - start);
+      setLatencyMs(elapsed);
 
-      try {
-        const start = performance.now();
-        rows = await kvGetByPrefix(`${tableName}_`);
-        const elapsed = Math.round(performance.now() - start);
-        directWorked = true;
-        useDirectKVRead.current = true;
-        
-        if (!initialFetchDone.current) {
-          console.log(
-            `%c[useTableSync] ${tableName}: Dogrudan KV okuma basarili (${rows.length} kayit, ${elapsed}ms)`,
-            'color: #22c55e'
-          );
-        }
-      } catch (directErr: any) {
-        // Dogrudan okuma basarisiz — sunucu endpoint'ine fallback
-        console.warn(`[useTableSync] ${tableName}: Dogrudan KV basarisiz, sunucuya fallback:`, directErr.message);
-        useDirectKVRead.current = false;
-        
-        try {
-          const res = await fetchWithRetry(`${SERVER_URL}/kv/prefix/${tableName}_`, { headers: getHeaders() });
-          if (!res.ok) throw new Error(`Server KV fetch failed (${res.status})`);
-          const json = await res.json();
-          if (!json.success) throw new Error(json.error || 'Unknown KV error');
-          rows = json.data || [];
-        } catch (serverErr: any) {
-          throw new Error(`Hem dogrudan hem sunucu okuma basarisiz: ${serverErr.message}`);
-        }
+      if (!initialFetchDone.current) {
+        console.log(
+          `%c[useTableSync] ${tableName}: ${rows.length} kayıt, ${elapsed}ms`,
+          'color: #22c55e; font-weight: bold'
+        );
       }
 
+      // fromDb dönüşümü uygula
       const mapped = fromDbRef.current
-        ? rows.map((row: any) => fromDbRef.current!(row))
+        ? rows.map(row => fromDbRef.current!(row))
         : (rows as T[]);
 
-      const currentLS = loadFromLS<T[]>(storageKey) || [];
-      const merged = smartMerge(mapped, currentLS);
-      const sorted = sortData(merged);
+      // Çakışma çözümü: Supabase yetkili kaynak, ama bekleyen yerel yazmaları koru
+      const deletedIds = loadDeletedIds(storageKey);
+      const remoteMap = new Map(mapped.map(i => [i.id, i]));
+      const localData = loadFromLS<T[]>(storageKey) || [];
+      const merged = new Map<string, T>(remoteMap);
 
+      localData.forEach(item => {
+        // Bekleyen yazma → yerel versiyon öncelikli
+        if (pendingWriteIds.current.has(item.id)) {
+          merged.set(item.id, item);
+        } else if (!remoteMap.has(item.id) && !deletedIds.has(item.id)) {
+          // Supabase'de yok + tombstone yok → henüz senkronize olmamış yerel kayıt → sakla
+          merged.set(item.id, item);
+        }
+      });
+
+      const sorted = sortData(Array.from(merged.values()));
       setData(sorted);
       setSyncState('synced');
       setLastSync(new Date());
+      setConsecutiveFailures(0);
+      clearConnectionCooldown();
       initialFetchDone.current = true;
     } catch (e: any) {
-      console.error(`[useTableSync] ${tableName} fetch error:`, e);
+      console.error(`[useTableSync] ${tableName} fetch hatası:`, e.message);
+      markConnectionFailure();
       setSyncState('offline');
-      setError(e.message || 'Ag baglantisi yok veya sunucu hatasi');
+      setError(e.message || 'Bağlantı hatası');
+      setConsecutiveFailures(prev => prev + 1);
     }
-  }, [tableName, storageKey, configured, sortData, setData, smartMerge]);
+  }, [tableName, storageKey, configured, orderBy, orderAsc, sortData, setData]);
 
-  // ─── Realtime Subscription ────────────────────────────────────────────────
+  // ─── Gerçek zamanlı abonelik (her tablo için postgres_changes) ─────────────
   useEffect(() => {
     if (!configured) return;
 
-    const prefix = `${tableName}_`;
-    const channelName = `kv_${tableName}_changes_${Date.now()}`;
+    const channelName = `rt_${tableName}_${Math.random().toString(36).slice(2, 8)}`;
+    const channel = supabase
+      .channel(channelName)
+      .on(
+        'postgres_changes' as any,
+        { event: '*', schema: 'public', table: tableName },
+        (payload: any) => {
+          const eventType: string = payload.eventType;
+          const record = payload.new as any;
+          const oldRecord = payload.old as any;
+          const id: string | undefined = record?.id ?? oldRecord?.id;
+          if (!id) return;
 
-    const unsubscribe = kvSubscribe(prefix, channelName, (event) => {
-      const id = event.key.replace(prefix, '');
+          // Kendi yazdıklarımızın echo'sunu atla
+          if (pendingWriteIds.current.has(id)) return;
 
-      // Kendi yazdiklarimizan echo'yu atla
-      if (pendingWriteIds.current.has(id)) return;
-
-      if (event.eventType === 'INSERT' || event.eventType === 'UPDATE') {
-        const item = fromDbRef.current ? fromDbRef.current(event.value) : event.value;
-        setDataState(prev => {
-          const existingIndex = prev.findIndex(i => i.id === id);
-          let updated;
-          if (existingIndex !== -1) {
-            updated = [...prev];
-            updated[existingIndex] = { ...updated[existingIndex], ...item };
-          } else {
-            updated = [item, ...prev];
+          if (eventType === 'INSERT' || eventType === 'UPDATE') {
+            const item = fromDbRef.current ? fromDbRef.current(record) : record as T;
+            setDataState(prev => {
+              const idx = prev.findIndex(i => i.id === id);
+              let updated: T[];
+              if (idx !== -1) {
+                updated = [...prev];
+                updated[idx] = { ...updated[idx], ...item };
+              } else {
+                updated = [item, ...prev];
+              }
+              const sorted = sortData(updated);
+              saveToLS(storageKey, sorted);
+              return sorted;
+            });
+          } else if (eventType === 'DELETE') {
+            setDataState(prev => {
+              const updated = prev.filter(i => i.id !== id);
+              saveToLS(storageKey, updated);
+              return updated;
+            });
           }
-          const sorted = sortData(updated);
-          saveToLS(storageKey, sorted);
-          return sorted;
-        });
-      } else if (event.eventType === 'DELETE') {
-        setDataState(prev => {
-          const updated = prev.filter(item => item.id !== id);
-          saveToLS(storageKey, updated);
-          return updated;
-        });
-      }
-      setLastSync(new Date());
-    });
+          setLastSync(new Date());
+        }
+      )
+      .subscribe((status: string) => {
+        if (status === 'SUBSCRIBED') {
+          console.log(`%c[RT] ${tableName} gerçek zamanlı aktif`, 'color: #a78bfa');
+        }
+      });
 
     return () => {
-      unsubscribe();
+      supabase.removeChannel(channel);
     };
   }, [tableName, storageKey, configured, sortData]);
 
+  // ─── İlk yükleme ─────────────────────────────────────────────────────────
   useEffect(() => {
     fetchData();
   }, [fetchData]);
 
-  // ─── Periodic background resync (every 2 minutes) ─────────────────────────
+  // ─── 2 dakikada bir arka plan yenileme ────────────────────────────────────
   useEffect(() => {
     if (!configured) return;
-    const RESYNC_INTERVAL_MS = 2 * 60 * 1000; // 2 minutes
     const interval = setInterval(() => {
       if (document.visibilityState === 'visible' && pendingWriteIds.current.size === 0) {
         fetchData().catch(() => {});
       }
-    }, RESYNC_INTERVAL_MS);
-    
-    // Also resync when tab becomes visible after being hidden
-    const handleVisibility = () => {
-      if (document.visibilityState === 'visible') {
-        fetchData().catch(() => {});
-      }
+    }, 2 * 60 * 1000);
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') fetchData().catch(() => {});
     };
-    document.addEventListener('visibilitychange', handleVisibility);
-    
+    document.addEventListener('visibilitychange', onVisible);
     return () => {
       clearInterval(interval);
-      document.removeEventListener('visibilitychange', handleVisibility);
+      document.removeEventListener('visibilitychange', onVisible);
     };
   }, [configured, fetchData]);
 
-  // ─── CRUD operations with optimistic updates + rollback ───────────────────
+  // ─── CRUD — Optimistik güncelleme + hata durumunda rollback ──────────────
 
   const addItem = useCallback(async (item: T): Promise<T> => {
+    // Optimistik ekleme
     setDataState(prev => {
       const updated = sortData([item, ...prev]);
       saveToLS(storageKey, updated);
@@ -580,32 +526,28 @@ export function useTableSync<T extends { id: string }>(
     if (!configured) return item;
 
     try {
-      const dbItem = toDbRef.current ? toDbRef.current(item) : item;
-      const key = `${tableName}_${item.id}`;
+      const dbRow = toDbRef.current ? toDbRef.current(item) : item;
       pendingWriteIds.current.add(item.id);
 
       if (writeQueueRef.current) {
-        writeQueueRef.current.push({ type: 'set', key, value: dbItem });
+        writeQueueRef.current.push({ type: 'upsert', id: item.id, row: dbRow });
       } else {
-        // Always write via server to bypass RLS
-        await serverSet(key, dbItem);
+        await tableUpsert(tableName, [dbRow]);
         pendingWriteIds.current.delete(item.id);
       }
       return item;
     } catch (e: any) {
-      console.error(`[addItem] ${tableName} exception:`, e);
-      setDataState(prev => {
-        const rolledBack = prev.filter(i => i.id !== item.id);
-        saveToLS(storageKey, rolledBack);
-        return rolledBack;
-      });
-      return item; // Return original item even on sync failure (optimistic)
+      console.error(`[addItem] ${tableName}:`, e);
+      pendingWriteIds.current.delete(item.id);
+      // Optimistik ekle localStorage'da kalır (veri kaybı yok)
+      return item;
     }
   }, [tableName, storageKey, configured, sortData]);
 
   const updateItem = useCallback(async (id: string, updates: Partial<T>): Promise<void> => {
     const oldItem = dataRef.current.find(i => i.id === id);
 
+    // Optimistik güncelleme
     setDataState(prev => {
       const updated = prev.map(item => item.id === id ? { ...item, ...updates } : item);
       saveToLS(storageKey, updated);
@@ -615,28 +557,24 @@ export function useTableSync<T extends { id: string }>(
     if (!configured) return;
 
     try {
-      const existingAppItem = oldItem;
-      if (!existingAppItem) return;
-
-      const mergedAppItem = { ...existingAppItem, ...updates };
-      const dbItem = toDbRef.current ? toDbRef.current(mergedAppItem) : mergedAppItem;
-      const key = `${tableName}_${id}`;
+      if (!oldItem) return;
+      const merged = { ...oldItem, ...updates };
+      const dbRow = toDbRef.current ? toDbRef.current(merged) : merged;
       pendingWriteIds.current.add(id);
 
       if (writeQueueRef.current) {
-        writeQueueRef.current.push({ type: 'set', key, value: dbItem });
+        writeQueueRef.current.push({ type: 'upsert', id, row: dbRow });
       } else {
-        // Always write via server to bypass RLS
-        await serverSet(key, dbItem);
+        await tableUpsert(tableName, [dbRow]);
         pendingWriteIds.current.delete(id);
       }
     } catch (e: any) {
-      console.error(`[updateItem] ${tableName} exception:`, e);
+      console.error(`[updateItem] ${tableName}:`, e);
       if (oldItem) {
         setDataState(prev => {
-          const rolledBack = prev.map(item => item.id === id ? oldItem : item);
-          saveToLS(storageKey, rolledBack);
-          return rolledBack;
+          const rb = prev.map(item => item.id === id ? oldItem : item);
+          saveToLS(storageKey, rb);
+          return rb;
         });
       }
       pendingWriteIds.current.delete(id);
@@ -645,10 +583,9 @@ export function useTableSync<T extends { id: string }>(
 
   const deleteItem = useCallback(async (id: string): Promise<void> => {
     const deletedItem = dataRef.current.find(i => i.id === id);
-
-    // Tombstone: silinmiş ID'yi kaydet (smartMerge'de geri gelmemesi için)
     saveDeletedId(storageKey, id);
 
+    // Optimistik silme
     setDataState(prev => {
       const updated = prev.filter(item => item.id !== id);
       saveToLS(storageKey, updated);
@@ -658,18 +595,15 @@ export function useTableSync<T extends { id: string }>(
     if (!configured) return;
 
     try {
-      const key = `${tableName}_${id}`;
       pendingWriteIds.current.add(id);
-
       if (writeQueueRef.current) {
-        writeQueueRef.current.push({ type: 'del', key });
+        writeQueueRef.current.push({ type: 'delete', id });
       } else {
-        // Always write via server to bypass RLS
-        await serverDel(key);
+        await tableDelete(tableName, id);
+        pendingWriteIds.current.delete(id);
       }
-      pendingWriteIds.current.delete(id);
     } catch (e: any) {
-      console.error(`[deleteItem] ${tableName} exception:`, e);
+      console.error(`[deleteItem] ${tableName}:`, e);
       if (deletedItem) {
         setDataState(prev => {
           const restored = sortData([deletedItem, ...prev]);
@@ -681,7 +615,9 @@ export function useTableSync<T extends { id: string }>(
     }
   }, [tableName, storageKey, configured, sortData]);
 
-  const batchUpdate = useCallback(async (updates: Array<{ id: string; changes: Partial<T> }>): Promise<void> => {
+  const batchUpdate = useCallback(async (
+    updates: Array<{ id: string; changes: Partial<T> }>
+  ): Promise<void> => {
     if (updates.length === 0) return;
 
     const oldItems = new Map<string, T>();
@@ -703,76 +639,72 @@ export function useTableSync<T extends { id: string }>(
     if (!configured) return;
 
     try {
-      const keys: string[] = [];
-      const values: any[] = [];
-
+      const rows: any[] = [];
       updates.forEach(u => {
-        const oldItem = oldItems.get(u.id);
-        if (!oldItem) return;
-        const merged = { ...oldItem, ...u.changes };
-        const dbItem = toDbRef.current ? toDbRef.current(merged) : merged;
-        keys.push(`${tableName}_${u.id}`);
-        values.push(dbItem);
+        const old = oldItems.get(u.id);
+        if (!old) return;
+        const merged = { ...old, ...u.changes };
+        const dbRow = toDbRef.current ? toDbRef.current(merged) : merged;
+        rows.push(dbRow);
         pendingWriteIds.current.add(u.id);
       });
 
-      if (keys.length > 0) {
-        // Always write via server to bypass RLS
-        await serverMSet(keys, values);
-        keys.forEach(k => {
-          const id = k.replace(`${tableName}_`, '');
-          pendingWriteIds.current.delete(id);
-        });
+      if (rows.length > 0) {
+        await tableUpsert(tableName, rows);
+        updates.forEach(u => pendingWriteIds.current.delete(u.id));
       }
     } catch (e: any) {
-      console.error(`[batchUpdate] ${tableName} exception:`, e);
+      console.error(`[batchUpdate] ${tableName}:`, e);
       setDataState(prev => {
-        const rolledBack = prev.map(item => {
-          const old = oldItems.get(item.id);
-          return old || item;
-        });
-        saveToLS(storageKey, rolledBack);
-        return rolledBack;
+        const rb = prev.map(item => oldItems.get(item.id) || item);
+        saveToLS(storageKey, rb);
+        return rb;
       });
       updates.forEach(u => pendingWriteIds.current.delete(u.id));
     }
   }, [tableName, storageKey, configured]);
 
+  // ─── Manuel senkronizasyon (localStorage → Supabase) ──────────────────────
   const syncToSupabase = useCallback(async (): Promise<{ ok: number; fail: number }> => {
     if (!configured) return { ok: 0, fail: 0 };
-    
     const current = loadFromLS<T[]>(storageKey) || [];
     if (current.length === 0) return { ok: 0, fail: 0 };
 
     setSyncState('loading');
-    
-    try {
-      const keys = current.map(item => `${tableName}_${item.id}`);
-      const values = current.map(item => toDbRef.current ? toDbRef.current(item) : item);
-      
-      // Always write via server to bypass RLS
-      await serverMSet(keys, values);
-      
-      await fetchData();
-      return { ok: current.length, fail: 0 };
-    } catch (e) {
-      console.error('Sync failed', e);
-      setSyncState('error');
-      return { ok: 0, fail: current.length };
+    let ok = 0; let fail = 0;
+    const CHUNK = 100;
+
+    for (let i = 0; i < current.length; i += CHUNK) {
+      const chunk = current.slice(i, i + CHUNK);
+      try {
+        const rows = chunk.map(item => toDbRef.current ? toDbRef.current(item) : item);
+        await tableUpsert(tableName, rows);
+        ok += chunk.length;
+      } catch {
+        fail += chunk.length;
+      }
     }
-  }, [tableName, storageKey, configured, fetchData]);
 
-  const syncHealth = useRef<SyncHealthInfo>({
-    lastSuccessfulSync: null,
-    consecutiveFailures: 0,
-    avgLatencyMs: 0,
-    pendingWrites: 0,
-    isHealthy: true,
-  });
+    setSyncState(fail === 0 ? 'synced' : 'error');
+    if (fail === 0) setLastSync(new Date());
+    return { ok, fail };
+  }, [tableName, storageKey, configured]);
 
-  const forceResync = useCallback(async (): Promise<void> => {
+  const refresh = useCallback(async () => { await fetchData(); }, [fetchData]);
+
+  const forceResync = useCallback(async () => {
+    initialFetchDone.current = false;
+    clearConnectionCooldown();
     await fetchData();
   }, [fetchData]);
+
+  const syncHealth: SyncHealthInfo = {
+    lastSuccessfulSync: lastSync,
+    consecutiveFailures,
+    avgLatencyMs: latencyMs,
+    pendingWrites: writeQueueRef.current?.pendingCount ?? 0,
+    isHealthy: consecutiveFailures < 3 && (writeQueueRef.current?.failedWrites ?? 0) < 5,
+  };
 
   return {
     data,
@@ -780,25 +712,15 @@ export function useTableSync<T extends { id: string }>(
     rowCount: data.length,
     lastSync,
     error,
-    isSupabase: configured && syncState === 'synced',
+    isSupabase: configured && syncState !== 'offline',
     addItem,
     updateItem,
     deleteItem,
     batchUpdate,
-    refresh: fetchData,
+    refresh,
     setData,
     syncToSupabase,
-    syncHealth: {
-      ...syncHealth.current,
-      // Anlık pending sayısını doğrudan kuyruktan al
-      pendingWrites: writeQueueRef.current?.pendingCount ?? 0,
-      // Hata oranı %20'yi geçiyorsa sağlıksız say
-      isHealthy:
-        syncHealth.current.consecutiveFailures < 3 &&
-        (writeQueueRef.current
-          ? writeQueueRef.current.failedWrites / Math.max(writeQueueRef.current.totalWrites, 1) < 0.2
-          : true),
-    },
+    syncHealth,
     forceResync,
   };
 }
