@@ -1,9 +1,10 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { CURRENT_VERSION, SEEN_VERSION_KEY, UPDATE_NOTES } from '../utils/updateNotes';
 
 export interface Notification {
   id: string;
   type: 'info' | 'warning' | 'error' | 'success';
-  category: 'stok' | 'odeme' | 'sistem' | 'genel';
+  category: 'stok' | 'odeme' | 'sistem' | 'genel' | 'guncelleme';
   title: string;
   message: string;
   timestamp: Date;
@@ -43,6 +44,44 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     localStorage.setItem('isleyen_et_notifications', JSON.stringify(notifications));
   }, [notifications]);
+
+  // Yeni versiyon bildirimi — sayfa yüklenince bir kez kontrol et
+  useEffect(() => {
+    const seen = localStorage.getItem(SEEN_VERSION_KEY);
+    if (!seen || seen !== CURRENT_VERSION) {
+      const newCount = UPDATE_NOTES.filter(n => n.isNew).length;
+      if (newCount > 0) {
+        // Aynı versiyon bildirimi daha önce eklenmediyse ekle
+        const existing = JSON.parse(localStorage.getItem('isleyen_et_notifications') || '[]');
+        const alreadyAdded = existing.some((n: any) => n.category === 'guncelleme' && n.title?.includes(CURRENT_VERSION));
+        if (!alreadyAdded) {
+          const notif = {
+            type: 'success' as const,
+            category: 'guncelleme' as const,
+            title: `Yeni Güncelleme: ${CURRENT_VERSION}`,
+            message: `${newCount} yeni iyileştirme ve düzeltme mevcut. Güncelleme notlarını görüntülemek için tıklayın.`,
+            priority: 'medium' as const,
+            actionUrl: '/guncelleme-notlari',
+          };
+          setNotifications(prev => [{
+            ...notif,
+            id: `update-${CURRENT_VERSION}`,
+            timestamp: new Date(),
+            read: false,
+          }, ...prev]);
+        }
+      }
+    }
+
+    // "Okundu işaretle" eventi dinle — UpdateNotesPage'den tetiklenir
+    const handleSeen = () => {
+      setNotifications(prev =>
+        prev.map(n => n.category === 'guncelleme' ? { ...n, read: true } : n)
+      );
+    };
+    window.addEventListener('update_notes_seen', handleSeen);
+    return () => window.removeEventListener('update_notes_seen', handleSeen);
+  }, []);
 
   // Otomatik bildirim kontrolleri
   useEffect(() => {
