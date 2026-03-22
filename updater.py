@@ -16,6 +16,7 @@ import json
 import shutil
 import re
 import math
+import urllib.request
 
 # ─── Ayarlar ────────────────────────────────────────────────────────────────
 REPO_DIR              = os.path.dirname(os.path.abspath(__file__))
@@ -656,6 +657,23 @@ class MertUpdater(tk.Tk):
         self._ram_max       = 512.0    # MB — ilk varsayım, docker stats'tan güncellenir
         self._stats_after   = None
 
+        # Sağlık monitörü
+        self._health_ok         = False
+        self._health_ms         = 0
+        self._health_history:   list[float] = []   # response ms geçmişi
+        self._health_up_since:  float | None = None  # uptime başlangıç epoch
+        self._health_last_toast = 0.0  # son toast zamanı (spam önleme)
+
+        # Otomatik güncelleme zamanlayıcısı
+        self._auto_timer_active     = False
+        self._auto_timer_remaining  = 0    # saniye
+        self._auto_timer_after_id   = None
+        self._auto_timer_intervals  = {"15 dk": 900, "30 dk": 1800,
+                                        "1 sa": 3600, "2 sa": 7200}
+
+        # Toast kuyruğu
+        self._toast_widgets: list[tk.Frame] = []
+
         self._build_ui()
         self._check_status()
         self._schedule_status_refresh()
@@ -698,6 +716,17 @@ class MertUpdater(tk.Tk):
             font=("Segoe UI", 11), fg=FG_TEXT, bg=BG_CARD
         )
         self.status_label.pack(side="left", padx=(8, 0))
+
+        # Sağlık göstergesi (app erişilebilirlik)
+        self.health_dot = tk.Label(
+            sinner, text="●", font=("Segoe UI", 11), fg=FG_DIM, bg=BG_CARD
+        )
+        self.health_dot.pack(side="left", padx=(16, 0))
+        self.health_lbl = tk.Label(
+            sinner, text="App kontrol ediliyor…",
+            font=("Segoe UI", 9), fg=FG_DIM, bg=BG_CARD
+        )
+        self.health_lbl.pack(side="left", padx=(3, 0))
 
         # Sağ taraf: commit bilgisi + "behind" badge + aç butonu
         right = tk.Frame(sinner, bg=BG_CARD)
@@ -778,6 +807,39 @@ class MertUpdater(tk.Tk):
         )
         full_btn.pack(side="right")
         _bind_hover(full_btn, FG_TITLE, _hover_color(FG_TITLE))
+
+        # ── Otomatik güncelleme zamanlayıcısı ────────────────────────────────
+        timer_frame = tk.Frame(self, bg=BG_DARK)
+        timer_frame.pack(fill="x", padx=20, pady=(0, 2))
+
+        self._timer_toggle_btn = tk.Button(
+            timer_frame, text="⏱  Otomatik Güncelleme: Kapalı",
+            command=self._toggle_auto_timer,
+            font=("Segoe UI", 9), fg=FG_DIM, bg=BG_CARD,
+            relief="flat", cursor="hand2", padx=10, pady=3, bd=0
+        )
+        self._timer_toggle_btn.pack(side="left")
+        _bind_hover(self._timer_toggle_btn, BG_CARD, "#353550")
+
+        # Interval seçici
+        self._timer_interval_var = tk.StringVar(value="30 dk")
+        interval_menu = tk.OptionMenu(
+            timer_frame, self._timer_interval_var,
+            *self._auto_timer_intervals.keys()
+        )
+        interval_menu.config(
+            font=("Segoe UI", 8), fg=FG_DIM, bg=BG_CARD,
+            activebackground="#353550", relief="flat",
+            highlightthickness=0, bd=0
+        )
+        interval_menu["menu"].config(bg=BG_CARD, fg=FG_TEXT, font=("Segoe UI", 8))
+        interval_menu.pack(side="left", padx=(4, 0))
+
+        self._timer_countdown_lbl = tk.Label(
+            timer_frame, text="",
+            font=("Consolas", 9), fg=TEAL, bg=BG_DARK
+        )
+        self._timer_countdown_lbl.pack(side="left", padx=(8, 0))
 
         # ── İlerleme çubuğu + süre etiketi ───────────────────────────────────
         prog_row = tk.Frame(self, bg=BG_DARK)
@@ -1006,8 +1068,29 @@ class MertUpdater(tk.Tk):
         self._chart_ram.canvas.pack()
 
         # İlk çizim + canlı polling başlat
-        self.after(500, self._redraw_history_charts)
-        self.after(800, self._poll_docker_stats)
+        self.after(500,  self._redraw_history_charts)
+        self.after(800,  self._poll_docker_stats)
+        self.after(1000, self._poll_health)
+
+        # ── Güncelleme Zaman Çizelgesi ────────────────────────────────────────
+        tl_bar = tk.Frame(self, bg=BG_DARK)
+        tl_bar.pack(fill="x", padx=20, pady=(6, 0))
+        tk.Label(
+            tl_bar, text="Güncelleme Geçmişi",
+            font=("Segoe UI", 9, "bold"), fg=FG_DIM, bg=BG_DARK
+        ).pack(side="left")
+
+        tl_card = tk.Frame(self, bg=BG_CARD,
+                           highlightbackground=BORDER, highlightthickness=1)
+        tl_card.pack(fill="x", padx=20, pady=(3, 0))
+
+        self._timeline_canvas = tk.Canvas(
+            tl_card, height=52, bg=BG_CARD,
+            highlightthickness=0, bd=0
+        )
+        self._timeline_canvas.pack(fill="x", padx=8, pady=6)
+        self._timeline_canvas.bind("<Configure>", lambda e: self._draw_timeline())
+        self.after(1200, self._draw_timeline)
 
         # ── Konsol başlık satırı ──────────────────────────────────────────────
         self._console_frame = tk.Frame(self, bg=BG_DARK)
@@ -1650,6 +1733,220 @@ class MertUpdater(tk.Tk):
                 font=("Segoe UI", 8), fg=FG_DIM, bg=BG_CARD, pady=4
             ).pack(anchor="w", padx=10)
 
+    # ─── Sağlık Monitörü ─────────────────────────────────────────────────────
+
+    def _poll_health(self):
+        """APP_URL'e HTTP ping atar; yanıt süresini ve durumu kaydeder."""
+        def _worker():
+            t0  = time.monotonic()
+            ok  = False
+            try:
+                req = urllib.request.Request(
+                    APP_URL, method="HEAD",
+                    headers={"User-Agent": "MERT4-HealthCheck/1.0"}
+                )
+                with urllib.request.urlopen(req, timeout=4) as resp:
+                    ok = resp.status < 500
+            except Exception:
+                pass
+            ms = int((time.monotonic() - t0) * 1000)
+            self.after(0, self._apply_health, ok, ms)
+
+        threading.Thread(target=_worker, daemon=True).start()
+        self.after(20_000, self._poll_health)   # 20 sn
+
+    def _apply_health(self, ok: bool, ms: int):
+        """Sağlık sonucunu UI'a yansıtır + toast tetikler."""
+        was_ok = self._health_ok
+        self._health_ok = ok
+        self._health_ms = ms
+
+        MAX_HIST = 40
+        self._health_history.append(ms if ok else 0)
+        if len(self._health_history) > MAX_HIST:
+            self._health_history.pop(0)
+
+        if ok:
+            if not was_ok:                         # yeni çevrim içi
+                self._health_up_since = time.time()
+                self._toast("App tekrar çevrim içi!", SUCCESS)
+            uptime = self._uptime_str(self._health_up_since)
+            self.health_dot.config(fg=SUCCESS)
+            self.health_lbl.config(
+                text=f"Çevrim içi  {ms}ms  ·  uptime {uptime}", fg=SUCCESS
+            )
+        else:
+            if was_ok:                             # yeni çevrim dışı
+                self._health_up_since = None
+                self._toast("App çevrim dışı!", ERROR, duration=6000)
+            self._health_up_since = None
+            self.health_dot.config(fg=ERROR)
+            self.health_lbl.config(text="Çevrim dışı", fg=ERROR)
+
+    @staticmethod
+    def _uptime_str(since: float | None) -> str:
+        if since is None:
+            return "—"
+        s = int(time.time() - since)
+        h, m = divmod(s // 60, 60)
+        return f"{h}s {m:02d}d" if h else f"{m}d {s % 60:02d}sn"
+
+    # ─── Toast Uyarı Sistemi ─────────────────────────────────────────────────
+
+    def _toast(self, msg: str, color: str = WARNING, duration: int = 4000):
+        """Sağ üst köşede kayan bildirim gösterir."""
+        TOAST_W, TOAST_H, PAD = 280, 42, 8
+
+        toast = tk.Frame(self, bg=color, padx=PAD, pady=PAD // 2)
+        tk.Label(
+            toast, text=msg,
+            font=("Segoe UI", 9, "bold"),
+            fg=BG_DARK, bg=color, wraplength=TOAST_W - 20
+        ).pack()
+
+        # Kapatma butonu
+        tk.Button(
+            toast, text="✕",
+            command=lambda: self._dismiss_toast(toast),
+            font=("Segoe UI", 7), fg=BG_DARK, bg=color,
+            relief="flat", cursor="hand2", bd=0
+        ).place(relx=1.0, rely=0.0, anchor="ne", x=-2, y=2)
+
+        # Pozisyon: sağ üst, birikmeyi önlemek için offset
+        offset_y = sum(t.winfo_reqheight() + 4
+                       for t in self._toast_widgets if t.winfo_exists()) + 4
+        self._toast_widgets.append(toast)
+
+        def _place():
+            w = self.winfo_width()
+            toast.place(x=w - TOAST_W - 12, y=50 + offset_y)
+            toast.lift()
+
+        self.after(50, _place)
+        self.after(duration, lambda: self._dismiss_toast(toast))
+
+    def _dismiss_toast(self, toast: tk.Frame):
+        if toast in self._toast_widgets:
+            self._toast_widgets.remove(toast)
+        try:
+            toast.destroy()
+        except Exception:
+            pass
+
+    # ─── Otomatik Güncelleme Zamanlayıcısı ───────────────────────────────────
+
+    def _toggle_auto_timer(self):
+        if self._auto_timer_active:
+            self._stop_auto_timer()
+        else:
+            self._start_auto_timer()
+
+    def _start_auto_timer(self):
+        interval_key   = self._timer_interval_var.get()
+        interval_secs  = self._auto_timer_intervals.get(interval_key, 1800)
+        self._auto_timer_active    = True
+        self._auto_timer_remaining = interval_secs
+        self._timer_toggle_btn.config(
+            text=f"⏱  Otomatik Güncelleme: Açık ({interval_key})",
+            fg=TEAL, bg=BG_CARD
+        )
+        self._toast(f"Otomatik güncelleme başladı — her {interval_key}", TEAL)
+        self._auto_timer_tick()
+
+    def _stop_auto_timer(self):
+        self._auto_timer_active = False
+        if self._auto_timer_after_id:
+            self.after_cancel(self._auto_timer_after_id)
+            self._auto_timer_after_id = None
+        self._timer_toggle_btn.config(
+            text="⏱  Otomatik Güncelleme: Kapalı", fg=FG_DIM
+        )
+        self._timer_countdown_lbl.config(text="")
+
+    def _auto_timer_tick(self):
+        if not self._auto_timer_active:
+            return
+        if self._auto_timer_remaining <= 0:
+            self._timer_countdown_lbl.config(text="▶ güncelleniyor…")
+            self._threaded(self._auto_update_job)
+            # Sonraki döngü için sıfırla
+            interval_key  = self._timer_interval_var.get()
+            interval_secs = self._auto_timer_intervals.get(interval_key, 1800)
+            self._auto_timer_remaining = interval_secs
+        else:
+            m, s = divmod(self._auto_timer_remaining, 60)
+            self._timer_countdown_lbl.config(text=f"sonraki güncelleme  {m:02d}:{s:02d}")
+            self._auto_timer_remaining -= 1
+
+        self._auto_timer_after_id = self.after(1000, self._auto_timer_tick)
+
+    def _auto_update_job(self):
+        """Zamanlayıcı tarafından çağrılan güncelleme görevi."""
+        from types import SimpleNamespace
+        # _do_full_update'ı doğrudan çağırabilmek için senkron sürümü kullan
+        self.after(0, self._do_full_update)
+
+    # ─── Güncelleme Zaman Çizelgesi ──────────────────────────────────────────
+
+    def _draw_timeline(self):
+        """Özet geçmişini görsel timeline olarak çizer."""
+        c  = self._timeline_canvas
+        c.delete("all")
+
+        history  = self._summary_mgr.all()
+        ordered  = list(reversed(history[-8:]))   # en eskiden en yeniye
+        n        = len(ordered)
+        if n == 0:
+            c.create_text(
+                10, 26, text="Henüz güncelleme kaydı yok.",
+                font=("Segoe UI", 8), fill=FG_DIM, anchor="w"
+            )
+            return
+
+        W = c.winfo_width() or 860
+        H = 52
+        DOT_R = 8
+        LINE_Y = H // 2
+
+        # Yatay çizgi
+        c.create_line(20, LINE_Y, W - 20, LINE_Y, fill=BORDER, width=2)
+
+        for i, entry in enumerate(ordered):
+            x = 20 + (W - 40) * i / max(n - 1, 1)
+            success = entry.get("success", True)
+            color   = SUCCESS if success else ERROR
+            ts      = entry.get("timestamp", "")[-5:]   # SS:DD
+            label   = entry.get("op_label", "")
+            elapsed = entry.get("elapsed_s", 0)
+
+            # Bağlantı çizgisi noktasına kadar zaten ana çizgide
+
+            # Dikey ince çizgi (nokta → alt etiket)
+            c.create_line(x, LINE_Y + DOT_R, x, LINE_Y + DOT_R + 8,
+                          fill=color, width=1)
+
+            # Nokta
+            c.create_oval(
+                x - DOT_R, LINE_Y - DOT_R,
+                x + DOT_R, LINE_Y + DOT_R,
+                fill=color, outline=BG_CARD, width=2
+            )
+            # Onay / çarpı ikonu
+            icon = "✓" if success else "✗"
+            c.create_text(x, LINE_Y, text=icon,
+                          font=("Segoe UI", 7, "bold"),
+                          fill=BG_DARK, anchor="center")
+
+            # Alt etiket: saat
+            c.create_text(x, LINE_Y + DOT_R + 12, text=ts,
+                          font=("Consolas", 7), fill=FG_DIM, anchor="center")
+
+            # Üst etiket: işlem adı + süre (son girişte farklı renk)
+            top_color = color if i == n - 1 else FG_DIM
+            lbl_text  = f"{label[:10]}\n{elapsed:.0f}s" if label else f"{elapsed:.0f}s"
+            c.create_text(x, LINE_Y - DOT_R - 4, text=lbl_text,
+                          font=("Consolas", 7), fill=top_color, anchor="s")
+
     # ─── Grafik metodları ────────────────────────────────────────────────────
 
     def _toggle_graphs(self, event=None):
@@ -1692,6 +1989,9 @@ class MertUpdater(tk.Tk):
             pos_color=SUCCESS, neg_color=ERROR,
             x_labels=x_labels
         )
+
+        # Timeline da güncelle
+        self._draw_timeline()
 
     def _poll_docker_stats(self):
         """Docker container CPU ve RAM'ini arka planda sorgular."""
@@ -1771,6 +2071,16 @@ class MertUpdater(tk.Tk):
         self._stats_lbl.config(
             text=f"CPU {cpu:.1f}%  RAM {ram_used:.0f}/{ram_max:.0f}MB  ·  {ts}"
         )
+
+        # Akıllı uyarı: eşik aşıldığında toast gönder (60 sn cooldown)
+        now = time.time()
+        if now - self._health_last_toast > 60:
+            if cpu >= 85:
+                self._health_last_toast = now
+                self._toast(f"Yüksek CPU: {cpu:.1f}%", ERROR)
+            elif ram_max > 0 and (ram_used / ram_max) >= 0.90:
+                self._health_last_toast = now
+                self._toast(f"Yüksek RAM: {ram_used:.0f}/{ram_max:.0f}MB", WARNING)
 
     def _do_restore(self, backup_id: str, label: str):
         if not messagebox.askyesno(
@@ -1852,4 +2162,5 @@ class MertUpdater(tk.Tk):
 
 if __name__ == "__main__":
     app = MertUpdater()
+    app.protocol("WM_DELETE_WINDOW", lambda: (app._stop_auto_timer(), app.destroy()))
     app.mainloop()
