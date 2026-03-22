@@ -192,7 +192,11 @@ export function useTableSync<T extends { id: string }>(
   const { tableName, storageKey, initialData = [], orderBy = 'created_at', orderAsc = false, toDb, fromDb } = config;
 
   const [data, setDataState] = useState<T[]>(() => {
-    return loadFromLS<T[]>(storageKey) || initialData;
+    const raw = loadFromLS<T[]>(storageKey) || initialData;
+    if (fromDb && raw.length > 0) {
+      try { return raw.map(item => fromDb(item as any)); } catch { return raw; }
+    }
+    return raw;
   });
   const [syncState, setSyncState] = useState<SyncState>('idle');
   const [lastSync, setLastSync] = useState<Date | null>(null);

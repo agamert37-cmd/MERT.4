@@ -193,7 +193,12 @@ export function PersonelPage() {
   const [roleRequests, setRoleRequests] = useState<any[]>([]);
 
   const filteredPersonnel = useMemo(() => {
-    return personnelList.filter(p => p.name.toLowerCase().includes(searchTerm.toLowerCase()) || p.username.toLowerCase().includes(searchTerm.toLowerCase()));
+    return personnelList.filter(p => {
+      const name = (p.name || '').toLowerCase();
+      const username = (p.username || '').toLowerCase();
+      const term = searchTerm.toLowerCase();
+      return name.includes(term) || username.includes(term);
+    });
   }, [personnelList, searchTerm]);
 
   const onlineCount = personnelList.filter(p => p.status === 'online').length;
@@ -523,7 +528,7 @@ export function PersonelPage() {
                   <div className="flex items-center gap-4">
                     <div className="relative">
                       <div className={`w-14 h-14 rounded-2xl flex items-center justify-center text-xl font-black shadow-lg ${person.role === 'Yönetici' ? 'bg-gradient-to-br from-orange-500 to-red-600' : 'bg-gradient-to-br from-blue-600 to-purple-600'}`}>
-                        {person.name.charAt(0).toUpperCase()}
+                        {(person.name || '?').charAt(0).toUpperCase()}
                       </div>
                       <div className={`absolute -bottom-1 -right-1 w-4 h-4 rounded-full border-2 border-[#111] ${person.status === 'online' ? 'bg-emerald-500' : 'bg-gray-600'}`} />
                     </div>
@@ -659,7 +664,7 @@ export function PersonelPage() {
               <div className="p-4 sm:p-8 border-b border-white/5 bg-gradient-to-b from-blue-900/20 to-transparent flex flex-col sm:flex-row justify-between items-start gap-4">
                 <div className="flex items-center gap-4 sm:gap-6">
                   <div className="w-14 h-14 sm:w-20 sm:h-20 rounded-2xl sm:rounded-3xl bg-blue-600 flex items-center justify-center text-xl sm:text-3xl font-black shadow-xl shadow-blue-600/30">
-                    {selectedEmployee.name.charAt(0)}
+                    {(selectedEmployee.name || '?').charAt(0)}
                   </div>
                   <div>
                     <Dialog.Title className="text-xl sm:text-3xl font-black mb-1">{selectedEmployee.name}</Dialog.Title>
