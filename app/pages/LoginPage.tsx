@@ -7,8 +7,8 @@ import {
   ChefHat, Percent, Newspaper, MapPin, Phone,
   ChevronRight, UtensilsCrossed, Info, ArrowRight,
   ShoppingBag, Tag, Star, Weight, Flame, Eye, EyeOff,
-  Award, Truck, Package, Search, Beef, Heart,
-  Fingerprint, KeyRound, LogIn, ShieldCheck, Loader2,
+  Award, Truck, Package, Search, Beef,
+  KeyRound, LogIn, ShieldCheck, Loader2,
   FileText, Minus, Plus, Send, CheckCircle
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
@@ -240,33 +240,6 @@ const BADGE_COLORS: Record<string, string> = {
   blue: 'bg-blue-500/20 text-blue-400 border-blue-500/30',
 };
 
-// ─── Floating Particles ──────────────────────────────────────────
-function FloatingParticles() {
-  const particles = useMemo(() =>
-    Array.from({ length: 20 }, (_, i) => ({
-      id: i,
-      x: Math.random() * 100,
-      y: Math.random() * 100,
-      size: Math.random() * 3 + 1,
-      duration: Math.random() * 15 + 10,
-      delay: Math.random() * 5,
-    })),
-  []);
-
-  return (
-    <div className="absolute inset-0 overflow-hidden pointer-events-none z-0">
-      {particles.map(p => (
-        <motion.div
-          key={p.id}
-          className="absolute rounded-full bg-blue-400/20"
-          style={{ width: p.size, height: p.size, left: `${p.x}%`, top: `${p.y}%` }}
-          animate={{ y: [0, -60, 0], opacity: [0, 0.6, 0] }}
-          transition={{ duration: p.duration, repeat: Infinity, delay: p.delay, ease: "easeInOut" }}
-        />
-      ))}
-    </div>
-  );
-}
 
 // ─── Mobile Bottom Sheet Login ───────────────────────────────────
 function MobileBottomSheet({ 
