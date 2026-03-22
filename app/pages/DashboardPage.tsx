@@ -115,6 +115,16 @@ export function DashboardPage() {
   const [refreshCounter, setRefreshCounter] = useState(0);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [chartView, setChartView] = useState<'area' | 'bar' | 'composed'>('composed');
+  const [liveCounter, setLiveCounter] = useState(0);
+
+  // Canlı otomatik yenileme - her 15 saniyede veriler güncellenir
+  useEffect(() => {
+    const liveInterval = setInterval(() => {
+      setRefreshCounter(c => c + 1);
+      setLiveCounter(c => c + 1);
+    }, 15_000);
+    return () => clearInterval(liveInterval);
+  }, []);
 
   // Sayfa ziyaretini logla (kullanıcı yüklenince bir kez)
   useEffect(() => {
@@ -428,6 +438,48 @@ export function DashboardPage() {
     return total;
   }, [rawFisler]);
 
+  // ─── Canlı saatlik satış akışı (bugün saat saat) ───
+  const hourlySalesFlow = useMemo(() => {
+    const now = new Date();
+    const hours: { saat: string; ciro: number; adet: number }[] = [];
+    for (let h = 7; h <= Math.min(now.getHours(), 23); h++) {
+      const hourSales = rawFisler.filter(f => {
+        if (f.mode !== 'sale' && f.mode !== 'satis') return false;
+        if (!f.date?.startsWith(todayISO) && f.date !== todayISO) return false;
+        const created = f.createdAt ? new Date(f.createdAt) : null;
+        return created ? created.getHours() === h : false;
+      });
+      const ciro = hourSales.reduce((sum, fis) => {
+        return sum + (fis.items || []).reduce((s: number, p: any) => {
+          return s + Math.abs(safeNum(p.totalPrice) || safeNum(p.total) || 0);
+        }, 0);
+      }, 0);
+      hours.push({ saat: `${h}:00`, ciro, adet: hourSales.length });
+    }
+    return hours;
+  }, [rawFisler, todayISO, liveCounter]);
+
+  // ─── Anlık kârlılık oranı (son 7 gün trend) ───
+  const profitTrend = useMemo(() => {
+    const today = new Date();
+    return Array.from({ length: 7 }).map((_, i) => {
+      const d = new Date(today);
+      d.setDate(d.getDate() - (6 - i));
+      const iso = d.toISOString().split('T')[0];
+      const daySales = rawFisler
+        .filter(f => (f.mode === 'sale' || f.mode === 'satis') && (f.date?.startsWith(iso) || f.date === iso))
+        .reduce((sum, item) => sum + (item.items || []).reduce((s: number, p: any) => s + Math.abs(safeNum(p.totalPrice) || safeNum(p.total) || 0), 0), 0);
+      const dayPurch = rawFisler
+        .filter(f => f.mode === 'alis' && (f.date?.startsWith(iso) || f.date === iso))
+        .reduce((sum, item) => sum + (item.items || []).reduce((s: number, p: any) => s + Math.abs(safeNum(p.totalPrice) || safeNum(p.total) || 0), 0), 0);
+      return {
+        gun: d.toLocaleDateString('tr-TR', { weekday: 'short' }),
+        kar: daySales - dayPurch,
+        oran: daySales > 0 ? Math.round(((daySales - dayPurch) / daySales) * 100) : 0
+      };
+    });
+  }, [rawFisler, liveCounter]);
+
   // ─── Stok akış verileri (fişlerden türetilen giriş/çıkış — son 5 ürün) ───
   const stockFlowData = useMemo(() => {
     const productFlow: Record<string, { inflow: number; outflow: number }> = {};
@@ -671,22 +723,89 @@ export function DashboardPage() {
   return (
     <div className="p-3 sm:p-6 lg:p-10 space-y-4 sm:space-y-6 lg:space-y-8 bg-background min-h-screen text-white font-sans pb-28 sm:pb-6 lg:pb-10">
       
-      {/* Release Banner */}
+      {/* ─── Güvenlik Kalkanı — Güncelleme Notları ─── */}
       <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }}
-        className="relative overflow-hidden flex items-start sm:items-center gap-4 p-4 bg-gradient-to-r from-emerald-500/10 via-blue-500/10 to-transparent border border-emerald-500/20 rounded-2xl"
+        className="relative overflow-hidden rounded-2xl lg:rounded-3xl bg-gradient-to-br from-emerald-500/[0.07] via-[#111] to-blue-500/[0.05] border border-emerald-500/20"
       >
-        <div className="absolute top-0 right-0 p-4 opacity-10">
-          <ShieldCheck className="w-24 h-24 text-emerald-400" />
+        {/* Dekoratif arka plan */}
+        <div className="absolute top-0 right-0 p-6 opacity-[0.06]">
+          <ShieldCheck className="w-32 h-32 text-emerald-400" />
         </div>
-        <div className="relative z-10 p-2 sm:p-3 bg-emerald-500/20 rounded-xl backdrop-blur-sm border border-emerald-500/30">
-          <ShieldCheck className="w-5 h-5 sm:w-6 sm:h-6 text-emerald-400" />
-        </div>
-        <div className="relative z-10 flex-1">
-          <div className="flex items-center gap-2 mb-1">
-            <h3 className="text-sm sm:text-base font-bold text-emerald-400">{t('dashboard.releaseTitle')}</h3>
-            <span className="px-2 py-0.5 text-[10px] font-bold bg-emerald-500/20 text-emerald-300 rounded-full border border-emerald-500/30">{t('dashboard.releaseNew')}</span>
+        <div className="absolute bottom-0 left-0 w-48 h-48 bg-emerald-500/5 rounded-full blur-3xl -translate-x-1/2 translate-y-1/2" />
+
+        {/* Üst başlık */}
+        <div className="relative z-10 flex items-center gap-3 sm:gap-4 p-4 sm:p-5 pb-3">
+          <div className="p-2.5 sm:p-3 bg-emerald-500/20 rounded-xl backdrop-blur-sm border border-emerald-500/30 shadow-lg shadow-emerald-500/10">
+            <ShieldCheck className="w-5 h-5 sm:w-6 sm:h-6 text-emerald-400" />
           </div>
-          <p className="text-xs sm:text-sm text-gray-400 max-w-3xl leading-relaxed">{t('dashboard.releaseDesc')}</p>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 mb-0.5 flex-wrap">
+              <h3 className="text-sm sm:text-base font-bold text-emerald-400">{t('dashboard.releaseTitle')}</h3>
+              <span className="px-2 py-0.5 text-[9px] font-bold bg-emerald-500/20 text-emerald-300 rounded-full border border-emerald-500/30 animate-pulse">{t('dashboard.releaseNew')}</span>
+            </div>
+            <p className="text-[10px] sm:text-xs text-gray-500">Son güncellemeler ve yapılan iyileştirmeler</p>
+          </div>
+          <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/20 shrink-0">
+            <span className="relative flex h-2 w-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-60" />
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-400" />
+            </span>
+            <span className="text-[9px] font-bold text-emerald-400 uppercase tracking-wider">Koruma Aktif</span>
+          </div>
+        </div>
+
+        {/* Güncelleme notları listesi */}
+        <div className="relative z-10 px-4 sm:px-5 pb-4 sm:pb-5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-2.5">
+            {[
+              { icon: '🛡️', cat: 'Güvenlik', color: 'emerald', text: 'Brute Force koruması ve 15dk otomatik oturum kapatma', ver: 'v4.2' },
+              { icon: '📊', cat: 'Grafik', color: 'blue', text: 'Canlı saatlik ciro akışı ve kârlılık trend grafiği eklendi', ver: 'v4.2.1' },
+              { icon: '🔄', cat: 'Özellik', color: 'purple', text: '15 saniyede otomatik dashboard yenileme sistemi', ver: 'v4.2.1' },
+              { icon: '🔐', cat: 'Güvenlik', color: 'emerald', text: 'Güvenlik Merkezi modülü ve detaylı aktivite loglaması', ver: 'v4.2' },
+              { icon: '🎨', cat: 'Arayüz', color: 'cyan', text: 'Karanlık tema, cam efektleri ve animasyonlu kartlar', ver: 'v4.2' },
+              { icon: '📈', cat: 'Analiz', color: 'amber', text: 'Performans radarı, satış hunisi ve ısı haritası', ver: 'v4.2' },
+              { icon: '🐛', cat: 'Düzeltme', color: 'red', text: 'Stok hesaplama ve fiş tutarı düzeltmeleri', ver: 'v4.2' },
+              { icon: '⚡', cat: 'Performans', color: 'orange', text: 'Dashboard render optimizasyonu, izole canlı saat', ver: 'v4.2.1' },
+            ].map((note, i) => {
+              const colorMap: Record<string, string> = {
+                emerald: 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400',
+                blue: 'bg-blue-500/10 border-blue-500/20 text-blue-400',
+                purple: 'bg-purple-500/10 border-purple-500/20 text-purple-400',
+                cyan: 'bg-cyan-500/10 border-cyan-500/20 text-cyan-400',
+                amber: 'bg-amber-500/10 border-amber-500/20 text-amber-400',
+                red: 'bg-red-500/10 border-red-500/20 text-red-400',
+                orange: 'bg-orange-500/10 border-orange-500/20 text-orange-400',
+              };
+              const cls = colorMap[note.color] || colorMap.blue;
+              return (
+                <motion.div
+                  key={i}
+                  initial={{ opacity: 0, x: -10 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: 0.1 + i * 0.05, type: 'spring', stiffness: 300, damping: 25 }}
+                  className="flex items-start gap-2.5 p-2.5 sm:p-3 rounded-xl bg-white/[0.02] border border-white/[0.05] hover:bg-white/[0.04] hover:border-white/[0.1] transition-all group"
+                >
+                  <span className="text-sm sm:text-base shrink-0 mt-0.5">{note.icon}</span>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-1.5 mb-0.5">
+                      <span className={`px-1.5 py-0.5 text-[8px] sm:text-[9px] font-bold rounded-md border ${cls}`}>{note.cat}</span>
+                      <span className="text-[8px] text-gray-600 font-mono">{note.ver}</span>
+                    </div>
+                    <p className="text-[10px] sm:text-[11px] text-gray-400 leading-relaxed group-hover:text-gray-300 transition-colors">{note.text}</p>
+                  </div>
+                </motion.div>
+              );
+            })}
+          </div>
+
+          {/* Alt açıklama */}
+          <div className="mt-3 pt-3 border-t border-white/[0.05] flex items-center justify-between">
+            <p className="text-[9px] sm:text-[10px] text-gray-600">
+              <ShieldCheck className="w-3 h-3 inline-block mr-1 text-emerald-500/50" />
+              Güvenlik Kalkanı v4.2 KALKAN · Tüm sistemler korunuyor
+            </p>
+            <span className="text-[8px] sm:text-[9px] text-gray-600 font-mono">Son güncelleme: {new Date().toLocaleDateString('tr-TR')}</span>
+          </div>
         </div>
       </motion.div>
 
@@ -731,8 +850,27 @@ export function DashboardPage() {
             </button>
           </div>
         </div>
-        {/* Live Clock Row - isolated component, won't re-render the whole dashboard */}
-        <LiveClockWidget />
+        {/* Live Clock Row + Auto-refresh indicator */}
+        <div className="flex items-center justify-between flex-wrap gap-2">
+          <LiveClockWidget />
+          <motion.div
+            key={liveCounter}
+            initial={{ opacity: 0, scale: 0.8 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20"
+          >
+            <motion.div
+              animate={{ rotate: 360 }}
+              transition={{ duration: 1, ease: "linear" }}
+              key={`spin-${liveCounter}`}
+            >
+              <RefreshCw className="w-3 h-3 text-emerald-400" />
+            </motion.div>
+            <span className="text-[9px] sm:text-[10px] font-bold text-emerald-400">
+              Otomatik Yenileme Aktif · 15s
+            </span>
+          </motion.div>
+        </div>
       </div>
 
       {/* ─── Stat Cards Grid ─── */}
@@ -761,12 +899,25 @@ export function DashboardPage() {
               </div>
             </div>
             <p className="text-[9px] sm:text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1">{t('dashboard.dailyRevenue')}</p>
-            <p className="text-xl sm:text-2xl lg:text-3xl font-black text-white">
+            <motion.p
+              key={`rev-${liveCounter}`}
+              initial={{ opacity: 0.7, scale: 0.98 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ type: 'spring', stiffness: 300, damping: 20 }}
+              className="text-xl sm:text-2xl lg:text-3xl font-black text-white"
+            >
               <AnimatedCounter value={realtimeRevenue} prefix="₺" />
-            </p>
+            </motion.p>
             <div className="mt-2 sm:mt-3 flex items-center gap-2">
-              <Sparkline data={dailySparkData} color="#3b82f6" width={60} height={24} />
-              <span className="text-[9px] sm:text-[10px] text-gray-500">7 gün</span>
+              <Sparkline data={dailySparkData} color="#3b82f6" width={80} height={28} />
+              <div className="flex flex-col">
+                <span className="text-[9px] sm:text-[10px] text-gray-500">7 gün</span>
+                {dailySparkData.length >= 2 && (
+                  <span className={`text-[8px] font-bold ${dailySparkData[dailySparkData.length - 1] >= dailySparkData[dailySparkData.length - 2] ? 'text-emerald-400' : 'text-red-400'}`}>
+                    {dailySparkData[dailySparkData.length - 1] >= dailySparkData[dailySparkData.length - 2] ? '↑' : '↓'} dün vs bugün
+                  </span>
+                )}
+              </div>
             </div>
           </div>
         </motion.div>
@@ -854,10 +1005,19 @@ export function DashboardPage() {
               {todayNetProfit !== 0 && <TrendBadge value={todayNetProfit >= 0 ? 8.2 : -3.5} />}
             </div>
             <p className="text-[9px] sm:text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1">Günlük Net Kâr</p>
-            <p className={`text-xl sm:text-2xl lg:text-3xl font-black ${todayNetProfit >= 0 ? 'text-purple-400' : 'text-orange-400'}`}>
+            <motion.p
+              key={`profit-${liveCounter}`}
+              initial={{ opacity: 0.7, scale: 0.98 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ type: 'spring', stiffness: 300, damping: 20 }}
+              className={`text-xl sm:text-2xl lg:text-3xl font-black ${todayNetProfit >= 0 ? 'text-purple-400' : 'text-orange-400'}`}
+            >
               <AnimatedCounter value={todayNetProfit} prefix="₺" />
-            </p>
-            <p className="text-[9px] sm:text-[10px] text-gray-500 mt-2">Satış − Alış</p>
+            </motion.p>
+            <div className="mt-2 flex items-center gap-2">
+              <Sparkline data={profitTrend.map(d => d.kar)} color={todayNetProfit >= 0 ? '#a855f7' : '#f97316'} width={60} height={22} />
+              <span className="text-[9px] sm:text-[10px] text-gray-500">7 gün kâr</span>
+            </div>
           </div>
         </motion.div>
       </motion.div>
@@ -1066,6 +1226,108 @@ export function DashboardPage() {
             </div>
           </motion.div>
         </div>
+      </div>
+
+      {/* ─── Canlı Saatlik Satış + Kârlılık Trend ─── */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-4 lg:gap-6">
+        {/* Saatlik Canlı Ciro Akışı */}
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.32 }}
+          className="p-4 sm:p-5 lg:p-6 rounded-2xl lg:rounded-3xl bg-[#111] border border-white/10 relative overflow-hidden"
+        >
+          <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-bl from-blue-500/5 to-transparent rounded-full blur-2xl" />
+          <div className="flex items-center justify-between mb-4 sm:mb-5">
+            <div className="flex items-center gap-2">
+              <div className="p-2 rounded-lg bg-blue-500/15">
+                <Activity className="w-4 h-4 text-blue-400" />
+              </div>
+              <div>
+                <h2 className="text-sm sm:text-base font-bold text-white">Canlı Ciro Akışı</h2>
+                <p className="text-[9px] sm:text-[10px] text-gray-500">Bugün saat saat · otomatik güncellenir</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <LivePulse color="#3b82f6" />
+              <span className="text-[8px] sm:text-[9px] text-blue-400 font-bold uppercase tracking-wider">Canlı</span>
+            </div>
+          </div>
+          <div className="h-[200px] sm:h-[240px]">
+            {hourlySalesFlow.length > 0 ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={hourlySalesFlow} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id="liveFlowGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#3b82f6" stopOpacity={0.4}/>
+                      <stop offset="100%" stopColor="#3b82f6" stopOpacity={0}/>
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#ffffff06" vertical={false} />
+                  <XAxis dataKey="saat" stroke="#ffffff25" fontSize={10} tickLine={false} axisLine={false} />
+                  <YAxis stroke="#ffffff25" fontSize={10} tickLine={false} axisLine={false} tickFormatter={v => v === 0 ? '0' : `₺${(v/1000).toFixed(0)}k`} />
+                  <Tooltip content={<PremiumTooltip formatter={(v: number) => `₺${v.toLocaleString('tr-TR')}`} />} />
+                  <Area type="monotone" dataKey="ciro" stroke="#3b82f6" strokeWidth={2.5} fillOpacity={1} fill="url(#liveFlowGrad)" name="Ciro"
+                    dot={{ r: 3, fill: '#111', stroke: '#3b82f6', strokeWidth: 2 }}
+                    activeDot={{ r: 6, fill: '#3b82f6', stroke: '#111', strokeWidth: 2 }} />
+                  <Bar dataKey="adet" fill="#3b82f640" name="Fiş Adedi" barSize={8} radius={[3, 3, 0, 0]} />
+                </AreaChart>
+              </ResponsiveContainer>
+            ) : (
+              <EmptyChartState message="Henüz bugünkü satış verisi yok" />
+            )}
+          </div>
+        </motion.div>
+
+        {/* Günlük Kârlılık Trend */}
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.34 }}
+          className="p-4 sm:p-5 lg:p-6 rounded-2xl lg:rounded-3xl bg-[#111] border border-white/10 relative overflow-hidden"
+        >
+          <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-bl from-emerald-500/5 to-transparent rounded-full blur-2xl" />
+          <div className="flex items-center gap-2 mb-4 sm:mb-5">
+            <div className="p-2 rounded-lg bg-emerald-500/15">
+              <TrendingUp className="w-4 h-4 text-emerald-400" />
+            </div>
+            <div>
+              <h2 className="text-sm sm:text-base font-bold text-white">Kârlılık Trendi</h2>
+              <p className="text-[9px] sm:text-[10px] text-gray-500">Son 7 günlük net kâr ve oran</p>
+            </div>
+          </div>
+          <div className="h-[200px] sm:h-[240px]">
+            {profitTrend.some(d => d.kar !== 0) ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <ComposedChart data={profitTrend} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id="profitGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#10b981" stopOpacity={0.3}/>
+                      <stop offset="100%" stopColor="#10b981" stopOpacity={0}/>
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#ffffff06" vertical={false} />
+                  <XAxis dataKey="gun" stroke="#ffffff25" fontSize={10} tickLine={false} axisLine={false} />
+                  <YAxis yAxisId="left" stroke="#ffffff25" fontSize={10} tickLine={false} axisLine={false} tickFormatter={v => v === 0 ? '0' : `₺${(v/1000).toFixed(0)}k`} />
+                  <YAxis yAxisId="right" orientation="right" stroke="#ffffff15" fontSize={9} tickLine={false} axisLine={false} tickFormatter={v => `${v}%`} />
+                  <Tooltip content={<PremiumTooltip formatter={(v: number) => v > 100 ? `₺${v.toLocaleString('tr-TR')}` : `%${v}`} />} />
+                  <Area yAxisId="left" type="monotone" dataKey="kar" stroke="#10b981" strokeWidth={2.5} fillOpacity={1} fill="url(#profitGrad)" name="Net Kâr"
+                    dot={{ r: 4, fill: '#111', stroke: '#10b981', strokeWidth: 2 }}
+                    activeDot={{ r: 6, fill: '#10b981' }} />
+                  <Line yAxisId="right" type="monotone" dataKey="oran" stroke="#f59e0b" strokeWidth={2} strokeDasharray="5 5" dot={{ r: 3, fill: '#f59e0b' }} name="Kâr Oranı %" />
+                </ComposedChart>
+              </ResponsiveContainer>
+            ) : (
+              <EmptyChartState message="Kârlılık verisi hesaplanıyor..." />
+            )}
+          </div>
+          {/* Anlık kâr özet strip */}
+          <div className="flex gap-2 mt-3 overflow-x-auto scrollbar-hide">
+            {profitTrend.slice(-3).map((d, i) => (
+              <div key={i} className={`shrink-0 px-2.5 py-1.5 rounded-lg border ${d.kar >= 0 ? 'bg-emerald-500/10 border-emerald-500/20' : 'bg-red-500/10 border-red-500/20'}`}>
+                <p className="text-[8px] font-bold text-gray-500 uppercase">{d.gun}</p>
+                <p className={`text-xs font-black ${d.kar >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                  {d.kar >= 0 ? '+' : ''}₺{d.kar.toLocaleString('tr-TR')}
+                </p>
+                <p className="text-[8px] text-gray-500">%{d.oran}</p>
+              </div>
+            ))}
+          </div>
+        </motion.div>
       </div>
 
       {/* ─── Middle Row: Finance Chart + Top Products ─── */}

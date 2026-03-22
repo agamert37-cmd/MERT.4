@@ -20,7 +20,9 @@ if %errorlevel% neq 0 (
     exit /b 1
 )
 
-for /f "tokens=*" %%v in ('python --version 2^>^&1') do set PY_VER=%%v
+python -c "import sys; print('Python ' + sys.version.split()[0])" > "%TEMP%\pyver.txt" 2>nul
+set /p PY_VER=<"%TEMP%\pyver.txt"
+del "%TEMP%\pyver.txt" >nul 2>nul
 echo  [OK]  %PY_VER% bulundu.
 
 :: ── tkinter kontrolü ────────────────────────────────────────────────────────
