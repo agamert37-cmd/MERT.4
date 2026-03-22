@@ -488,6 +488,23 @@ export function LoginPage() {
   const [adminTab, setAdminTab] = useState<'admin' | 'user'>('user');
   const [activeRecipe, setActiveRecipe] = useState(0);
 
+  // ── Gizli admin tetikleyici (logo'ya 5 hızlı tıklama) ──────────────────
+  const secretTapCount = React.useRef(0);
+  const secretTapTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  const handleSecretTap = () => {
+    secretTapCount.current += 1;
+    if (secretTapTimer.current) clearTimeout(secretTapTimer.current);
+    if (secretTapCount.current >= 5) {
+      secretTapCount.current = 0;
+      setAdminTab('admin');
+      setError('');
+      setAdminPassword('');
+      setShowAdminPanel(true);
+      return;
+    }
+    secretTapTimer.current = setTimeout(() => { secretTapCount.current = 0; }, 2500);
+  };
+
   // News detail state
   const [selectedNews, setSelectedNews] = useState<typeof NEWS_ITEMS[0] | null>(null);
   const [showAllNews, setShowAllNews] = useState(false);
@@ -799,7 +816,10 @@ export function LoginPage() {
           transition={{ delay: 0.2 }}
           className="relative z-20 flex items-center gap-3 px-5 py-4 sm:px-6 sm:py-4 bg-black/60 backdrop-blur-sm border-b border-white/5 flex-shrink-0"
         >
-          <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-blue-600 flex items-center justify-center flex-shrink-0 shadow-lg shadow-blue-600/40">
+          <div
+            onClick={handleSecretTap}
+            className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-blue-600 flex items-center justify-center flex-shrink-0 shadow-lg shadow-blue-600/40 cursor-default select-none"
+          >
             <Sparkles className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
           </div>
           <div className="min-w-0">
