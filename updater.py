@@ -26,6 +26,7 @@ BACKUP_DIR            = os.path.join(REPO_DIR, ".mert4_backups")
 BACKUP_INDEX          = os.path.join(BACKUP_DIR, "index.json")
 DOCKER_IMAGE_NAME     = "mert4-mert-site"   # docker image adı
 MAX_BACKUPS           = 10                  # en fazla kaç yedek saklanır
+SUMMARY_FILE          = os.path.join(REPO_DIR, ".mert4_backups", "summary.json")
 
 # ─── Renkler (Catppuccin Mocha) ──────────────────────────────────────────────
 BG_DARK   = "#1e1e2e"
@@ -246,6 +247,94 @@ class BackupManager:
         self._save_index(index)
 
 
+# ─── Özet Yöneticisi ──────────────────────────────────────────────────────────
+
+class SummaryManager:
+    """Her güncelleme sonrası özet kaydeder ve okur."""
+
+    MAX_HISTORY = 20   # saklanacak maksimum özet sayısı
+
+    def _load(self) -> list:
+        if not os.path.exists(SUMMARY_FILE):
+            return []
+        try:
+            with open(SUMMARY_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            return []
+
+    def _save(self, data: list):
+        os.makedirs(os.path.dirname(SUMMARY_FILE), exist_ok=True)
+        with open(SUMMARY_FILE, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+
+    def record(self, entry: dict):
+        """Yeni bir özet ekler (en başa)."""
+        history = self._load()
+        history.insert(0, entry)
+        history = history[:self.MAX_HISTORY]
+        self._save(history)
+
+    def all(self) -> list:
+        return self._load()
+
+
+def _collect_update_diff(old_hash: str) -> dict:
+    """
+    old_hash: güncelleme öncesi HEAD hash'i
+    Döndürür: {commits: [...], files_changed: int, insertions: int, deletions: int, diff_stat: str}
+    """
+    result = {
+        "commits": [],
+        "files_changed": 0,
+        "insertions": 0,
+        "deletions": 0,
+        "diff_stat": "",
+    }
+    if not old_hash or old_hash == "unknown":
+        return result
+
+    # Yeni gelen commitler
+    try:
+        r = subprocess.run(
+            ["git", "log", f"{old_hash}..HEAD", "--format=%h|%s|%ar"],
+            cwd=REPO_DIR, capture_output=True, text=True, timeout=10
+        )
+        if r.returncode == 0:
+            for line in r.stdout.strip().splitlines():
+                parts = line.split("|", 2)
+                if len(parts) == 3:
+                    result["commits"].append({
+                        "hash": parts[0], "msg": parts[1], "ago": parts[2]
+                    })
+    except Exception:
+        pass
+
+    # Dosya istatistikleri
+    try:
+        r = subprocess.run(
+            ["git", "diff", "--shortstat", old_hash, "HEAD"],
+            cwd=REPO_DIR, capture_output=True, text=True, timeout=10
+        )
+        stat = r.stdout.strip()
+        result["diff_stat"] = stat
+        # "3 files changed, 42 insertions(+), 7 deletions(-)"
+        import re
+        m = re.search(r"(\d+) file", stat)
+        if m:
+            result["files_changed"] = int(m.group(1))
+        m = re.search(r"(\d+) insertion", stat)
+        if m:
+            result["insertions"] = int(m.group(1))
+        m = re.search(r"(\d+) deletion", stat)
+        if m:
+            result["deletions"] = int(m.group(1))
+    except Exception:
+        pass
+
+    return result
+
+
 def _detect_compose_cmd() -> str:
     """docker compose (V2) varsa onu kullan, yoksa docker-compose (V1) ile dön."""
     try:
@@ -280,6 +369,8 @@ class MertUpdater(tk.Tk):
         self._compose_cmd  = _detect_compose_cmd()
         self._behind_count = 0
         self._backup_mgr   = BackupManager()
+        self._summary_mgr  = SummaryManager()
+        self._pre_update_hash = ""   # güncelleme öncesi HEAD hash'i
 
         self._build_ui()
         self._check_status()
@@ -520,6 +611,42 @@ class MertUpdater(tk.Tk):
         self._backup_empty_lbl.pack()
 
         self.after(300, self._refresh_backups)
+
+        # ── Güncelleme Özeti Paneli ───────────────────────────────────────────
+        sbar = tk.Frame(self, bg=BG_DARK)
+        sbar.pack(fill="x", padx=20, pady=(10, 0))
+
+        tk.Label(
+            sbar, text="Son Güncelleme Özeti",
+            font=("Segoe UI", 9, "bold"), fg=FG_DIM, bg=BG_DARK
+        ).pack(side="left")
+
+        # Geçmiş özetler dropdown
+        self._summary_history_var = tk.StringVar(value="En son")
+        self._summary_ids = []
+        self._summary_menu = ttk.Combobox(
+            sbar, textvariable=self._summary_history_var,
+            font=("Segoe UI", 8), state="readonly", width=28
+        )
+        self._summary_menu.pack(side="left", padx=(10, 0))
+        self._summary_menu.bind("<<ComboboxSelected>>", self._on_summary_select)
+
+        self._summary_panel = tk.Frame(
+            self, bg=BG_CARD,
+            highlightbackground=BORDER, highlightthickness=1
+        )
+        self._summary_panel.pack(fill="x", padx=20, pady=(3, 0))
+
+        # İlk yükleme — "henüz özet yok" etiketi
+        self._summary_content = tk.Frame(self._summary_panel, bg=BG_CARD)
+        self._summary_content.pack(fill="x")
+        tk.Label(
+            self._summary_content,
+            text="Henüz güncelleme yapılmadı",
+            font=("Segoe UI", 9), fg=FG_DIM, bg=BG_CARD, pady=8
+        ).pack()
+
+        self.after(200, self._refresh_summary_ui)
 
         # ── Konsol başlık satırı ──────────────────────────────────────────────
         con_bar = tk.Frame(self, bg=BG_DARK)
@@ -765,7 +892,7 @@ class MertUpdater(tk.Tk):
             self.after(0, self._clear_console)
             self.after(0, self._log, "━━━ Git Güncelleme ━━━", "info")
 
-            # Güncelleme öncesi otomatik yedek
+            self._capture_pre_hash()
             self._auto_backup_before_update(
                 include_docker=self.backup_docker_var.get()
             )
@@ -776,6 +903,7 @@ class MertUpdater(tk.Tk):
             if not ok1:
                 self.after(0, self._log, "Fetch başarısız! İşlem durdu.", "error")
                 self._end_task()
+                self._save_summary("Güncelleme", False, time.monotonic() - self._task_start)
                 return
 
             ok2, _ = self._run_cmd(
@@ -791,6 +919,8 @@ class MertUpdater(tk.Tk):
             else:
                 self.after(0, self._log, "Reset başarısız!", "error")
 
+            elapsed = time.monotonic() - self._task_start
+            self._save_summary("Güncelleme", ok2, elapsed)
             self._end_task("Güncelleme")
 
         self._threaded(_task)
@@ -808,7 +938,10 @@ class MertUpdater(tk.Tk):
             self._start_task()
             self.after(0, self._clear_console)
             self.after(0, self._log, "━━━ Docker Build ━━━", "info")
+            self._capture_pre_hash()
             ok = self._build_inner()
+            elapsed = time.monotonic() - self._task_start
+            self._save_summary("Build & Başlat", ok, elapsed)
             if ok:
                 self.after(0, self._log, "━━━ Build Tamamlandı! ━━━", "success")
                 self.after(0, self._log, f"→ {APP_URL}", "success")
@@ -1001,6 +1134,159 @@ class MertUpdater(tk.Tk):
         )
         self.after(0, self._refresh_backups)
 
+    # ─── Güncelleme Özeti ────────────────────────────────────────────────────
+
+    def _capture_pre_hash(self):
+        """Güncelleme öncesi HEAD'i kaydet."""
+        try:
+            r = subprocess.run(
+                ["git", "log", "--format=%H", "-1"],
+                cwd=REPO_DIR, capture_output=True, text=True, timeout=5
+            )
+            self._pre_update_hash = r.stdout.strip() if r.returncode == 0 else ""
+        except Exception:
+            self._pre_update_hash = ""
+
+    def _save_summary(self, op_label: str, success: bool, elapsed: float):
+        """Güncelleme bitti, özeti hesapla ve kaydet."""
+        diff = _collect_update_diff(self._pre_update_hash)
+        ts = datetime.datetime.now()
+        entry = {
+            "id":            ts.strftime("%Y%m%d_%H%M%S"),
+            "timestamp":     ts.strftime("%d.%m.%Y %H:%M:%S"),
+            "operation":     op_label,
+            "success":       success,
+            "elapsed_s":     round(elapsed, 1),
+            "new_commits":   len(diff["commits"]),
+            "commits":       diff["commits"],
+            "files_changed": diff["files_changed"],
+            "insertions":    diff["insertions"],
+            "deletions":     diff["deletions"],
+            "diff_stat":     diff["diff_stat"],
+        }
+        self._summary_mgr.record(entry)
+        self.after(0, self._refresh_summary_ui)
+
+    def _refresh_summary_ui(self):
+        """Özet panelini ve dropdown'ı güncelle."""
+        history = self._summary_mgr.all()
+        if not history:
+            return
+
+        # Dropdown güncelle
+        labels = [
+            f"{h['timestamp']}  —  {h['operation']}"
+            for h in history
+        ]
+        self._summary_ids = [h["id"] for h in history]
+        self._summary_menu["values"] = labels
+        self._summary_menu.current(0)
+
+        # İlk özeti göster
+        self._render_summary(history[0])
+
+    def _on_summary_select(self, event=None):
+        idx = self._summary_menu.current()
+        if idx < 0:
+            return
+        history = self._summary_mgr.all()
+        if idx < len(history):
+            self._render_summary(history[idx])
+
+    def _render_summary(self, s: dict):
+        """Seçili özeti panelde göster."""
+        # Mevcut içeriği temizle
+        for w in self._summary_content.winfo_children():
+            w.destroy()
+
+        ok      = s.get("success", False)
+        color   = SUCCESS if ok else ERROR
+        icon    = "✓" if ok else "✗"
+        elapsed = s.get("elapsed_s", 0)
+        n_com   = s.get("new_commits", 0)
+        n_files = s.get("files_changed", 0)
+        ins     = s.get("insertions", 0)
+        dels    = s.get("deletions", 0)
+
+        # ─ Üst şerit: durum + istatistikler ─────────────────────────────────
+        top = tk.Frame(self._summary_content, bg=BG_CARD)
+        top.pack(fill="x", padx=10, pady=(6, 4))
+
+        # Durum badge
+        tk.Label(
+            top, text=f" {icon} {s.get('operation', '?')} ",
+            font=("Segoe UI", 9, "bold"), fg=BG_DARK, bg=color,
+            padx=6, pady=2
+        ).pack(side="left")
+
+        tk.Label(
+            top, text=f"  {s.get('timestamp', '')}",
+            font=("Segoe UI", 8), fg=FG_DIM, bg=BG_CARD
+        ).pack(side="left")
+
+        # Sağ: stat kutucukları
+        stats_frame = tk.Frame(top, bg=BG_CARD)
+        stats_frame.pack(side="right")
+
+        def stat_box(parent, val, lbl, fg_col):
+            f = tk.Frame(parent, bg=BG_INPUT, padx=8, pady=2)
+            f.pack(side="left", padx=3)
+            tk.Label(f, text=str(val), font=("Segoe UI", 11, "bold"),
+                     fg=fg_col, bg=BG_INPUT).pack()
+            tk.Label(f, text=lbl, font=("Segoe UI", 7),
+                     fg=FG_DIM, bg=BG_INPUT).pack()
+
+        stat_box(stats_frame, n_com,           "commit",   ACCENT)
+        stat_box(stats_frame, n_files,         "dosya",    PURPLE)
+        stat_box(stats_frame, f"+{ins}",       "ekleme",   SUCCESS)
+        stat_box(stats_frame, f"-{dels}",      "silme",    ERROR)
+        stat_box(stats_frame, f"{elapsed}s",   "süre",     WARNING)
+
+        # ─ Commit listesi ──────────────────────────────────────────────────
+        commits = s.get("commits", [])
+        if commits:
+            c_frame = tk.Frame(self._summary_content, bg=BG_CARD)
+            c_frame.pack(fill="x", padx=10, pady=(0, 6))
+
+            for c in commits[:6]:   # en fazla 6 commit göster
+                row = tk.Frame(c_frame, bg=BG_CARD)
+                row.pack(fill="x", pady=1)
+
+                tk.Label(
+                    row, text=c["hash"],
+                    font=("Consolas", 8, "bold"), fg=ACCENT,
+                    bg=BG_CARD, width=8, anchor="w"
+                ).pack(side="left")
+
+                tk.Label(
+                    row, text=f"({c['ago']})",
+                    font=("Consolas", 8), fg=FG_DIM,
+                    bg=BG_CARD, width=12, anchor="w"
+                ).pack(side="left")
+
+                msg = c["msg"]
+                if len(msg) > 70:
+                    msg = msg[:70] + "…"
+                tk.Label(
+                    row, text=msg,
+                    font=("Segoe UI", 8), fg=FG_TEXT,
+                    bg=BG_CARD, anchor="w"
+                ).pack(side="left")
+
+            if len(commits) > 6:
+                tk.Label(
+                    c_frame,
+                    text=f"  … ve {len(commits) - 6} commit daha",
+                    font=("Segoe UI", 8), fg=FG_DIM, bg=BG_CARD
+                ).pack(anchor="w", pady=(0, 2))
+
+        elif n_com == 0 and ok:
+            tk.Label(
+                self._summary_content,
+                text="  Kod değişikliği yok — sadece build/restart yapıldı",
+                font=("Segoe UI", 8), fg=FG_DIM, bg=BG_CARD, pady=4
+            ).pack(anchor="w", padx=10)
+
     def _do_restore(self, backup_id: str, label: str):
         if not messagebox.askyesno(
             "Geri Yükle",
@@ -1040,7 +1326,7 @@ class MertUpdater(tk.Tk):
             self.after(0, self._clear_console)
             self.after(0, self._log, "⚡━━━ Tam Güncelleme ━━━⚡", "info")
 
-            # Güncelleme öncesi otomatik yedek
+            self._capture_pre_hash()
             self._auto_backup_before_update(
                 include_docker=self.backup_docker_var.get()
             )
@@ -1050,6 +1336,7 @@ class MertUpdater(tk.Tk):
             )
             if not ok1:
                 self.after(0, self._log, "Fetch başarısız! Duruyorum.", "error")
+                self._save_summary("Tam Güncelleme", False, time.monotonic() - self._task_start)
                 self._end_task("Tam Güncelleme")
                 return
 
@@ -1058,11 +1345,14 @@ class MertUpdater(tk.Tk):
             )
             if not ok2:
                 self.after(0, self._log, "Reset başarısız! Duruyorum.", "error")
+                self._save_summary("Tam Güncelleme", False, time.monotonic() - self._task_start)
                 self._end_task("Tam Güncelleme")
                 return
 
             self.after(0, self._log, "3/3 — Docker build & başlat...", "info")
             ok3 = self._build_inner()
+            elapsed = time.monotonic() - self._task_start
+            self._save_summary("Tam Güncelleme", ok3, elapsed)
 
             if ok3:
                 self.after(0, self._log, "⚡━━━ Her Şey Tamam! Site Hazır! ━━━⚡", "success")
