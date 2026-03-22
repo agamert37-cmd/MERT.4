@@ -34,6 +34,7 @@ import {
   CalendarHeatmap, BarRace, GradientArc
 } from '../components/ChartComponents';
 import { ActivityTimeline } from '../components/ActivityTimeline';
+import { useIsMobile } from '../hooks/useMobile';
 
 const safeNum = (v: any, fallback = 0): number => {
   if (v === null || v === undefined || v === '') return fallback;
@@ -704,6 +705,9 @@ export function DashboardPage() {
   }, [rawFisler, rawKasa]);
 
   const [activityTab, setActivityTab] = useState<'recent' | 'deleted'>('recent');
+  const isMobile = useIsMobile(768);
+  const [showAdvancedMobile, setShowAdvancedMobile] = useState(false);
+  const [notesExpanded, setNotesExpanded] = useState(false);
 
   const weekTotal = weeklySalesData.reduce((s, d) => s + d.satis, 0);
 
@@ -725,7 +729,7 @@ export function DashboardPage() {
       
       {/* ─── Güvenlik Kalkanı — Güncelleme Notları ─── */}
       <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }}
-        className="relative overflow-hidden rounded-2xl lg:rounded-3xl bg-gradient-to-br from-emerald-500/[0.07] via-[#111] to-blue-500/[0.05] border border-emerald-500/20"
+        className="relative overflow-hidden rounded-2xl lg:rounded-3xl bg-gradient-to-br from-emerald-500/[0.07] via-[#111] to-blue-500/[0.05] border border-emerald-500/20 hover:border-emerald-500/40 hover:shadow-xl hover:shadow-emerald-500/5 transition-all group"
       >
         {/* Dekoratif arka plan */}
         <div className="absolute top-0 right-0 p-6 opacity-[0.06]">
@@ -734,7 +738,10 @@ export function DashboardPage() {
         <div className="absolute bottom-0 left-0 w-48 h-48 bg-emerald-500/5 rounded-full blur-3xl -translate-x-1/2 translate-y-1/2" />
 
         {/* Üst başlık */}
-        <div className="relative z-10 flex items-center gap-3 sm:gap-4 p-4 sm:p-5 pb-3">
+        <div
+          className="relative z-10 flex items-center gap-3 sm:gap-4 p-4 sm:p-5 pb-3 cursor-pointer"
+          onClick={() => isMobile ? setNotesExpanded(v => !v) : navigate('/guncelleme-notlari')}
+        >
           <div className="p-2.5 sm:p-3 bg-emerald-500/20 rounded-xl backdrop-blur-sm border border-emerald-500/30 shadow-lg shadow-emerald-500/10">
             <ShieldCheck className="w-5 h-5 sm:w-6 sm:h-6 text-emerald-400" />
           </div>
@@ -745,16 +752,23 @@ export function DashboardPage() {
             </div>
             <p className="text-[10px] sm:text-xs text-gray-500">Son güncellemeler ve yapılan iyileştirmeler</p>
           </div>
-          <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/20 shrink-0">
-            <span className="relative flex h-2 w-2">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-60" />
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-400" />
-            </span>
-            <span className="text-[9px] font-bold text-emerald-400 uppercase tracking-wider">Koruma Aktif</span>
+          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/20 shrink-0">
+            {isMobile ? (
+              <span className="text-[9px] font-bold text-emerald-400">{notesExpanded ? '▲ Kapat' : '▼ Göster'}</span>
+            ) : (
+              <>
+                <span className="relative flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-60" />
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-400" />
+                </span>
+                <span className="text-[9px] font-bold text-emerald-400 uppercase tracking-wider">Koruma Aktif</span>
+              </>
+            )}
           </div>
         </div>
 
         {/* Güncelleme notları listesi */}
+        {(!isMobile || notesExpanded) && (
         <div className="relative z-10 px-4 sm:px-5 pb-4 sm:pb-5">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-2.5">
             {[
@@ -807,6 +821,7 @@ export function DashboardPage() {
             <span className="text-[8px] sm:text-[9px] text-gray-600 font-mono">Son güncelleme: {new Date().toLocaleDateString('tr-TR')}</span>
           </div>
         </div>
+        )}
       </motion.div>
 
       {/* OpenAI Banner */}
@@ -1563,11 +1578,14 @@ export function DashboardPage() {
       </div>
 
       {/* ─── KPI Ticker Banner ─── */}
+      {(!isMobile || showAdvancedMobile) && (
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.62 }}>
         <KPITicker items={kpiTickerItems} />
       </motion.div>
+      )}
 
       {/* ─── Trend Comparison + Bullet KPIs Row ─── */}
+      {(!isMobile || showAdvancedMobile) && (
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-4 lg:gap-6">
         {/* Haftalık Trend Karşılaştırma */}
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.63 }}
@@ -1601,8 +1619,21 @@ export function DashboardPage() {
           </div>
         </motion.div>
       </div>
+      )}
+
+      {/* ─── Mobil: Gelişmiş Analitik Toggle ─── */}
+      {isMobile && (
+        <button
+          onClick={() => setShowAdvancedMobile(v => !v)}
+          className="w-full py-3 px-4 rounded-2xl border border-white/10 bg-white/[0.03] hover:bg-white/[0.06] transition-all flex items-center justify-center gap-2 text-sm font-bold text-gray-400"
+        >
+          <BarChart3 className="w-4 h-4 text-blue-400" />
+          {showAdvancedMobile ? 'Gelişmiş Analizleri Gizle ▲' : 'Gelişmiş Analizleri Göster ▼'}
+        </button>
+      )}
 
       {/* ─── Advanced Analytics Row ─── */}
+      {(!isMobile || showAdvancedMobile) && (
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 sm:gap-4 lg:gap-6">
 
         {/* Saatlik Satış Isı Haritası */}
@@ -1641,8 +1672,10 @@ export function DashboardPage() {
           )}
         </motion.div>
       </div>
+      )}
 
       {/* ─── Performance Radar + Funnel + Waterfall Row ─── */}
+      {(!isMobile || showAdvancedMobile) && (
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 lg:gap-6">
 
         {/* Performans Radarı */}
@@ -1708,8 +1741,10 @@ export function DashboardPage() {
           <WaterfallChart items={waterfallData} height={180} />
         </motion.div>
       </div>
+      )}
 
       {/* ─── Week Comparison + Stock Flow + Production Row ─── */}
+      {(!isMobile || showAdvancedMobile) && (
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 lg:gap-6">
 
         {/* Haftalık Karşılaştırma */}
@@ -1801,6 +1836,7 @@ export function DashboardPage() {
           )}
         </motion.div>
       </div>
+      )}
 
       {/* ─── Cari Borç/Alacak Özet ─── */}
       {cariStats.toplam > 0 && (
