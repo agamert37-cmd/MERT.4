@@ -32,6 +32,7 @@ import { PazarlamaPage } from "./pages/PazarlamaPage";
 import { CeklerPage } from "./pages/CeklerPage";
 import { SecurityPage } from "./pages/SecurityPage";
 import { FaturaPage } from "./pages/FaturaPage";
+import { UpdateNotesPage } from "./pages/UpdateNotesPage";
 
 /**
  * Route guard: kullanıcı giriş yapmamışsa /login'e yönlendirir.
@@ -125,6 +126,7 @@ export const router = createBrowserRouter([
           { path: "yedekler", element: <ProtectedRoute element={<YedeklerPage />} /> },
           { path: "guvenlik", element: <ProtectedRoute element={<SecurityPage />} /> },
           { path: "faturalar", element: <ProtectedRoute element={<FaturaPage />} /> },
+          { path: "guncelleme-notlari", element: <ProtectedRoute element={<UpdateNotesPage />} /> },
         ],
       },
       {
