@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef } from 'react';
 import { UserCog, Shield, Clock, MapPin, Phone, Mail, Plus, Trash2, Activity, MousePointerClick, History, Eye, EyeOff, Edit3, Lock, Key, Save, X, Search, CheckCircle2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import * as Dialog from '@radix-ui/react-dialog';
@@ -189,6 +189,7 @@ export function PersonelPage() {
   const [editConfirmPassword, setEditConfirmPassword] = useState('');
   const [editPermissions, setEditPermissions] = useState<string[]>([]);
 
+  const [isSaving, setIsSaving] = useState(false);
   const [isRequestsModalOpen, setIsRequestsModalOpen] = useState(false);
   const [roleRequests, setRoleRequests] = useState<any[]>([]);
 
@@ -288,14 +289,15 @@ export function PersonelPage() {
     if (ev) ev.stopPropagation();
     setEditId(person.id); setEditName(person.name); setEditUsername(person.username); setEditPhone(person.phone);
     setEditEmail(person.email); setEditDepartment(person.department || person.position); setEditRole(person.role);
-    setEditSalary(String(person.salary || 0)); setEditPin(person.pinCode || ''); setEditPassword('');
+    setEditSalary(String(person.salary || 0)); setEditPin(''); setEditPassword('');
     setEditConfirmPassword(''); setEditPermissions(person.permissions || []); setIsEditModalOpen(true);
   };
 
   const handleUpdatePersonnel = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    if (isSaving) return;
     if (!canEdit) {
-      toast.error('Personel düzenleme yetkiniz bulunmamaktadır.');
+      toast.error('Personel düzenleme yetkiniz bulunmamaktadır. Yönetici hesabıyla giriş yapın.');
       logActivity('security_alert', 'Yetkisiz Personel Düzenleme', { level: 'high', employeeName: user?.name, description: 'Kullanıcı personel düzenlemeye çalıştı ancak yetkisi yoktu.' });
       return;
     }
@@ -348,11 +350,19 @@ export function PersonelPage() {
     if (editPin.trim()) updates.pinCode = await hashString(editPin.trim());
     if (editPassword.trim()) updates.password = await hashString(editPassword.trim());
 
-    await updateItem(editId, updates);
-    appendToLogChain(`personel_update:${editId}:${editName}`);
-    emit('personel:updated', { personnelId: editId, name: editName });
-    toast.success(`${editName} bilgileri güncellendi.`);
-    setIsEditModalOpen(false);
+    setIsSaving(true);
+    try {
+      await updateItem(editId, updates);
+      appendToLogChain(`personel_update:${editId}:${editName}`);
+      emit('personel:updated', { personnelId: editId, name: editName });
+      toast.success(`${editName} bilgileri güncellendi.`);
+      setIsEditModalOpen(false);
+    } catch (err) {
+      console.error('[PersonelPage] updateItem error:', err);
+      toast.error('Kayıt sırasında bir hata oluştu. Lütfen tekrar deneyin.');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const handleDelete = async (e: React.MouseEvent, id: string, name: string) => {
@@ -649,8 +659,10 @@ export function PersonelPage() {
             </div>
 
             <div className="flex gap-3 pt-4">
-              <Dialog.Close className="flex-1 py-4 bg-white/5 hover:bg-white/10 rounded-xl font-bold transition-all">İptal</Dialog.Close>
-              <button type="submit" className="flex-1 py-4 bg-orange-600 hover:bg-orange-500 text-white rounded-xl font-bold transition-all shadow-lg shadow-orange-600/20">Güncelle</button>
+              <Dialog.Close disabled={isSaving} className="flex-1 py-4 bg-white/5 hover:bg-white/10 rounded-xl font-bold transition-all disabled:opacity-50">İptal</Dialog.Close>
+              <button type="submit" disabled={isSaving} className="flex-1 py-4 bg-orange-600 hover:bg-orange-500 text-white rounded-xl font-bold transition-all shadow-lg shadow-orange-600/20 disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2">
+                {isSaving ? <><span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />Kaydediliyor...</> : 'Güncelle'}
+              </button>
             </div>
           </form>
         </Dialog.Content></Dialog.Portal>

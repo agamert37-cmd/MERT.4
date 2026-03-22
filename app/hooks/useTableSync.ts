@@ -321,20 +321,14 @@ export function useTableSync<T extends { id: string }>(
 
   // ─── Smart merge: KV data + LS pending changes ───────────────────────────
   const smartMerge = useCallback((kvItems: T[], lsItems: T[]): T[] => {
-    const kvMap = new Map(kvItems.map(i => [i.id, i]));
     const merged = new Map<string, T>();
 
-    // Start with all KV items
+    // KV store is authoritative — start with KV data
     kvItems.forEach(item => merged.set(item.id, item));
 
+    // Only override with local data for items that have pending writes from THIS session
     lsItems.forEach(item => {
-      // If this item is pending a write from THIS instance, our local version takes priority
       if (pendingWriteIds.current.has(item.id)) {
-        merged.set(item.id, item);
-      }
-      // If the item exists in LS but NOT in KV, preserve it.
-      // It's likely a pending write from another component/tab that hasn't been flushed yet.
-      if (!kvMap.has(item.id)) {
         merged.set(item.id, item);
       }
     });
