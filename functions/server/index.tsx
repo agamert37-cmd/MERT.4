@@ -331,8 +331,185 @@ app.post("/make-server-daadfb0c/setup-db", async (c) => {
       ON kv_store_daadfb0c (key text_pattern_ops)
     `);
 
-    // 9. RLS kapat
-    for (const tbl of ["personeller","cari_hesaplar","araclar","kasa_islemleri","fisler","urunler","bankalar","kv_store_daadfb0c"]) {
+    // 9. Araç Vardiyaları
+    await run("arac_shifts", `
+      CREATE TABLE IF NOT EXISTS arac_shifts (
+        id              UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+        vehicle_id      TEXT        NOT NULL,
+        vehicle_plate   TEXT        NOT NULL DEFAULT '',
+        vehicle_model   TEXT        DEFAULT '',
+        start_km        NUMERIC(10,2) NOT NULL DEFAULT 0,
+        end_km          NUMERIC(10,2),
+        start_time      TEXT        NOT NULL DEFAULT '',
+        end_time        TEXT,
+        start_timestamp BIGINT      NOT NULL DEFAULT 0,
+        end_timestamp   BIGINT,
+        employee        TEXT        NOT NULL DEFAULT '',
+        employee_id     TEXT        DEFAULT '',
+        status          TEXT        NOT NULL DEFAULT 'active' CHECK (status IN ('active','completed')),
+        total_km        NUMERIC(10,2),
+        date            TEXT        NOT NULL DEFAULT '',
+        created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `);
+
+    // 10. Çekler / Senetler
+    await run("cekler", `
+      CREATE TABLE IF NOT EXISTS cekler (
+        id                      UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+        direction               TEXT        NOT NULL CHECK (direction IN ('alinan','verilen')),
+        amount                  NUMERIC(10,2) NOT NULL DEFAULT 0,
+        collected_amount        NUMERIC(10,2),
+        bank_name               TEXT        NOT NULL DEFAULT '',
+        check_number            TEXT,
+        due_date                TEXT        NOT NULL DEFAULT '',
+        issue_date              TEXT        NOT NULL DEFAULT '',
+        source_type             TEXT        DEFAULT 'musteri' CHECK (source_type IN ('musteri','toptanci')),
+        source_name             TEXT        DEFAULT '',
+        source_id               TEXT        DEFAULT '',
+        recipient_name          TEXT,
+        payment_reason          TEXT,
+        related_fis_id          TEXT,
+        related_fis_description TEXT,
+        photo_front             TEXT,
+        photo_back              TEXT,
+        status                  TEXT        NOT NULL DEFAULT 'beklemede'
+                                            CHECK (status IN ('beklemede','tahsil_edildi','karsiliksiz','iade','ciro','odendi')),
+        status_note             TEXT,
+        endorsed_to             TEXT,
+        endorse_date            TEXT,
+        audit_log               JSONB       DEFAULT '[]'::jsonb,
+        created_by              TEXT        NOT NULL DEFAULT '',
+        updated_at_custom       TEXT,
+        created_at              TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at              TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `);
+
+    // 11. Üretim Profilleri
+    await run("uretim_profilleri", `
+      CREATE TABLE IF NOT EXISTS uretim_profilleri (
+        id                         UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+        name                       TEXT        NOT NULL,
+        default_tup_kg             NUMERIC(10,4) NOT NULL DEFAULT 0,
+        default_paketleme_maliyeti NUMERIC(10,2) NOT NULL DEFAULT 0,
+        default_isyeri_maliyeti    NUMERIC(10,2) NOT NULL DEFAULT 0,
+        default_calisan_maliyeti   NUMERIC(10,2) NOT NULL DEFAULT 0,
+        default_tup_fiyat_kg       NUMERIC(10,4) NOT NULL DEFAULT 0,
+        avg_fire_orani             NUMERIC(5,4)  NOT NULL DEFAULT 0,
+        avg_cop_orani              NUMERIC(5,4)  NOT NULL DEFAULT 0,
+        created_at                 TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at                 TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `);
+
+    // 12. Üretim Kayıtları
+    await run("uretim_kayitlari", `
+      CREATE TABLE IF NOT EXISTS uretim_kayitlari (
+        id                     UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+        profile_id             TEXT        NOT NULL DEFAULT '',
+        profile_name           TEXT        NOT NULL DEFAULT '',
+        date                   TEXT        NOT NULL DEFAULT '',
+        hammadde_stok_id       TEXT        DEFAULT '',
+        hammadde_adi           TEXT        DEFAULT '',
+        toptanci_adi           TEXT        DEFAULT '',
+        tr_kodu                TEXT        DEFAULT '',
+        cig_kg                 NUMERIC(10,3) NOT NULL DEFAULT 0,
+        birim_fiyat            NUMERIC(10,4) NOT NULL DEFAULT 0,
+        cop_kg                 NUMERIC(10,3) NOT NULL DEFAULT 0,
+        temiz_kg               NUMERIC(10,3) NOT NULL DEFAULT 0,
+        cop_orani              NUMERIC(5,4)  NOT NULL DEFAULT 0,
+        cikti_kg               NUMERIC(10,3) NOT NULL DEFAULT 0,
+        fire_kg                NUMERIC(10,3) NOT NULL DEFAULT 0,
+        fire_orani             NUMERIC(5,4)  NOT NULL DEFAULT 0,
+        kazan_sayisi           INTEGER       NOT NULL DEFAULT 0,
+        pis_suresi_saat        NUMERIC(5,2)  NOT NULL DEFAULT 0,
+        tup_per_kazan          NUMERIC(5,2)  NOT NULL DEFAULT 0,
+        tup_baslangic_kg       NUMERIC(10,3) NOT NULL DEFAULT 0,
+        tup_bitis_kg           NUMERIC(10,3) NOT NULL DEFAULT 0,
+        tup_kullanilan_kg      NUMERIC(10,3) NOT NULL DEFAULT 0,
+        tup_fiyat_kg           NUMERIC(10,4) NOT NULL DEFAULT 0,
+        paketleme_maliyeti     NUMERIC(10,2) NOT NULL DEFAULT 0,
+        isyeri_maliyeti        NUMERIC(10,2) NOT NULL DEFAULT 0,
+        calisan_maliyeti       NUMERIC(10,2) NOT NULL DEFAULT 0,
+        toplam_maliyet         NUMERIC(10,2) NOT NULL DEFAULT 0,
+        kg_basina_maliyet      NUMERIC(10,4) NOT NULL DEFAULT 0,
+        cikti_urun_adi         TEXT          DEFAULT '',
+        cikti_stok_id          TEXT          DEFAULT '',
+        stok_islemleri_yapildi BOOLEAN       NOT NULL DEFAULT false,
+        created_at             TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at             TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `);
+
+    // 13. Faturalar
+    await run("faturalar", `
+      CREATE TABLE IF NOT EXISTS faturalar (
+        id                 UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+        type               TEXT        NOT NULL CHECK (type IN ('alis','satis')),
+        status             TEXT        NOT NULL DEFAULT 'aktif' CHECK (status IN ('aktif','iptal')),
+        counter_party      TEXT        NOT NULL DEFAULT '',
+        counter_party_id   TEXT,
+        issued_to          TEXT        NOT NULL DEFAULT '',
+        issued_by          TEXT        NOT NULL DEFAULT '',
+        fatura_no          TEXT,
+        date               TEXT        NOT NULL DEFAULT '',
+        kdv_rate           NUMERIC(5,2) NOT NULL DEFAULT 0,
+        net_amount         NUMERIC(10,2) NOT NULL DEFAULT 0,
+        kdv_amount         NUMERIC(10,2) NOT NULL DEFAULT 0,
+        gross_amount       NUMERIC(10,2) NOT NULL DEFAULT 0,
+        tevkifat_rate      NUMERIC(5,4),
+        tevkifat_amount    NUMERIC(10,2),
+        is_linked_to_goods BOOLEAN     NOT NULL DEFAULT false,
+        linked_fis_id      TEXT,
+        fatura_items       JSONB       DEFAULT '[]'::jsonb,
+        photo              TEXT        NOT NULL DEFAULT '',
+        description        TEXT,
+        cancelled_at       TEXT,
+        cancelled_by       TEXT,
+        created_at         TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at         TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `);
+
+    // 14. Fatura Stok Kalemleri
+    await run("fatura_stok", `
+      CREATE TABLE IF NOT EXISTS fatura_stok (
+        id                UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+        name              TEXT        NOT NULL,
+        unit              TEXT        NOT NULL DEFAULT 'KG',
+        description       TEXT,
+        linked_stock_id   TEXT,
+        linked_stock_name TEXT,
+        created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `);
+
+    // 15. updated_at trigger fonksiyonu ve trigger'lar
+    await run("set_updated_at_fn", `
+      CREATE OR REPLACE FUNCTION set_updated_at()
+      RETURNS TRIGGER AS $$
+      BEGIN NEW.updated_at = NOW(); RETURN NEW; END;
+      $$ LANGUAGE plpgsql
+    `);
+    for (const tbl of ["personeller","cari_hesaplar","araclar","arac_shifts","kasa_islemleri","urunler","bankalar","cekler","uretim_profilleri","uretim_kayitlari","faturalar","fatura_stok"]) {
+      await run(`trigger_${tbl}`, `
+        CREATE OR REPLACE TRIGGER ${tbl}_updated_at
+        BEFORE UPDATE ON ${tbl}
+        FOR EACH ROW EXECUTE FUNCTION set_updated_at()
+      `);
+    }
+
+    // 16. JSONB GIN index
+    await run("idx_kv_gin", `
+      CREATE INDEX IF NOT EXISTS idx_kv_store_value_gin
+      ON kv_store_daadfb0c USING GIN (value)
+    `);
+
+    // 17. RLS kapat (tüm tablolar)
+    for (const tbl of ["personeller","cari_hesaplar","araclar","arac_shifts","kasa_islemleri","fisler","urunler","bankalar","cekler","uretim_profilleri","uretim_kayitlari","faturalar","fatura_stok","kv_store_daadfb0c"]) {
       await run(`rls_${tbl}`, `ALTER TABLE ${tbl} DISABLE ROW LEVEL SECURITY`);
     }
 
@@ -360,7 +537,7 @@ app.get("/make-server-daadfb0c/check-tables", async (c) => {
   try {
     const supabase = getSupabaseAdmin();
 
-    const tables = ["kv_store_daadfb0c","personeller","cari_hesaplar","araclar","kasa_islemleri","fisler","urunler","bankalar"];
+    const tables = ["kv_store_daadfb0c","personeller","cari_hesaplar","araclar","arac_shifts","kasa_islemleri","fisler","urunler","bankalar","cekler","uretim_profilleri","uretim_kayitlari","faturalar","fatura_stok"];
     const results: Record<string, boolean> = {};
 
     for (const table of tables) {
