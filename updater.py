@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-MERT.4 Proje Güncelleme Aracı  v3
+MERT.4 Proje Güncelleme Aracı  v3.1
 Windows GUI uygulaması - Git & Docker işlemleri
 """
 
@@ -12,6 +12,8 @@ import os
 import datetime
 import time
 import webbrowser
+import json
+import shutil
 
 # ─── Ayarlar ────────────────────────────────────────────────────────────────
 REPO_DIR              = os.path.dirname(os.path.abspath(__file__))
@@ -20,6 +22,10 @@ BRANCH                = "claude/multi-db-sync-setup-3DmYn"
 APP_URL               = "http://localhost:8080"
 STATUS_REFRESH_MS     = 30_000   # 30 saniye
 CONSOLE_MAX_LINES     = 1_200    # bu limitin üstünde eski satırlar silinir
+BACKUP_DIR            = os.path.join(REPO_DIR, ".mert4_backups")
+BACKUP_INDEX          = os.path.join(BACKUP_DIR, "index.json")
+DOCKER_IMAGE_NAME     = "mert4-mert-site"   # docker image adı
+MAX_BACKUPS           = 10                  # en fazla kaç yedek saklanır
 
 # ─── Renkler (Catppuccin Mocha) ──────────────────────────────────────────────
 BG_DARK   = "#1e1e2e"
@@ -59,6 +65,187 @@ def _bind_hover(widget: tk.Widget, normal: str, hover: str):
     widget.bind("<Leave>", lambda e: widget.configure(bg=normal))
 
 
+# ─── Yedekleme Yöneticisi ─────────────────────────────────────────────────────
+
+class BackupManager:
+    """Git hash + isteğe bağlı Docker image yedekleme/geri yükleme."""
+
+    def __init__(self):
+        os.makedirs(BACKUP_DIR, exist_ok=True)
+
+    # ── Index okuma/yazma ──────────────────────────────────────────────────────
+    def _load_index(self) -> list:
+        if not os.path.exists(BACKUP_INDEX):
+            return []
+        try:
+            with open(BACKUP_INDEX, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            return []
+
+    def _save_index(self, index: list):
+        with open(BACKUP_INDEX, "w", encoding="utf-8") as f:
+            json.dump(index, f, ensure_ascii=False, indent=2)
+
+    # ── Yedek oluştur ─────────────────────────────────────────────────────────
+    def create(self, label: str = "", include_docker: bool = False,
+               log_fn=None) -> dict | None:
+        """
+        Yedek oluşturur.
+        - Git hash'i kaydeder (her zaman)
+        - include_docker=True ise docker image'ı da tar olarak yedekler
+        log_fn: oluşturulan satırları loglamak için callback(msg, tag)
+        """
+        def log(msg, tag="dim"):
+            if log_fn:
+                log_fn(msg, tag)
+
+        ts = datetime.datetime.now()
+        backup_id = ts.strftime("%Y%m%d_%H%M%S")
+        ts_str    = ts.strftime("%d.%m.%Y %H:%M:%S")
+
+        # Git bilgileri
+        try:
+            r = subprocess.run(
+                ["git", "log", "--format=%H|%s|%ar", "-1"],
+                cwd=REPO_DIR, capture_output=True, text=True, timeout=10
+            )
+            parts = r.stdout.strip().split("|", 2) if r.returncode == 0 else []
+            git_hash = parts[0] if parts else "unknown"
+            git_msg  = parts[1] if len(parts) > 1 else ""
+            git_ago  = parts[2] if len(parts) > 2 else ""
+        except Exception:
+            git_hash = "unknown"
+            git_msg  = ""
+            git_ago  = ""
+
+        # Docker image yedekleme (opsiyonel)
+        docker_file = None
+        if include_docker:
+            tar_path = os.path.join(BACKUP_DIR, f"docker_{backup_id}.tar")
+            log(f"Docker image kaydediliyor → {os.path.basename(tar_path)}", "dim")
+            try:
+                r = subprocess.run(
+                    ["docker", "save", "-o", tar_path, DOCKER_IMAGE_NAME],
+                    capture_output=True, text=True, timeout=300
+                )
+                if r.returncode == 0:
+                    size_mb = os.path.getsize(tar_path) / (1024 * 1024)
+                    log(f"Docker image yedeklendi ({size_mb:.1f} MB)", "success")
+                    docker_file = os.path.basename(tar_path)
+                else:
+                    log(f"Docker yedekleme başarısız: {r.stderr.strip()}", "warning")
+            except Exception as e:
+                log(f"Docker yedekleme hatası: {e}", "warning")
+
+        entry = {
+            "id":           backup_id,
+            "timestamp":    ts_str,
+            "label":        label or "Manuel yedek",
+            "git_hash":     git_hash,
+            "git_hash_short": git_hash[:7],
+            "git_msg":      git_msg,
+            "git_ago":      git_ago,
+            "docker_file":  docker_file,
+        }
+
+        index = self._load_index()
+        index.insert(0, entry)
+
+        # Eski yedekleri temizle
+        if len(index) > MAX_BACKUPS:
+            removed = index[MAX_BACKUPS:]
+            index   = index[:MAX_BACKUPS]
+            for old in removed:
+                if old.get("docker_file"):
+                    old_path = os.path.join(BACKUP_DIR, old["docker_file"])
+                    try:
+                        os.remove(old_path)
+                    except Exception:
+                        pass
+
+        self._save_index(index)
+        log(f"✓ Yedek oluşturuldu: {backup_id}  ({git_hash[:7]}  {git_msg[:50]})", "success")
+        return entry
+
+    # ── Geri yükle ────────────────────────────────────────────────────────────
+    def restore(self, backup_id: str, compose_cmd: str,
+                log_fn=None) -> bool:
+        """Verilen yedeğe geri döner."""
+        def log(msg, tag="dim"):
+            if log_fn:
+                log_fn(msg, tag)
+
+        index = self._load_index()
+        entry = next((e for e in index if e["id"] == backup_id), None)
+        if not entry:
+            log(f"Yedek bulunamadı: {backup_id}", "error")
+            return False
+
+        git_hash = entry["git_hash"]
+        log(f"Geri yükleme başlatılıyor → {entry['timestamp']}  ({git_hash[:7]})", "info")
+
+        # Docker image geri yükle (varsa)
+        docker_ok = False
+        if entry.get("docker_file"):
+            tar_path = os.path.join(BACKUP_DIR, entry["docker_file"])
+            if os.path.exists(tar_path):
+                log("Docker image geri yükleniyor...", "dim")
+                r = subprocess.run(
+                    ["docker", "load", "-i", tar_path],
+                    capture_output=True, text=True, timeout=300
+                )
+                if r.returncode == 0:
+                    log("Docker image geri yüklendi.", "success")
+                    docker_ok = True
+                else:
+                    log(f"Docker load hatası: {r.stderr.strip()}", "warning")
+
+        # Container durdur
+        log("Container durduruluyor...", "dim")
+        subprocess.run(f"{compose_cmd} down", shell=True, cwd=REPO_DIR,
+                       capture_output=True, text=True, timeout=60)
+
+        # Git hash'e dön
+        log(f"Kod geri yükleniyor: git checkout {git_hash[:7]}...", "dim")
+        r = subprocess.run(
+            ["git", "checkout", git_hash],
+            cwd=REPO_DIR, capture_output=True, text=True, timeout=30
+        )
+        if r.returncode != 0:
+            log(f"Git checkout hatası: {r.stderr.strip()}", "error")
+            return False
+        log(f"Kod geri yüklendi: {git_hash[:7]}", "success")
+
+        # Container'ı yeniden başlat (docker image varsa up -d, yoksa build et)
+        if docker_ok:
+            log("Container yedek image ile başlatılıyor...", "dim")
+            subprocess.run(f"{compose_cmd} up -d", shell=True, cwd=REPO_DIR,
+                           capture_output=True, text=True, timeout=60)
+        else:
+            log("Docker image yoktu, yeniden build ediliyor...", "dim")
+            subprocess.run(f"{compose_cmd} up --build -d", shell=True, cwd=REPO_DIR,
+                           capture_output=True, text=True, timeout=600)
+
+        log("━━━ Geri yükleme tamamlandı! ━━━", "success")
+        return True
+
+    # ── Liste ─────────────────────────────────────────────────────────────────
+    def list(self) -> list:
+        return self._load_index()
+
+    def delete(self, backup_id: str):
+        index = self._load_index()
+        entry = next((e for e in index if e["id"] == backup_id), None)
+        if entry and entry.get("docker_file"):
+            try:
+                os.remove(os.path.join(BACKUP_DIR, entry["docker_file"]))
+            except Exception:
+                pass
+        index = [e for e in index if e["id"] != backup_id]
+        self._save_index(index)
+
+
 def _detect_compose_cmd() -> str:
     """docker compose (V2) varsa onu kullan, yoksa docker-compose (V1) ile dön."""
     try:
@@ -88,10 +275,11 @@ class MertUpdater(tk.Tk):
         except Exception:
             pass
 
-        self._running     = False
-        self._task_start  = 0.0          # işlem başlangıç zamanı
-        self._compose_cmd = _detect_compose_cmd()
-        self._behind_count = 0           # kaç commit geride
+        self._running      = False
+        self._task_start   = 0.0
+        self._compose_cmd  = _detect_compose_cmd()
+        self._behind_count = 0
+        self._backup_mgr   = BackupManager()
 
         self._build_ui()
         self._check_status()
@@ -254,6 +442,84 @@ class MertUpdater(tk.Tk):
         self.commits_box.tag_configure("msg",  foreground=FG_TEXT)
         self.commits_box.tag_configure("date", foreground=FG_DIM)
         self.commits_box.tag_configure("new",  foreground=SUCCESS)
+
+        # ── Yedekler paneli ──────────────────────────────────────────────────
+        bbar = tk.Frame(self, bg=BG_DARK)
+        bbar.pack(fill="x", padx=20, pady=(8, 0))
+
+        tk.Label(
+            bbar, text="Yedekler",
+            font=("Segoe UI", 9, "bold"), fg=FG_DIM, bg=BG_DARK
+        ).pack(side="left")
+
+        # Manuel yedek al butonu
+        man_btn = tk.Button(
+            bbar, text="📦 Yedek Al",
+            command=self._do_manual_backup,
+            font=("Segoe UI", 8), fg=BG_DARK, bg=TEAL,
+            relief="flat", cursor="hand2", bd=0, padx=8, pady=2
+        )
+        man_btn.pack(side="left", padx=(8, 0))
+        _bind_hover(man_btn, TEAL, TEAL_H)
+
+        # Docker image dahil et checkbox
+        self.backup_docker_var = tk.BooleanVar(value=False)
+        tk.Checkbutton(
+            bbar, text="Docker image dahil",
+            variable=self.backup_docker_var,
+            font=("Segoe UI", 8), fg=FG_DIM, bg=BG_DARK,
+            selectcolor=BG_CARD, activebackground=BG_DARK
+        ).pack(side="left", padx=(10, 0))
+
+        # Refresh
+        tk.Button(
+            bbar, text="↺", command=self._refresh_backups,
+            font=("Segoe UI", 9), fg=FG_DIM, bg=BG_DARK,
+            relief="flat", cursor="hand2", bd=0, padx=4
+        ).pack(side="left", padx=(4, 0))
+
+        # Yedekler listesi (kaydırmalı çerçeve)
+        b_outer = tk.Frame(
+            self, bg=BG_CARD,
+            highlightbackground=BORDER, highlightthickness=1
+        )
+        b_outer.pack(fill="x", padx=20, pady=(3, 0))
+
+        # Canvas + scrollbar ile kaydırılabilir yedek listesi
+        self._backup_canvas = tk.Canvas(
+            b_outer, bg=BG_CARD, height=90, highlightthickness=0
+        )
+        b_vsb = ttk.Scrollbar(b_outer, orient="vertical",
+                               command=self._backup_canvas.yview)
+        self._backup_canvas.configure(yscrollcommand=b_vsb.set)
+        b_vsb.pack(side="right", fill="y")
+        self._backup_canvas.pack(side="left", fill="both", expand=True)
+
+        self._backup_inner = tk.Frame(self._backup_canvas, bg=BG_CARD)
+        self._backup_canvas_window = self._backup_canvas.create_window(
+            (0, 0), window=self._backup_inner, anchor="nw"
+        )
+        self._backup_inner.bind(
+            "<Configure>",
+            lambda e: self._backup_canvas.configure(
+                scrollregion=self._backup_canvas.bbox("all")
+            )
+        )
+        self._backup_canvas.bind(
+            "<Configure>",
+            lambda e: self._backup_canvas.itemconfig(
+                self._backup_canvas_window, width=e.width
+            )
+        )
+
+        # Boş durum etiketi
+        self._backup_empty_lbl = tk.Label(
+            self._backup_inner, text="Henüz yedek yok",
+            font=("Segoe UI", 9), fg=FG_DIM, bg=BG_CARD, pady=10
+        )
+        self._backup_empty_lbl.pack()
+
+        self.after(300, self._refresh_backups)
 
         # ── Konsol başlık satırı ──────────────────────────────────────────────
         con_bar = tk.Frame(self, bg=BG_DARK)
@@ -499,6 +765,11 @@ class MertUpdater(tk.Tk):
             self.after(0, self._clear_console)
             self.after(0, self._log, "━━━ Git Güncelleme ━━━", "info")
 
+            # Güncelleme öncesi otomatik yedek
+            self._auto_backup_before_update(
+                include_docker=self.backup_docker_var.get()
+            )
+
             ok1, _ = self._run_cmd(
                 f"git fetch {REMOTE} {BRANCH}", "1/2 — Uzak depodan çekiliyor..."
             )
@@ -626,6 +897,140 @@ class MertUpdater(tk.Tk):
 
         self._threaded(_task)
 
+    # ─── Yedekleme ───────────────────────────────────────────────────────────
+
+    def _refresh_backups(self):
+        """Yedekler listesini UI'da günceller."""
+        for w in self._backup_inner.winfo_children():
+            w.destroy()
+
+        backups = self._backup_mgr.list()
+
+        if not backups:
+            tk.Label(
+                self._backup_inner, text="Henüz yedek yok",
+                font=("Segoe UI", 9), fg=FG_DIM, bg=BG_CARD, pady=10
+            ).pack()
+            return
+
+        for i, b in enumerate(backups):
+            row = tk.Frame(self._backup_inner, bg=BG_CARD)
+            row.pack(fill="x", padx=6, pady=2)
+
+            # Renk: ilk yedek (en yeni) biraz öne çıksın
+            row_bg = BG_INPUT if i == 0 else BG_CARD
+
+            inner = tk.Frame(row, bg=row_bg)
+            inner.pack(fill="x", ipady=4, ipadx=6)
+
+            # Tarih
+            tk.Label(
+                inner, text=b["timestamp"],
+                font=("Consolas", 8), fg=TEAL, bg=row_bg, width=18, anchor="w"
+            ).pack(side="left")
+
+            # Etiket
+            tk.Label(
+                inner, text=b["label"],
+                font=("Segoe UI", 8, "bold"), fg=FG_TEXT, bg=row_bg, anchor="w"
+            ).pack(side="left", padx=(4, 0))
+
+            # Hash + commit mesajı
+            msg = f"  {b['git_hash_short']}  {b['git_msg'][:45]}"
+            if len(b.get("git_msg", "")) > 45:
+                msg += "…"
+            tk.Label(
+                inner, text=msg,
+                font=("Consolas", 8), fg=FG_DIM, bg=row_bg, anchor="w"
+            ).pack(side="left")
+
+            # Docker badge
+            if b.get("docker_file"):
+                tk.Label(
+                    inner, text="🐳",
+                    font=("Segoe UI", 8), fg=ACCENT, bg=row_bg
+                ).pack(side="left", padx=(4, 0))
+
+            # Geri Yükle butonu
+            restore_btn = tk.Button(
+                inner, text="↩ Geri Yükle",
+                command=lambda bid=b["id"], blbl=b["label"]: self._do_restore(bid, blbl),
+                font=("Segoe UI", 8), fg=BG_DARK, bg=WARNING,
+                relief="flat", cursor="hand2", bd=0, padx=6, pady=1
+            )
+            restore_btn.pack(side="right", padx=(4, 0))
+            _bind_hover(restore_btn, WARNING, WARNING_H)
+
+            # Sil butonu
+            del_btn = tk.Button(
+                inner, text="🗑",
+                command=lambda bid=b["id"]: self._do_delete_backup(bid),
+                font=("Segoe UI", 8), fg=ERROR, bg=row_bg,
+                relief="flat", cursor="hand2", bd=0, padx=4, pady=1
+            )
+            del_btn.pack(side="right")
+            _bind_hover(del_btn, row_bg, BG_INPUT)
+
+    def _do_manual_backup(self):
+        """Kullanıcının manuel olarak tetiklediği yedekleme."""
+        if self._running:
+            messagebox.showwarning("Bekle", "Başka bir işlem devam ediyor!")
+            return
+        include_docker = self.backup_docker_var.get()
+
+        def _task():
+            self._start_task()
+            self.after(0, self._log, "━━━ Manuel Yedek Alınıyor ━━━", "info")
+            self._backup_mgr.create(
+                label="Manuel yedek",
+                include_docker=include_docker,
+                log_fn=lambda m, t="dim": self.after(0, self._log, m, t)
+            )
+            self.after(0, self._refresh_backups)
+            self._end_task("Yedek")
+
+        threading.Thread(target=_task, daemon=True).start()
+
+    def _auto_backup_before_update(self, include_docker: bool = False):
+        """Güncelleme öncesi otomatik yedek — senkron çalışır (thread içinden)."""
+        self.after(0, self._log, "📦 Güncelleme öncesi yedek alınıyor...", "info")
+        self._backup_mgr.create(
+            label="Otomatik (güncelleme öncesi)",
+            include_docker=include_docker,
+            log_fn=lambda m, t="dim": self.after(0, self._log, m, t)
+        )
+        self.after(0, self._refresh_backups)
+
+    def _do_restore(self, backup_id: str, label: str):
+        if not messagebox.askyesno(
+            "Geri Yükle",
+            f"'{label}' yedeğine geri dönmek istiyor musunuz?\n\n"
+            "Mevcut çalışan kod ve container değişecek."
+        ):
+            return
+
+        def _task():
+            self._start_task()
+            self.after(0, self._clear_console)
+            self.after(0, self._log, "━━━ Yedekten Geri Yükleniyor ━━━", "warning")
+            ok = self._backup_mgr.restore(
+                backup_id,
+                self._compose_cmd,
+                log_fn=lambda m, t="dim": self.after(0, self._log, m, t)
+            )
+            if ok:
+                self.after(0, self._log, f"→ {APP_URL}", "success")
+            self._end_task("Geri Yükleme")
+
+        self._threaded(_task)
+
+    def _do_delete_backup(self, backup_id: str):
+        if not messagebox.askyesno("Sil", "Bu yedek silinsin mi?"):
+            return
+        self._backup_mgr.delete(backup_id)
+        self._refresh_backups()
+        self._log(f"Yedek silindi: {backup_id}", "dim")
+
     def _do_full_update(self):
         if not self._check_uncommitted():
             return
@@ -634,6 +1039,11 @@ class MertUpdater(tk.Tk):
             self._start_task()
             self.after(0, self._clear_console)
             self.after(0, self._log, "⚡━━━ Tam Güncelleme ━━━⚡", "info")
+
+            # Güncelleme öncesi otomatik yedek
+            self._auto_backup_before_update(
+                include_docker=self.backup_docker_var.get()
+            )
 
             ok1, _ = self._run_cmd(
                 f"git fetch {REMOTE} {BRANCH}", "1/3 — Uzak depodan çekiliyor..."
