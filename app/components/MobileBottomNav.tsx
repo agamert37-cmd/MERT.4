@@ -6,7 +6,7 @@ import {
   MoreHorizontal, X, FileText, Banknote, CalendarCheck,
   UserCog, Factory, ArrowLeftRight, Receipt, FileCheck,
   FolderOpen, Database, MessageSquare, ShieldAlert, Settings,
-  Megaphone, Truck, Search, FileEdit,
+  Megaphone, Truck, Search, FileEdit, ChevronRight,
 } from 'lucide-react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
@@ -64,24 +64,25 @@ const moreGroups: { titleKey: string; items: NavItem[] }[] = [
   },
 ];
 
-const colorMap: Record<string, { bg: string; text: string; border: string }> = {
-  blue:    { bg: 'bg-blue-500/15', text: 'text-blue-400', border: 'border-blue-500/30' },
-  green:   { bg: 'bg-green-500/15', text: 'text-green-400', border: 'border-green-500/30' },
-  indigo:  { bg: 'bg-indigo-500/15', text: 'text-indigo-400', border: 'border-indigo-500/30' },
-  sky:     { bg: 'bg-sky-500/15', text: 'text-sky-400', border: 'border-sky-500/30' },
-  emerald: { bg: 'bg-emerald-500/15', text: 'text-emerald-400', border: 'border-emerald-500/30' },
-  lime:    { bg: 'bg-lime-500/15', text: 'text-lime-400', border: 'border-lime-500/30' },
-  purple:  { bg: 'bg-purple-500/15', text: 'text-purple-400', border: 'border-purple-500/30' },
-  cyan:    { bg: 'bg-cyan-500/15', text: 'text-cyan-400', border: 'border-cyan-500/30' },
-  orange:  { bg: 'bg-orange-500/15', text: 'text-orange-400', border: 'border-orange-500/30' },
-  rose:    { bg: 'bg-rose-500/15', text: 'text-rose-400', border: 'border-rose-500/30' },
-  amber:   { bg: 'bg-amber-500/15', text: 'text-amber-400', border: 'border-amber-500/30' },
-  teal:    { bg: 'bg-teal-500/15', text: 'text-teal-400', border: 'border-teal-500/30' },
-  pink:    { bg: 'bg-pink-500/15', text: 'text-pink-400', border: 'border-pink-500/30' },
-  slate:   { bg: 'bg-slate-500/15', text: 'text-slate-400', border: 'border-slate-500/30' },
-  violet:  { bg: 'bg-violet-500/15', text: 'text-violet-400', border: 'border-violet-500/30' },
-  red:     { bg: 'bg-red-500/15', text: 'text-red-400', border: 'border-red-500/30' },
-  gray:    { bg: 'bg-gray-500/15', text: 'text-gray-400', border: 'border-gray-500/30' },
+// Color tokens
+const colorMap: Record<string, { bg: string; text: string; bar: string }> = {
+  blue:    { bg: 'bg-blue-500/20',    text: 'text-blue-400',    bar: '#3b82f6' },
+  green:   { bg: 'bg-green-500/20',   text: 'text-green-400',   bar: '#22c55e' },
+  indigo:  { bg: 'bg-indigo-500/20',  text: 'text-indigo-400',  bar: '#6366f1' },
+  sky:     { bg: 'bg-sky-500/20',     text: 'text-sky-400',     bar: '#0ea5e9' },
+  emerald: { bg: 'bg-emerald-500/20', text: 'text-emerald-400', bar: '#10b981' },
+  lime:    { bg: 'bg-lime-500/20',    text: 'text-lime-400',    bar: '#84cc16' },
+  purple:  { bg: 'bg-purple-500/20',  text: 'text-purple-400',  bar: '#a855f7' },
+  cyan:    { bg: 'bg-cyan-500/20',    text: 'text-cyan-400',    bar: '#06b6d4' },
+  orange:  { bg: 'bg-orange-500/20',  text: 'text-orange-400',  bar: '#f97316' },
+  rose:    { bg: 'bg-rose-500/20',    text: 'text-rose-400',    bar: '#f43f5e' },
+  amber:   { bg: 'bg-amber-500/20',   text: 'text-amber-400',   bar: '#f59e0b' },
+  teal:    { bg: 'bg-teal-500/20',    text: 'text-teal-400',    bar: '#14b8a6' },
+  pink:    { bg: 'bg-pink-500/20',    text: 'text-pink-400',    bar: '#ec4899' },
+  slate:   { bg: 'bg-slate-500/20',   text: 'text-slate-400',   bar: '#64748b' },
+  violet:  { bg: 'bg-violet-500/20',  text: 'text-violet-400',  bar: '#8b5cf6' },
+  red:     { bg: 'bg-red-500/20',     text: 'text-red-400',     bar: '#ef4444' },
+  gray:    { bg: 'bg-gray-500/20',    text: 'text-gray-400',    bar: '#6b7280' },
 };
 
 export function MobileBottomNav() {
@@ -91,13 +92,23 @@ export function MobileBottomNav() {
   const { user } = useAuth();
   const { currentEmployee } = useEmployee();
   const [isMoreOpen, setIsMoreOpen] = useState(false);
+  const [search, setSearch] = useState('');
   const sheetRef = useRef<HTMLDivElement>(null);
   const startY = useRef(0);
+  const searchRef = useRef<HTMLInputElement>(null);
 
   // Close on route change
   useEffect(() => {
     setIsMoreOpen(false);
+    setSearch('');
   }, [location.pathname]);
+
+  // Focus search when drawer opens
+  useEffect(() => {
+    if (isMoreOpen) {
+      setTimeout(() => searchRef.current?.focus(), 200);
+    }
+  }, [isMoreOpen]);
 
   const hasPermission = (permKey?: string) => {
     if (!permKey) return true;
@@ -108,31 +119,35 @@ export function MobileBottomNav() {
   const isActive = (path: string) =>
     location.pathname === path || (path !== '/dashboard' && location.pathname.startsWith(path));
 
-  // Check if any "more" page is currently active
   const isMoreActive = moreGroups.some(g => g.items.some(i => isActive(i.path)));
 
-  // Hafif dokunma titreşimi (destekleyen cihazlarda)
   const haptic = (type: 'light' | 'medium' = 'light') => {
-    if ('vibrate' in navigator) {
-      navigator.vibrate(type === 'light' ? 8 : 18);
-    }
+    if ('vibrate' in navigator) navigator.vibrate(type === 'light' ? 6 : 14);
   };
 
-  // Swipe down to close (daha hassas eşik: 60px)
-  const handleTouchStart = (e: React.TouchEvent) => {
-    startY.current = e.touches[0].clientY;
-  };
+  // Swipe down to close
+  const handleTouchStart = (e: React.TouchEvent) => { startY.current = e.touches[0].clientY; };
   const handleTouchEnd = (e: React.TouchEvent) => {
-    const diff = e.changedTouches[0].clientY - startY.current;
-    if (diff > 60) {
+    if (e.changedTouches[0].clientY - startY.current > 60) {
       haptic('light');
       setIsMoreOpen(false);
     }
   };
 
+  // Filtered groups for search
+  const filteredGroups = search.trim()
+    ? moreGroups.map(g => ({
+        ...g,
+        items: g.items.filter(i =>
+          hasPermission(i.permKey) &&
+          t(i.labelKey).toLowerCase().includes(search.toLowerCase())
+        ),
+      })).filter(g => g.items.length > 0)
+    : moreGroups.map(g => ({ ...g, items: g.items.filter(i => hasPermission(i.permKey)) })).filter(g => g.items.length > 0);
+
   return (
     <>
-      {/* More Drawer (Bottom Sheet) */}
+      {/* ── More Drawer (Bottom Sheet) ── */}
       <AnimatePresence>
         {isMoreOpen && (
           <>
@@ -140,7 +155,7 @@ export function MobileBottomNav() {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[98]"
+              className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[98]"
               onClick={() => setIsMoreOpen(false)}
             />
             <motion.div
@@ -148,76 +163,113 @@ export function MobileBottomNav() {
               initial={{ y: '100%' }}
               animate={{ y: 0 }}
               exit={{ y: '100%' }}
-              transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-              className="fixed bottom-0 left-0 right-0 z-[99] bg-[#0d1117]/98 backdrop-blur-2xl border-t border-white/10 rounded-t-3xl max-h-[75vh] overflow-hidden flex flex-col"
+              transition={{ type: 'spring', stiffness: 320, damping: 32 }}
+              className="fixed bottom-0 left-0 right-0 z-[99] bg-[#0d1117]/98 backdrop-blur-2xl border-t border-white/[0.08] rounded-t-3xl max-h-[82vh] overflow-hidden flex flex-col"
               onTouchStart={handleTouchStart}
               onTouchEnd={handleTouchEnd}
             >
               {/* Drag Handle */}
-              <div className="flex justify-center pt-3 pb-2">
-                <div className="w-10 h-1 rounded-full bg-white/20" />
+              <div className="flex justify-center pt-2.5 pb-1.5">
+                <div className="w-9 h-[3px] rounded-full bg-white/20" />
               </div>
 
-              {/* Header */}
-              <div className="flex items-center justify-between px-5 pb-3">
-                <h3 className="text-white font-bold text-lg">{t('mobileNav.allModules') || 'Tüm Modüller'}</h3>
+              {/* Header row */}
+              <div className="flex items-center gap-3 px-4 pb-3 pt-1">
+                <h3 className="text-white font-bold text-base flex-1">
+                  {t('mobileNav.allModules') || 'Tüm Modüller'}
+                </h3>
                 <button
                   onClick={() => setIsMoreOpen(false)}
-                  className="p-2 rounded-xl bg-white/5 hover:bg-white/10 transition-colors"
+                  className="p-1.5 rounded-xl bg-white/[0.06] active:bg-white/[0.12] transition-colors"
                 >
                   <X className="w-4 h-4 text-gray-400" />
                 </button>
               </div>
 
+              {/* Search bar */}
+              <div className="px-4 pb-3">
+                <div className="flex items-center gap-2 bg-white/[0.06] border border-white/[0.08] rounded-xl px-3 py-2">
+                  <Search className="w-4 h-4 text-gray-500 flex-shrink-0" />
+                  <input
+                    ref={searchRef}
+                    type="text"
+                    value={search}
+                    onChange={e => setSearch(e.target.value)}
+                    placeholder="Modül ara..."
+                    className="flex-1 bg-transparent text-white text-sm placeholder-gray-500 outline-none"
+                  />
+                  {search && (
+                    <button onClick={() => setSearch('')} className="text-gray-500">
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+              </div>
+
               {/* Scrollable content */}
-              <div className="flex-1 overflow-y-auto px-4 pb-6 space-y-5 no-scrollbar">
-                {moreGroups.map((group, gi) => (
-                  <div key={gi}>
-                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2.5 px-1">
-                      {t(group.titleKey) || group.titleKey}
-                    </p>
-                    <div className="grid grid-cols-3 gap-2">
-                      {group.items.filter(i => hasPermission(i.permKey)).map(item => {
-                        const Icon = item.icon;
-                        const active = isActive(item.path);
-                        const colors = colorMap[item.color] || colorMap.gray;
-                        return (
-                          <motion.button
-                            key={item.path}
-                            whileTap={{ scale: 0.92 }}
-                            onClick={() => { haptic('light'); navigate(item.path); }}
-                            className={`flex flex-col items-center gap-1.5 py-3.5 px-2 rounded-2xl border transition-all ${
-                              active
-                                ? `${colors.bg} ${colors.border} border`
-                                : 'bg-white/[0.03] border-white/[0.06] hover:bg-white/[0.06]'
-                            }`}
-                          >
-                            <div className={`p-2 rounded-xl ${active ? colors.bg : 'bg-white/5'}`}>
-                              <Icon className={`w-5 h-5 ${active ? colors.text : 'text-gray-400'}`} />
-                            </div>
-                            <span className={`text-[11px] font-medium leading-tight text-center ${
-                              active ? 'text-white' : 'text-gray-400'
-                            }`}>
-                              {t(item.labelKey)}
-                            </span>
-                          </motion.button>
-                        );
-                      })}
-                    </div>
+              <div className="flex-1 overflow-y-auto px-4 pb-6 space-y-4 overscroll-contain">
+                {filteredGroups.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-10 text-gray-500">
+                    <Search className="w-8 h-8 mb-2 opacity-40" />
+                    <p className="text-sm">Sonuç bulunamadı</p>
                   </div>
-                ))}
+                ) : (
+                  filteredGroups.map((group, gi) => (
+                    <div key={gi}>
+                      <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-2 px-0.5">
+                        {t(group.titleKey) || group.titleKey}
+                      </p>
+                      {/* 4-column grid for compact fit */}
+                      <div className="grid grid-cols-4 gap-2">
+                        {group.items.map(item => {
+                          const Icon = item.icon;
+                          const active = isActive(item.path);
+                          const colors = colorMap[item.color] || colorMap.gray;
+                          return (
+                            <motion.button
+                              key={item.path}
+                              whileTap={{ scale: 0.88 }}
+                              onClick={() => { haptic('light'); navigate(item.path); }}
+                              className={`flex flex-col items-center gap-1.5 py-3 px-1 rounded-2xl border transition-all min-h-[72px] ${
+                                active
+                                  ? `${colors.bg} border-current`
+                                  : 'bg-white/[0.03] border-white/[0.05] active:bg-white/[0.07]'
+                              }`}
+                            >
+                              <div className={`p-1.5 rounded-xl ${active ? colors.bg : 'bg-white/[0.06]'}`}>
+                                <Icon className={`w-[18px] h-[18px] ${active ? colors.text : 'text-gray-400'}`} />
+                              </div>
+                              <span className={`text-[10px] font-medium leading-tight text-center px-0.5 ${
+                                active ? 'text-white' : 'text-gray-400'
+                              }`}>
+                                {t(item.labelKey)}
+                              </span>
+                            </motion.button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ))
+                )}
               </div>
             </motion.div>
           </>
         )}
       </AnimatePresence>
 
-      {/* Bottom Tab Bar */}
-      <nav className="fixed bottom-0 left-0 right-0 z-[97] lg:hidden">
+      {/* ── Bottom Tab Bar ── */}
+      <nav
+        className="fixed bottom-0 left-0 right-0 z-[97] lg:hidden"
+        role="navigation"
+        aria-label="Ana navigasyon"
+      >
         {/* Glass background */}
-        <div className="absolute inset-0 bg-[#0a0e14]/90 backdrop-blur-2xl border-t border-white/[0.08]" />
+        <div className="absolute inset-0 bg-[#0a0e14]/92 backdrop-blur-2xl border-t border-white/[0.07]" />
 
-        <div className="relative flex items-stretch justify-around px-1 pb-[env(safe-area-inset-bottom,0px)]">
+        <div
+          className="relative flex items-stretch justify-around"
+          style={{ paddingBottom: 'env(safe-area-inset-bottom, 4px)' }}
+        >
           {primaryTabs.filter(i => hasPermission(i.permKey)).map(item => {
             const Icon = item.icon;
             const active = isActive(item.path);
@@ -227,32 +279,36 @@ export function MobileBottomNav() {
               <button
                 key={item.path}
                 onClick={() => { haptic('light'); navigate(item.path); }}
-                className="flex-1 flex flex-col items-center gap-0.5 py-2 pt-2.5 relative min-w-0"
+                aria-label={t(item.labelKey)}
+                aria-current={active ? 'page' : undefined}
+                className="flex-1 flex flex-col items-center justify-center gap-0.5 py-2 relative min-w-0 min-h-[48px]"
               >
-                {/* Active indicator */}
+                {/* Active pill under icon */}
                 {active && (
                   <motion.div
-                    layoutId="mobileNavIndicator"
-                    className={`absolute top-0 left-1/2 -translate-x-1/2 w-8 h-[3px] rounded-full`}
-                    style={{
-                      background: `linear-gradient(90deg, ${
-                        item.color === 'blue' ? '#3b82f6' :
-                        item.color === 'green' ? '#22c55e' :
-                        item.color === 'indigo' ? '#6366f1' :
-                        item.color === 'sky' ? '#0ea5e9' :
-                        '#10b981'
-                      }, transparent)`
-                    }}
+                    layoutId="mobileNavPill"
+                    className="absolute inset-x-2 inset-y-1 rounded-xl"
+                    style={{ background: `${colors.bar}18` }}
+                    transition={{ type: 'spring', stiffness: 400, damping: 30 }}
+                  />
+                )}
+                {/* Top indicator bar */}
+                {active && (
+                  <motion.div
+                    layoutId="mobileNavBar"
+                    className="absolute top-0 left-1/2 -translate-x-1/2 w-6 h-[2px] rounded-full"
+                    style={{ background: colors.bar }}
                     transition={{ type: 'spring', stiffness: 400, damping: 30 }}
                   />
                 )}
                 <motion.div
                   animate={active ? { scale: 1.1, y: -1 } : { scale: 1, y: 0 }}
                   transition={{ type: 'spring', stiffness: 400, damping: 25 }}
+                  className="relative z-10"
                 >
-                  <Icon className={`w-5 h-5 ${active ? colors.text : 'text-gray-500'}`} />
+                  <Icon className={`w-[19px] h-[19px] ${active ? colors.text : 'text-gray-500'}`} />
                 </motion.div>
-                <span className={`text-[10px] font-medium truncate max-w-full px-0.5 ${
+                <span className={`text-[10px] font-medium truncate max-w-full px-1 relative z-10 ${
                   active ? 'text-white' : 'text-gray-500'
                 }`}>
                   {t(item.labelKey)}
@@ -264,20 +320,24 @@ export function MobileBottomNav() {
           {/* More button */}
           <button
             onClick={() => { haptic('medium'); setIsMoreOpen(true); }}
-            className="flex-1 flex flex-col items-center gap-0.5 py-2 pt-2.5 relative min-w-0"
+            aria-label="Tüm modüller"
+            aria-expanded={isMoreOpen}
+            className="flex-1 flex flex-col items-center justify-center gap-0.5 py-2 relative min-w-0 min-h-[48px]"
           >
             {isMoreActive && (
-              <motion.div
-                className="absolute top-0 left-1/2 -translate-x-1/2 w-8 h-[3px] rounded-full bg-gradient-to-r from-purple-500 to-transparent"
-              />
+              <div className="absolute inset-x-2 inset-y-1 rounded-xl bg-purple-500/10" />
+            )}
+            {isMoreActive && (
+              <div className="absolute top-0 left-1/2 -translate-x-1/2 w-6 h-[2px] rounded-full bg-purple-500" />
             )}
             <motion.div
-              animate={isMoreOpen ? { rotate: 90 } : { rotate: 0 }}
+              animate={isMoreOpen ? { rotate: 45, scale: 1.1 } : { rotate: 0, scale: 1 }}
               transition={{ type: 'spring', stiffness: 300, damping: 20 }}
+              className="relative z-10"
             >
-              <MoreHorizontal className={`w-5 h-5 ${isMoreActive ? 'text-purple-400' : 'text-gray-500'}`} />
+              <MoreHorizontal className={`w-[19px] h-[19px] ${isMoreActive ? 'text-purple-400' : 'text-gray-500'}`} />
             </motion.div>
-            <span className={`text-[10px] font-medium ${isMoreActive ? 'text-white' : 'text-gray-500'}`}>
+            <span className={`text-[10px] font-medium relative z-10 ${isMoreActive ? 'text-white' : 'text-gray-500'}`}>
               {t('mobileNav.more') || 'Daha'}
             </span>
           </button>

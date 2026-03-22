@@ -34,6 +34,8 @@ import {
   CalendarHeatmap, BarRace, GradientArc
 } from '../components/ChartComponents';
 import { ActivityTimeline } from '../components/ActivityTimeline';
+import { useIsMobile } from '../hooks/useMobile';
+import { getLatestUpdates, CURRENT_VERSION } from '../utils/updateNotes';
 
 const safeNum = (v: any, fallback = 0): number => {
   if (v === null || v === undefined || v === '') return fallback;
@@ -704,6 +706,9 @@ export function DashboardPage() {
   }, [rawFisler, rawKasa]);
 
   const [activityTab, setActivityTab] = useState<'recent' | 'deleted'>('recent');
+  const isMobile = useIsMobile(768);
+  const [showAdvancedMobile, setShowAdvancedMobile] = useState(false);
+  const [notesExpanded, setNotesExpanded] = useState(false);
 
   const weekTotal = weeklySalesData.reduce((s, d) => s + d.satis, 0);
 
@@ -725,7 +730,7 @@ export function DashboardPage() {
       
       {/* ─── Güvenlik Kalkanı — Güncelleme Notları ─── */}
       <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }}
-        className="relative overflow-hidden rounded-2xl lg:rounded-3xl bg-gradient-to-br from-emerald-500/[0.07] via-[#111] to-blue-500/[0.05] border border-emerald-500/20"
+        className="relative overflow-hidden rounded-2xl lg:rounded-3xl bg-gradient-to-br from-emerald-500/[0.07] via-[#111] to-blue-500/[0.05] border border-emerald-500/20 hover:border-emerald-500/40 hover:shadow-xl hover:shadow-emerald-500/5 transition-all group"
       >
         {/* Dekoratif arka plan */}
         <div className="absolute top-0 right-0 p-6 opacity-[0.06]">
@@ -734,7 +739,10 @@ export function DashboardPage() {
         <div className="absolute bottom-0 left-0 w-48 h-48 bg-emerald-500/5 rounded-full blur-3xl -translate-x-1/2 translate-y-1/2" />
 
         {/* Üst başlık */}
-        <div className="relative z-10 flex items-center gap-3 sm:gap-4 p-4 sm:p-5 pb-3">
+        <div
+          className="relative z-10 flex items-center gap-3 sm:gap-4 p-4 sm:p-5 pb-3 cursor-pointer"
+          onClick={() => isMobile ? setNotesExpanded(v => !v) : navigate('/guncelleme-notlari')}
+        >
           <div className="p-2.5 sm:p-3 bg-emerald-500/20 rounded-xl backdrop-blur-sm border border-emerald-500/30 shadow-lg shadow-emerald-500/10">
             <ShieldCheck className="w-5 h-5 sm:w-6 sm:h-6 text-emerald-400" />
           </div>
@@ -745,53 +753,59 @@ export function DashboardPage() {
             </div>
             <p className="text-[10px] sm:text-xs text-gray-500">Son güncellemeler ve yapılan iyileştirmeler</p>
           </div>
-          <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/20 shrink-0">
-            <span className="relative flex h-2 w-2">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-60" />
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-400" />
-            </span>
-            <span className="text-[9px] font-bold text-emerald-400 uppercase tracking-wider">Koruma Aktif</span>
+          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/20 shrink-0">
+            {isMobile ? (
+              <span className="text-[9px] font-bold text-emerald-400">{notesExpanded ? '▲ Kapat' : '▼ Göster'}</span>
+            ) : (
+              <>
+                <span className="relative flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-60" />
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-400" />
+                </span>
+                <span className="text-[9px] font-bold text-emerald-400 uppercase tracking-wider">Koruma Aktif</span>
+              </>
+            )}
           </div>
         </div>
 
-        {/* Güncelleme notları listesi */}
+        {/* Güncelleme notları listesi — merkezi veriden beslenir */}
+        {(!isMobile || notesExpanded) && (
         <div className="relative z-10 px-4 sm:px-5 pb-4 sm:pb-5">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-2.5">
-            {[
-              { icon: '🛡️', cat: 'Güvenlik', color: 'emerald', text: 'Brute Force koruması ve 15dk otomatik oturum kapatma', ver: 'v4.2' },
-              { icon: '📊', cat: 'Grafik', color: 'blue', text: 'Canlı saatlik ciro akışı ve kârlılık trend grafiği eklendi', ver: 'v4.2.1' },
-              { icon: '🔄', cat: 'Özellik', color: 'purple', text: '15 saniyede otomatik dashboard yenileme sistemi', ver: 'v4.2.1' },
-              { icon: '🔐', cat: 'Güvenlik', color: 'emerald', text: 'Güvenlik Merkezi modülü ve detaylı aktivite loglaması', ver: 'v4.2' },
-              { icon: '🎨', cat: 'Arayüz', color: 'cyan', text: 'Karanlık tema, cam efektleri ve animasyonlu kartlar', ver: 'v4.2' },
-              { icon: '📈', cat: 'Analiz', color: 'amber', text: 'Performans radarı, satış hunisi ve ısı haritası', ver: 'v4.2' },
-              { icon: '🐛', cat: 'Düzeltme', color: 'red', text: 'Stok hesaplama ve fiş tutarı düzeltmeleri', ver: 'v4.2' },
-              { icon: '⚡', cat: 'Performans', color: 'orange', text: 'Dashboard render optimizasyonu, izole canlı saat', ver: 'v4.2.1' },
-            ].map((note, i) => {
-              const colorMap: Record<string, string> = {
-                emerald: 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400',
-                blue: 'bg-blue-500/10 border-blue-500/20 text-blue-400',
-                purple: 'bg-purple-500/10 border-purple-500/20 text-purple-400',
-                cyan: 'bg-cyan-500/10 border-cyan-500/20 text-cyan-400',
-                amber: 'bg-amber-500/10 border-amber-500/20 text-amber-400',
-                red: 'bg-red-500/10 border-red-500/20 text-red-400',
-                orange: 'bg-orange-500/10 border-orange-500/20 text-orange-400',
+            {getLatestUpdates(8).map((note, i) => {
+              const catColorMap: Record<string, string> = {
+                security:    'bg-emerald-500/10 border-emerald-500/20 text-emerald-400',
+                feature:     'bg-blue-500/10 border-blue-500/20 text-blue-400',
+                bugfix:      'bg-red-500/10 border-red-500/20 text-red-400',
+                ui:          'bg-cyan-500/10 border-cyan-500/20 text-cyan-400',
+                performance: 'bg-orange-500/10 border-orange-500/20 text-orange-400',
+                analytics:   'bg-purple-500/10 border-purple-500/20 text-purple-400',
               };
-              const cls = colorMap[note.color] || colorMap.blue;
+              const catLabelMap: Record<string, string> = {
+                security: 'Güvenlik', feature: 'Özellik', bugfix: 'Düzeltme',
+                ui: 'Arayüz', performance: 'Performans', analytics: 'Analiz',
+              };
+              const cls = catColorMap[note.category] || catColorMap.feature;
               return (
                 <motion.div
-                  key={i}
+                  key={note.id}
                   initial={{ opacity: 0, x: -10 }}
                   animate={{ opacity: 1, x: 0 }}
                   transition={{ delay: 0.1 + i * 0.05, type: 'spring', stiffness: 300, damping: 25 }}
                   className="flex items-start gap-2.5 p-2.5 sm:p-3 rounded-xl bg-white/[0.02] border border-white/[0.05] hover:bg-white/[0.04] hover:border-white/[0.1] transition-all group"
                 >
-                  <span className="text-sm sm:text-base shrink-0 mt-0.5">{note.icon}</span>
+                  <span className="text-sm sm:text-base shrink-0 mt-0.5">{note.emoji || '✨'}</span>
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-1.5 mb-0.5">
-                      <span className={`px-1.5 py-0.5 text-[8px] sm:text-[9px] font-bold rounded-md border ${cls}`}>{note.cat}</span>
-                      <span className="text-[8px] text-gray-600 font-mono">{note.ver}</span>
+                    <div className="flex items-center gap-1.5 mb-0.5 flex-wrap">
+                      <span className={`px-1.5 py-0.5 text-[8px] font-bold rounded-md border ${cls}`}>
+                        {catLabelMap[note.category] || note.category}
+                      </span>
+                      <span className="text-[8px] text-gray-600 font-mono">{note.version}</span>
+                      {note.isNew && (
+                        <span className="text-[7px] font-bold text-amber-400 border border-amber-500/30 px-1 py-0.5 rounded bg-amber-500/10">YENİ</span>
+                      )}
                     </div>
-                    <p className="text-[10px] sm:text-[11px] text-gray-400 leading-relaxed group-hover:text-gray-300 transition-colors">{note.text}</p>
+                    <p className="text-[10px] sm:text-[11px] text-gray-400 leading-relaxed group-hover:text-gray-300 transition-colors line-clamp-2">{note.description}</p>
                   </div>
                 </motion.div>
               );
@@ -802,11 +816,12 @@ export function DashboardPage() {
           <div className="mt-3 pt-3 border-t border-white/[0.05] flex items-center justify-between">
             <p className="text-[9px] sm:text-[10px] text-gray-600">
               <ShieldCheck className="w-3 h-3 inline-block mr-1 text-emerald-500/50" />
-              Güvenlik Kalkanı v4.2 KALKAN · Tüm sistemler korunuyor
+              Güvenlik Kalkanı {CURRENT_VERSION} KALKAN · Tüm sistemler korunuyor
             </p>
             <span className="text-[8px] sm:text-[9px] text-gray-600 font-mono">Son güncelleme: {new Date().toLocaleDateString('tr-TR')}</span>
           </div>
         </div>
+        )}
       </motion.div>
 
       {/* OpenAI Banner */}
@@ -1563,11 +1578,14 @@ export function DashboardPage() {
       </div>
 
       {/* ─── KPI Ticker Banner ─── */}
+      {(!isMobile || showAdvancedMobile) && (
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.62 }}>
         <KPITicker items={kpiTickerItems} />
       </motion.div>
+      )}
 
       {/* ─── Trend Comparison + Bullet KPIs Row ─── */}
+      {(!isMobile || showAdvancedMobile) && (
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-4 lg:gap-6">
         {/* Haftalık Trend Karşılaştırma */}
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.63 }}
@@ -1601,8 +1619,21 @@ export function DashboardPage() {
           </div>
         </motion.div>
       </div>
+      )}
+
+      {/* ─── Mobil: Gelişmiş Analitik Toggle ─── */}
+      {isMobile && (
+        <button
+          onClick={() => setShowAdvancedMobile(v => !v)}
+          className="w-full py-3 px-4 rounded-2xl border border-white/10 bg-white/[0.03] hover:bg-white/[0.06] transition-all flex items-center justify-center gap-2 text-sm font-bold text-gray-400"
+        >
+          <BarChart3 className="w-4 h-4 text-blue-400" />
+          {showAdvancedMobile ? 'Gelişmiş Analizleri Gizle ▲' : 'Gelişmiş Analizleri Göster ▼'}
+        </button>
+      )}
 
       {/* ─── Advanced Analytics Row ─── */}
+      {(!isMobile || showAdvancedMobile) && (
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 sm:gap-4 lg:gap-6">
 
         {/* Saatlik Satış Isı Haritası */}
@@ -1641,8 +1672,10 @@ export function DashboardPage() {
           )}
         </motion.div>
       </div>
+      )}
 
       {/* ─── Performance Radar + Funnel + Waterfall Row ─── */}
+      {(!isMobile || showAdvancedMobile) && (
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 lg:gap-6">
 
         {/* Performans Radarı */}
@@ -1708,8 +1741,10 @@ export function DashboardPage() {
           <WaterfallChart items={waterfallData} height={180} />
         </motion.div>
       </div>
+      )}
 
       {/* ─── Week Comparison + Stock Flow + Production Row ─── */}
+      {(!isMobile || showAdvancedMobile) && (
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 lg:gap-6">
 
         {/* Haftalık Karşılaştırma */}
@@ -1801,6 +1836,7 @@ export function DashboardPage() {
           )}
         </motion.div>
       </div>
+      )}
 
       {/* ─── Cari Borç/Alacak Özet ─── */}
       {cariStats.toplam > 0 && (

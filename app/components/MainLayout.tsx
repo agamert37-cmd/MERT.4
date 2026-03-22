@@ -484,7 +484,32 @@ export function MainLayout() {
               </nav>
 
               {/* Mobile User Section */}
-              <div className="p-3 border-t border-border/60">
+              <div className="p-3 border-t border-border/60 space-y-2">
+                {/* Profil kartı */}
+                <div className="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-secondary/30">
+                  <div className={`w-9 h-9 rounded-full flex items-center justify-center text-white font-semibold text-sm shadow-lg flex-shrink-0 ${
+                    user?.id === 'admin-super'
+                      ? 'bg-gradient-to-br from-red-600 to-red-900'
+                      : 'bg-gradient-to-br from-blue-600 to-purple-600'
+                  }`}>
+                    {user?.name?.charAt(0)?.toUpperCase() || 'U'}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className={`text-sm font-medium truncate ${user?.id === 'admin-super' ? 'text-red-400' : 'text-white'}`}>
+                      {user?.name || 'Kullanıcı'}
+                    </p>
+                    <p className="text-xs text-muted-foreground truncate">{user?.role || 'Personel'}</p>
+                  </div>
+                </div>
+                {/* Profili Düzenle */}
+                <button
+                  onClick={() => { setIsMobileSidebarOpen(false); setIsProfileModalOpen(true); }}
+                  className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-foreground hover:bg-secondary/60 hover:text-white transition-colors"
+                >
+                  <UserCircle className="w-[18px] h-[18px]" />
+                  <span>{t('userMenu.editProfile')}</span>
+                </button>
+                {/* Çıkış */}
                 <button
                   onClick={() => { setIsMobileSidebarOpen(false); handleLogout(); }}
                   className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-red-400 hover:bg-red-500/10 transition-colors"
@@ -855,20 +880,19 @@ export function MainLayout() {
         <div className="flex-1 flex flex-col min-w-0">
           {/* Top Bar */}
           <header
-            className="bg-sidebar/80 backdrop-blur-xl border-b border-sidebar-border flex items-center justify-between px-3 sm:px-6 z-10 relative"
+            className="bg-sidebar/80 backdrop-blur-xl border-b border-sidebar-border flex items-center justify-between px-2 sm:px-6 z-10 relative"
             style={{
               paddingTop: 'env(safe-area-inset-top, 0px)',
-              minHeight: 'calc(3.5rem + env(safe-area-inset-top, 0px))',
+              minHeight: 'calc(2.75rem + env(safe-area-inset-top, 0px))',
             }}
           >
-            <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1 overflow-hidden">
+            <div className="flex items-center gap-1.5 sm:gap-3 min-w-0 flex-1 overflow-hidden">
               {/* Mobile Hamburger */}
               <motion.button
-                whileHover={{ scale: 1.1, backgroundColor: 'rgba(255,255,255,0.08)' }}
                 whileTap={{ scale: 0.88 }}
-                transition={{ type: 'spring', stiffness: 520, damping: 28 }}
                 onClick={() => setIsMobileSidebarOpen(true)}
-                className="lg:hidden p-2 rounded-lg text-muted-foreground hover:text-white transition-colors flex-shrink-0"
+                className="lg:hidden p-1.5 rounded-lg text-muted-foreground hover:text-white transition-colors flex-shrink-0"
+                aria-label="Menüyü aç"
               >
                 <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
@@ -880,14 +904,11 @@ export function MainLayout() {
                 <AnimatePresence mode="wait">
                   <motion.span
                     key={currentPageLabel}
-                    initial={{ opacity: 0, x: -14, filter: 'blur(6px)' }}
-                    animate={{ opacity: 1, x: 0, filter: 'blur(0px)',
-                      transition: { type: 'spring', stiffness: 400, damping: 30, filter: { duration: 0.25 } }
-                    }}
-                    exit={{ opacity: 0, x: 10, filter: 'blur(4px)',
-                      transition: { duration: 0.16, ease: [0.4, 0, 1, 1] }
-                    }}
-                    className="lg:hidden text-white font-semibold text-sm truncate max-w-[120px] sm:max-w-[180px]"
+                    initial={{ opacity: 0, x: -10 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: 8 }}
+                    transition={{ duration: 0.18 }}
+                    className="lg:hidden text-white font-semibold text-sm truncate max-w-[110px] sm:max-w-[200px]"
                   >
                     {currentPageLabel}
                   </motion.span>
@@ -961,18 +982,16 @@ export function MainLayout() {
               )}
             </div>
 
-            <div className="flex items-center gap-3">
-              {/* Mobile search icon */}
+            <div className="flex items-center gap-1.5 sm:gap-2">
+              {/* Search — icon only on mobile, pill on sm+ */}
               <button
                 onClick={() => setIsCommandPaletteOpen(true)}
-                className="sm:hidden p-2 rounded-lg bg-secondary/40 hover:bg-secondary/70 border border-border/50 text-muted-foreground active:bg-secondary transition-colors"
+                className="sm:hidden p-1.5 rounded-lg text-muted-foreground active:bg-secondary/60 transition-colors"
+                aria-label="Ara"
               >
                 <Search className="w-4 h-4" />
               </button>
-
-              {/* Desktop Search / Command Palette Trigger */}
               <motion.button
-                whileHover={{ scale: 1.03 }}
                 whileTap={{ scale: 0.97 }}
                 onClick={() => setIsCommandPaletteOpen(true)}
                 className="hidden sm:flex items-center gap-2 px-3 py-1.5 text-sm text-muted-foreground bg-secondary/40 hover:bg-secondary/70 border border-border/50 rounded-lg transition-colors"
@@ -984,19 +1003,18 @@ export function MainLayout() {
                 </kbd>
               </motion.button>
 
-              {/* Live badges summary */}
+              {/* Critical stock badge — icon-only on mobile, full on sm+ */}
               {badgeData.criticalStock > 0 && (
                 <Tooltip.Root>
-                  <Tooltip.Trigger onClick={() => navigate('/stok')} className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 hover:bg-red-500/20 transition-colors cursor-pointer outline-none">
-                      <AlertTriangle className="w-3.5 h-3.5" />
-                      <span className="text-xs font-bold">{badgeData.criticalStock}</span>
+                  <Tooltip.Trigger
+                    onClick={() => navigate('/stok')}
+                    className="flex items-center gap-1 sm:gap-1.5 px-1.5 sm:px-2 py-1 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 active:bg-red-500/20 transition-colors cursor-pointer outline-none"
+                  >
+                    <AlertTriangle className="w-3.5 h-3.5" />
+                    <span className="text-xs font-bold hidden sm:inline">{badgeData.criticalStock}</span>
                   </Tooltip.Trigger>
                   <Tooltip.Portal>
-                    <Tooltip.Content
-                      side="bottom"
-                      sideOffset={4}
-                      className="px-3 py-1.5 text-xs font-medium text-white bg-secondary border border-border rounded-lg shadow-xl z-[100]"
-                    >
+                    <Tooltip.Content side="bottom" sideOffset={4} className="px-3 py-1.5 text-xs font-medium text-white bg-secondary border border-border rounded-lg shadow-xl z-[100]">
                       {badgeData.criticalStock} ürün kritik stok seviyesinde
                       <Tooltip.Arrow className="fill-secondary" />
                     </Tooltip.Content>
@@ -1007,11 +1025,11 @@ export function MainLayout() {
               <div className="hidden sm:block">
                 <LiveClock />
               </div>
-              <div className="w-px h-5 bg-secondary hidden sm:block" />
+              <div className="w-px h-4 bg-secondary hidden sm:block" />
 
-              {/* Language Switcher */}
+              {/* Language Switcher — sm+ only on mobile */}
               <DropdownMenu.Root>
-                <DropdownMenu.Trigger className="flex items-center gap-1 sm:gap-1.5 px-1.5 sm:px-2 py-1 rounded-lg bg-secondary/40 hover:bg-secondary/70 border border-border/50 text-muted-foreground hover:text-white transition-colors cursor-pointer outline-none" title={t('settings.language')}>
+                <DropdownMenu.Trigger className="hidden sm:flex items-center gap-1.5 px-2 py-1 rounded-lg bg-secondary/40 hover:bg-secondary/70 border border-border/50 text-muted-foreground hover:text-white transition-colors cursor-pointer outline-none" title={t('settings.language')}>
                     <Globe className="w-3.5 h-3.5" />
                     <span className="text-[11px] font-semibold uppercase">{lang}</span>
                 </DropdownMenu.Trigger>
@@ -1049,11 +1067,27 @@ export function MainLayout() {
               </DropdownMenu.Root>
 
               <NotificationPanel />
+
+              {/* Mobile Profile Avatar */}
+              <button
+                onClick={() => setIsProfileModalOpen(true)}
+                className="lg:hidden flex items-center justify-center w-7 h-7 rounded-full flex-shrink-0 ring-2 ring-white/10 active:ring-white/30 transition-all"
+                style={{
+                  background: user?.id === 'admin-super'
+                    ? 'linear-gradient(135deg, #dc2626, #7f1d1d)'
+                    : 'linear-gradient(135deg, #2563eb, #7c3aed)'
+                }}
+                aria-label="Profili düzenle"
+              >
+                <span className="text-white font-bold text-[11px]">
+                  {user?.name?.charAt(0)?.toUpperCase() || 'U'}
+                </span>
+              </button>
             </div>
           </header>
 
           {/* Page Content with Animated Transitions */}
-          <main className="flex-1 overflow-y-auto custom-scrollbar">
+          <main className="flex-1 overflow-y-auto custom-scrollbar lg:pb-0">
             <AnimatePresence mode="wait">
               <motion.div
                 key={location.pathname}
