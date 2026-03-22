@@ -98,6 +98,29 @@ function saveToLS<T>(storageKey: string, data: T): void {
   } catch {}
 }
 
+// ─── Silinmiş ID tombstone (cihazlar arası silinmiş kayıtları takip eder) ──
+const DELETED_SUFFIX = '__deleted_ids';
+
+function loadDeletedIds(storageKey: string): Set<string> {
+  try {
+    const raw = localStorage.getItem(STORAGE_PREFIX + storageKey + DELETED_SUFFIX);
+    const arr = raw ? JSON.parse(raw) : [];
+    return new Set<string>(arr);
+  } catch {
+    return new Set<string>();
+  }
+}
+
+function saveDeletedId(storageKey: string, id: string): void {
+  try {
+    const existing = loadDeletedIds(storageKey);
+    existing.add(id);
+    // Max 500 silinmiş ID sakla (eski olanları temizle)
+    const arr = Array.from(existing).slice(-500);
+    localStorage.setItem(STORAGE_PREFIX + storageKey + DELETED_SUFFIX, JSON.stringify(arr));
+  } catch {}
+}
+
 // ─── Write queue for debounced writes ────────────────────────────────────
 interface WriteOp {
   type: 'set' | 'del';
@@ -319,22 +342,33 @@ export function useTableSync<T extends { id: string }>(
     saveToLS(storageKey, newData);
   }, [storageKey]);
 
-  // ─── Smart merge: KV data + LS pending changes ───────────────────────────
+  // ─── Smart merge: KV data + LS pending/unsynced changes ────────────────────
   const smartMerge = useCallback((kvItems: T[], lsItems: T[]): T[] => {
+    const kvMap = new Map(kvItems.map(i => [i.id, i]));
     const merged = new Map<string, T>();
 
     // KV store is authoritative — start with KV data
     kvItems.forEach(item => merged.set(item.id, item));
 
-    // Only override with local data for items that have pending writes from THIS session
+    // Load tombstone of explicitly deleted IDs (persisted across sessions)
+    const deletedIds = loadDeletedIds(storageKey);
+
     lsItems.forEach(item => {
+      // Pending write from THIS session → local version takes priority
       if (pendingWriteIds.current.has(item.id)) {
         merged.set(item.id, item);
+        return;
       }
+      // Item in KV → KV is authoritative, already set above
+      if (kvMap.has(item.id)) return;
+      // Item NOT in KV and was explicitly deleted (tombstone) → skip (keeps it gone)
+      if (deletedIds.has(item.id)) return;
+      // Item NOT in KV and NOT deleted → it was added locally but not yet synced → keep it
+      merged.set(item.id, item);
     });
 
     return Array.from(merged.values());
-  }, []);
+  }, [storageKey]);
 
   // Sync state between tabs/windows locally
   useEffect(() => {
@@ -569,6 +603,9 @@ export function useTableSync<T extends { id: string }>(
 
   const deleteItem = useCallback(async (id: string): Promise<void> => {
     const deletedItem = dataRef.current.find(i => i.id === id);
+
+    // Tombstone: silinmiş ID'yi kaydet (smartMerge'de geri gelmemesi için)
+    saveDeletedId(storageKey, id);
 
     setDataState(prev => {
       const updated = prev.filter(item => item.id !== id);
