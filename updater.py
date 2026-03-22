@@ -14,6 +14,8 @@ import time
 import webbrowser
 import json
 import shutil
+import re
+import math
 
 # ─── Ayarlar ────────────────────────────────────────────────────────────────
 REPO_DIR              = os.path.dirname(os.path.abspath(__file__))
@@ -319,7 +321,6 @@ def _collect_update_diff(old_hash: str) -> dict:
         stat = r.stdout.strip()
         result["diff_stat"] = stat
         # "3 files changed, 42 insertions(+), 7 deletions(-)"
-        import re
         m = re.search(r"(\d+) file", stat)
         if m:
             result["files_changed"] = int(m.group(1))
@@ -333,6 +334,282 @@ def _collect_update_diff(old_hash: str) -> dict:
         pass
 
     return result
+
+
+# ─── Grafik Motoru (saf tkinter Canvas) ───────────────────────────────────────
+
+class ChartCanvas:
+    """
+    Yeniden kullanılabilir Canvas tabanlı grafik çizici.
+    Çizgi, çubuk ve gösterge (gauge) grafikleri destekler.
+    """
+
+    ML, MR, MT, MB = 42, 12, 22, 28   # kenar boşlukları (px)
+
+    def __init__(self, parent: tk.Widget, width: int, height: int,
+                 title: str, bg: str = "#1e1e2e"):
+        self.w      = width
+        self.h      = height
+        self.title  = title
+        self.bg     = bg
+        self.canvas = tk.Canvas(parent, width=width, height=height,
+                                bg=bg, highlightthickness=0, bd=0)
+
+    # ── İç koordinat sistemi ────────────────────────────────────────────────
+    def _px(self, x_norm: float) -> float:
+        """0‥1 → piksel X (sol→sağ, kenar boşlukları dahil)."""
+        return self.ML + x_norm * (self.w - self.ML - self.MR)
+
+    def _py(self, y_norm: float) -> float:
+        """0‥1 → piksel Y (0=alt, 1=üst)."""
+        return self.MT + (1 - y_norm) * (self.h - self.MT - self.MB)
+
+    # ── Temizle ─────────────────────────────────────────────────────────────
+    def clear(self):
+        self.canvas.delete("all")
+        # Başlık
+        self.canvas.create_text(
+            self.w // 2, 11, text=self.title,
+            font=("Segoe UI", 8, "bold"), fill="#7f849c", anchor="center"
+        )
+
+    # ── Yatay grid çizgileri ─────────────────────────────────────────────────
+    def _draw_grid(self, n: int = 4, color: str = "#2a2a3d"):
+        for i in range(n + 1):
+            y = self._py(i / n)
+            self.canvas.create_line(
+                self._px(0), y, self._px(1), y,
+                fill=color, dash=(2, 4)
+            )
+
+    # ── Y ekseni etiketleri ─────────────────────────────────────────────────
+    def _y_labels(self, vmin: float, vmax: float, n: int = 4, fmt: str = "{:.0f}"):
+        for i in range(n + 1):
+            v = vmin + (vmax - vmin) * i / n
+            y = self._py(i / n)
+            self.canvas.create_text(
+                self.ML - 4, y, text=fmt.format(v),
+                font=("Consolas", 7), fill="#555577", anchor="e"
+            )
+
+    # ── Çizgi grafik ────────────────────────────────────────────────────────
+    def draw_line(self, values: list[float], color: str,
+                  fill_color: str = "", dot_color: str = "",
+                  x_labels: list[str] | None = None,
+                  y_fmt: str = "{:.1f}", grid: bool = True):
+        """values: sayı listesi (en eskiden en yeniye)."""
+        self.clear()
+        if len(values) < 2:
+            self.canvas.create_text(
+                self.w // 2, self.h // 2, text="Veri yok",
+                font=("Segoe UI", 8), fill="#555577"
+            )
+            return
+
+        vmin = min(values) * 0.9
+        vmax = max(values) * 1.1 if max(values) > 0 else 1
+        n    = len(values)
+
+        if grid:
+            self._draw_grid(4)
+        self._y_labels(vmin, vmax, 4, y_fmt)
+
+        # Normalize
+        def norm_y(v): return (v - vmin) / (vmax - vmin) if vmax != vmin else 0.5
+
+        pts = [(self._px(i / (n - 1)), self._py(norm_y(v)))
+               for i, v in enumerate(values)]
+
+        # Dolu alan (fill)
+        if fill_color:
+            poly = [pts[0][0], self._py(0)]
+            for px, py in pts:
+                poly += [px, py]
+            poly += [pts[-1][0], self._py(0)]
+            self.canvas.create_polygon(poly, fill=fill_color, outline="", smooth=True)
+
+        # Çizgi
+        flat = [c for p in pts for c in p]
+        self.canvas.create_line(*flat, fill=color, width=2, smooth=True)
+
+        # Noktalar + değer etiketleri
+        dc = dot_color or color
+        for i, (px, py) in enumerate(pts):
+            self.canvas.create_oval(px-3, py-3, px+3, py+3, fill=dc, outline=self.bg)
+            # Son noktaya değer yaz
+            if i == n - 1 or n <= 8:
+                self.canvas.create_text(
+                    px, py - 9, text=y_fmt.format(values[i]),
+                    font=("Consolas", 7), fill=color, anchor="center"
+                )
+
+        # X ekseni etiketleri
+        if x_labels:
+            step = max(1, n // 6)
+            for i, lbl in enumerate(x_labels):
+                if i % step == 0 or i == n - 1:
+                    px = self._px(i / (n - 1))
+                    self.canvas.create_text(
+                        px, self.h - 8, text=lbl,
+                        font=("Consolas", 7), fill="#555577", anchor="center"
+                    )
+
+    # ── Çubuk grafik (ikili: yeşil/kırmızı) ─────────────────────────────────
+    def draw_bars(self, pos_vals: list[float], neg_vals: list[float],
+                  pos_color: str = "#a6e3a1", neg_color: str = "#f38ba8",
+                  x_labels: list[str] | None = None, grid: bool = True):
+        """pos_vals: eklemeler, neg_vals: silmeler (mutlak değer)."""
+        self.clear()
+        n = max(len(pos_vals), len(neg_vals))
+        if n == 0:
+            self.canvas.create_text(
+                self.w // 2, self.h // 2, text="Veri yok",
+                font=("Segoe UI", 8), fill="#555577"
+            )
+            return
+
+        # Maksimum değer
+        combined = list(pos_vals) + list(neg_vals)
+        vmax = max(combined) if combined else 1
+        if vmax == 0:
+            vmax = 1
+
+        if grid:
+            self._draw_grid(4)
+        self._y_labels(0, vmax, 4)
+
+        bar_w_total = (self.w - self.ML - self.MR) / max(n, 1)
+        gap         = max(1, bar_w_total * 0.1)
+        bar_w       = (bar_w_total - gap * 3) / 2
+
+        for i in range(n):
+            cx = self._px(i / max(n - 1, 1)) if n > 1 else self._px(0.5)
+            base_y = self._py(0)
+
+            # Ekleme çubuğu (sol)
+            if i < len(pos_vals) and pos_vals[i] > 0:
+                h_px = (pos_vals[i] / vmax) * (self.h - self.MT - self.MB)
+                x0 = cx - bar_w - gap / 2
+                self.canvas.create_rectangle(
+                    x0, base_y - h_px, x0 + bar_w, base_y,
+                    fill=pos_color, outline="", width=0
+                )
+
+            # Silme çubuğu (sağ)
+            if i < len(neg_vals) and neg_vals[i] > 0:
+                h_px = (neg_vals[i] / vmax) * (self.h - self.MT - self.MB)
+                x0 = cx + gap / 2
+                self.canvas.create_rectangle(
+                    x0, base_y - h_px, x0 + bar_w, base_y,
+                    fill=neg_color, outline="", width=0
+                )
+
+        # X etiketleri
+        if x_labels:
+            step = max(1, n // 6)
+            for i, lbl in enumerate(x_labels):
+                if i % step == 0 or i == n - 1:
+                    cx = self._px(i / max(n - 1, 1)) if n > 1 else self._px(0.5)
+                    self.canvas.create_text(
+                        cx, self.h - 8, text=lbl,
+                        font=("Consolas", 7), fill="#555577", anchor="center"
+                    )
+
+        # Legend
+        self.canvas.create_rectangle(self.ML, 13, self.ML + 8, 19,
+                                     fill=pos_color, outline="")
+        self.canvas.create_text(self.ML + 11, 16, text="+ekle",
+                                font=("Consolas", 7), fill=pos_color, anchor="w")
+        self.canvas.create_rectangle(self.ML + 48, 13, self.ML + 56, 19,
+                                     fill=neg_color, outline="")
+        self.canvas.create_text(self.ML + 59, 16, text="-sil",
+                                font=("Consolas", 7), fill=neg_color, anchor="w")
+
+    # ── Gösterge (Gauge / Arc) ───────────────────────────────────────────────
+    def draw_gauge(self, value: float, max_val: float,
+                   label: str, unit: str,
+                   low_color: str = "#a6e3a1",
+                   mid_color: str = "#f9e2af",
+                   high_color: str = "#f38ba8",
+                   history: list[float] | None = None):
+        """Yarım daire gösterge + mini geçmiş çizgisi."""
+        self.clear()
+
+        pct   = min(1.0, value / max_val) if max_val > 0 else 0
+        cx    = self.w // 2
+        cy    = int(self.h * 0.62)
+        r     = min(cx - self.ML - 4, cy - self.MT - 4)
+
+        # Arka plan yayı
+        self.canvas.create_arc(
+            cx - r, cy - r, cx + r, cy + r,
+            start=0, extent=180,
+            style="arc", outline="#2a2a3d", width=10
+        )
+
+        # Renk seç
+        if pct < 0.5:
+            arc_color = low_color
+        elif pct < 0.8:
+            arc_color = mid_color
+        else:
+            arc_color = high_color
+
+        # Değer yayı
+        extent = pct * 180
+        if extent > 0:
+            self.canvas.create_arc(
+                cx - r, cy - r, cx + r, cy + r,
+                start=180 - extent, extent=extent,
+                style="arc", outline=arc_color, width=10
+            )
+
+        # İbre
+        angle_rad = math.pi * (1 - pct)
+        ix = cx + (r - 14) * math.cos(angle_rad)
+        iy = cy - (r - 14) * math.sin(angle_rad)
+        self.canvas.create_line(cx, cy, ix, iy, fill="#cdd6f4", width=2)
+        self.canvas.create_oval(cx-4, cy-4, cx+4, cy+4, fill="#cdd6f4", outline="")
+
+        # Değer metni
+        val_str = f"{value:.1f}{unit}" if isinstance(value, float) else f"{value}{unit}"
+        self.canvas.create_text(
+            cx, cy - r // 3,
+            text=val_str, font=("Segoe UI", 12, "bold"),
+            fill=arc_color, anchor="center"
+        )
+        self.canvas.create_text(
+            cx, cy - r // 3 + 16,
+            text=label, font=("Segoe UI", 7),
+            fill="#7f849c", anchor="center"
+        )
+
+        # Min/Max etiketleri
+        self.canvas.create_text(
+            cx - r - 2, cy + 6, text="0",
+            font=("Consolas", 7), fill="#555577", anchor="e"
+        )
+        self.canvas.create_text(
+            cx + r + 2, cy + 6, text=str(int(max_val)),
+            font=("Consolas", 7), fill="#555577", anchor="w"
+        )
+
+        # Mini geçmiş çizgisi (altta)
+        if history and len(history) >= 2:
+            hmax   = max(history) or 1
+            hx0    = self.ML
+            hx1    = self.w - self.MR
+            hy0    = self.h - 6
+            hy1    = cy + 8
+            hrange = hy0 - hy1
+            pts    = []
+            for i, v in enumerate(history):
+                hx = hx0 + (hx1 - hx0) * i / (len(history) - 1)
+                hy = hy0 - (v / hmax) * hrange
+                pts += [hx, hy]
+            if len(pts) >= 4:
+                self.canvas.create_line(*pts, fill=arc_color,
+                                        width=1, smooth=True)
 
 
 def _detect_compose_cmd() -> str:
@@ -368,9 +645,16 @@ class MertUpdater(tk.Tk):
         self._task_start   = 0.0
         self._compose_cmd  = _detect_compose_cmd()
         self._behind_count = 0
-        self._backup_mgr   = BackupManager()
-        self._summary_mgr  = SummaryManager()
-        self._pre_update_hash = ""   # güncelleme öncesi HEAD hash'i
+        self._backup_mgr      = BackupManager()
+        self._summary_mgr     = SummaryManager()
+        self._pre_update_hash = ""
+        # Canlı Docker istatistikleri
+        self._cpu_history:  list[float] = []
+        self._ram_history:  list[float] = []
+        self._cpu_now       = 0.0
+        self._ram_now       = 0.0
+        self._ram_max       = 512.0    # MB — ilk varsayım, docker stats'tan güncellenir
+        self._stats_after   = None
 
         self._build_ui()
         self._check_status()
@@ -648,8 +932,86 @@ class MertUpdater(tk.Tk):
 
         self.after(200, self._refresh_summary_ui)
 
+        # ── Grafikler paneli ──────────────────────────────────────────────────
+        gbar = tk.Frame(self, bg=BG_DARK)
+        gbar.pack(fill="x", padx=20, pady=(10, 0))
+
+        # Başlık + aç/kapa butonu
+        self._graphs_open = tk.BooleanVar(value=True)
+        gbar_left = tk.Frame(gbar, bg=BG_DARK)
+        gbar_left.pack(side="left")
+        tk.Label(
+            gbar_left, text="Grafikler",
+            font=("Segoe UI", 9, "bold"), fg=FG_DIM, bg=BG_DARK
+        ).pack(side="left")
+        self._graph_toggle_lbl = tk.Label(
+            gbar_left, text="▲", font=("Segoe UI", 8), fg=FG_DIM, bg=BG_DARK,
+            cursor="hand2"
+        )
+        self._graph_toggle_lbl.pack(side="left", padx=(4, 0))
+        self._graph_toggle_lbl.bind("<Button-1>", self._toggle_graphs)
+
+        # Canlı güncelleme ibaresi
+        self._stats_lbl = tk.Label(
+            gbar, text="", font=("Segoe UI", 8), fg=FG_DIM, bg=BG_DARK
+        )
+        self._stats_lbl.pack(side="right")
+
+        # Grafik çerçevesi (gizlenebilir)
+        self._graphs_frame = tk.Frame(self, bg=BG_CARD,
+                                       highlightbackground=BORDER,
+                                       highlightthickness=1)
+        self._graphs_frame.pack(fill="x", padx=20, pady=(3, 0))
+
+        inner_g = tk.Frame(self._graphs_frame, bg=BG_CARD)
+        inner_g.pack(fill="x", padx=6, pady=6)
+
+        CHART_H = 110
+        CHART_W = 220
+
+        # Sol: Build süresi (çizgi)
+        left_g = tk.Frame(inner_g, bg=BG_CARD)
+        left_g.pack(side="left", fill="both", expand=True)
+        tk.Label(left_g, text="Build Süresi (sn)",
+                 font=("Segoe UI", 7), fg=FG_DIM, bg=BG_CARD).pack()
+        self._chart_build = ChartCanvas(left_g, CHART_W, CHART_H,
+                                         "", bg=BG_CARD)
+        self._chart_build.canvas.pack()
+
+        # Orta: Kod değişikliği (çubuk)
+        mid_g = tk.Frame(inner_g, bg=BG_CARD)
+        mid_g.pack(side="left", fill="both", expand=True, padx=6)
+        tk.Label(mid_g, text="Kod Değişikliği (satır)",
+                 font=("Segoe UI", 7), fg=FG_DIM, bg=BG_CARD).pack()
+        self._chart_code = ChartCanvas(mid_g, CHART_W, CHART_H,
+                                        "", bg=BG_CARD)
+        self._chart_code.canvas.pack()
+
+        # Sağ: CPU gauge
+        right_g = tk.Frame(inner_g, bg=BG_CARD)
+        right_g.pack(side="left", fill="both", expand=True, padx=(0, 6))
+        tk.Label(right_g, text="CPU",
+                 font=("Segoe UI", 7), fg=FG_DIM, bg=BG_CARD).pack()
+        self._chart_cpu = ChartCanvas(right_g, 140, CHART_H,
+                                       "", bg=BG_CARD)
+        self._chart_cpu.canvas.pack()
+
+        # En sağ: RAM gauge
+        far_g = tk.Frame(inner_g, bg=BG_CARD)
+        far_g.pack(side="left", fill="both", expand=True)
+        tk.Label(far_g, text="RAM",
+                 font=("Segoe UI", 7), fg=FG_DIM, bg=BG_CARD).pack()
+        self._chart_ram = ChartCanvas(far_g, 140, CHART_H,
+                                       "", bg=BG_CARD)
+        self._chart_ram.canvas.pack()
+
+        # İlk çizim + canlı polling başlat
+        self.after(500, self._redraw_history_charts)
+        self.after(800, self._poll_docker_stats)
+
         # ── Konsol başlık satırı ──────────────────────────────────────────────
-        con_bar = tk.Frame(self, bg=BG_DARK)
+        self._console_frame = tk.Frame(self, bg=BG_DARK)
+        con_bar = self._console_frame
         con_bar.pack(fill="x", padx=20, pady=(8, 2))
 
         tk.Label(
@@ -1166,6 +1528,7 @@ class MertUpdater(tk.Tk):
         }
         self._summary_mgr.record(entry)
         self.after(0, self._refresh_summary_ui)
+        self.after(100, self._redraw_history_charts)
 
     def _refresh_summary_ui(self):
         """Özet panelini ve dropdown'ı güncelle."""
@@ -1286,6 +1649,128 @@ class MertUpdater(tk.Tk):
                 text="  Kod değişikliği yok — sadece build/restart yapıldı",
                 font=("Segoe UI", 8), fg=FG_DIM, bg=BG_CARD, pady=4
             ).pack(anchor="w", padx=10)
+
+    # ─── Grafik metodları ────────────────────────────────────────────────────
+
+    def _toggle_graphs(self, event=None):
+        """Grafik panelini aç/kapat."""
+        if self._graphs_open.get():
+            self._graphs_frame.pack_forget()
+            self._graphs_open.set(False)
+            self._graph_toggle_lbl.config(text="▼")
+        else:
+            self._graphs_frame.pack(fill="x", padx=20, pady=(3, 0),
+                                    before=self._console_frame)
+            self._graphs_open.set(True)
+            self._graph_toggle_lbl.config(text="▲")
+
+    def _redraw_history_charts(self):
+        """Özet geçmişinden build süresi + kod değişikliği grafiklerini çizer."""
+        history = self._summary_mgr.all()
+        if not history:
+            self._chart_build.clear()
+            self._chart_code.clear()
+            return
+
+        # En eskiden en yeniye sırala (özet en yeni başta)
+        ordered = list(reversed(history[-12:]))
+
+        build_times = [h.get("elapsed_s", 0) for h in ordered]
+        insertions  = [h.get("insertions", 0)  for h in ordered]
+        deletions   = [h.get("deletions", 0)   for h in ordered]
+        x_labels    = [h.get("timestamp", "")[-5:] for h in ordered]  # SS:DD
+
+        # Build süresi çizgi grafiği
+        self._chart_build.draw_line(
+            build_times, color=TEAL, fill_color="#1a3a3a",
+            dot_color=TEAL, x_labels=x_labels, y_fmt="{:.0f}s"
+        )
+
+        # Kod değişikliği çubuk grafiği
+        self._chart_code.draw_bars(
+            insertions, deletions,
+            pos_color=SUCCESS, neg_color=ERROR,
+            x_labels=x_labels
+        )
+
+    def _poll_docker_stats(self):
+        """Docker container CPU ve RAM'ini arka planda sorgular."""
+        def _worker():
+            try:
+                r = subprocess.run(
+                    ["docker", "stats", "--no-stream", "--format",
+                     "{{.CPUPerc}}|{{.MemUsage}}",
+                     "--filter", "name=mert-site"],
+                    capture_output=True, text=True, timeout=8
+                )
+                if r.returncode == 0 and r.stdout.strip():
+                    line = r.stdout.strip().splitlines()[0]
+                    parts = line.split("|")
+                    if len(parts) >= 2:
+                        cpu_str = parts[0].strip().replace("%", "")
+                        mem_str = parts[1].strip()   # örn: "123MiB / 512MiB"
+                        try:
+                            cpu = float(cpu_str)
+                        except ValueError:
+                            cpu = 0.0
+                        # RAM parse
+                        ram_used, ram_max = 0.0, 512.0
+                        m = re.match(r"([\d.]+)(\w+)\s*/\s*([\d.]+)(\w+)", mem_str)
+                        if m:
+                            def to_mb(val, unit):
+                                unit = unit.upper()
+                                if "GIB" in unit or "GB" in unit:
+                                    return float(val) * 1024
+                                if "MIB" in unit or "MB" in unit:
+                                    return float(val)
+                                if "KIB" in unit or "KB" in unit:
+                                    return float(val) / 1024
+                                return float(val)
+                            ram_used = to_mb(m.group(1), m.group(2))
+                            ram_max  = to_mb(m.group(3), m.group(4))
+
+                        self.after(0, self._apply_docker_stats, cpu, ram_used, ram_max)
+            except Exception:
+                pass
+
+        threading.Thread(target=_worker, daemon=True).start()
+        # 4 saniyede bir tekrarla
+        self._stats_after = self.after(4000, self._poll_docker_stats)
+
+    def _apply_docker_stats(self, cpu: float, ram_used: float, ram_max: float):
+        """Stats geldi → geçmiş güncelle → grafikleri çiz."""
+        MAX_HISTORY = 30
+
+        self._cpu_now = cpu
+        self._ram_now = ram_used
+        self._ram_max = ram_max
+
+        self._cpu_history.append(cpu)
+        self._ram_history.append(ram_used)
+        if len(self._cpu_history) > MAX_HISTORY:
+            self._cpu_history.pop(0)
+        if len(self._ram_history) > MAX_HISTORY:
+            self._ram_history.pop(0)
+
+        # CPU gauge
+        self._chart_cpu.draw_gauge(
+            cpu, 100.0, "CPU Kullanım", "%",
+            low_color=SUCCESS, mid_color=WARNING, high_color=ERROR,
+            history=self._cpu_history
+        )
+
+        # RAM gauge
+        self._chart_ram.draw_gauge(
+            ram_used, max(ram_max, 1), "RAM Kullanım", "M",
+            low_color=ACCENT, mid_color=PURPLE, high_color=ERROR,
+            history=self._ram_history
+        )
+
+        # Üst ibare güncelle
+        ts = datetime.datetime.now().strftime("%H:%M:%S")
+        self._stats_lbl.config(
+            text=f"CPU {cpu:.1f}%  RAM {ram_used:.0f}/{ram_max:.0f}MB  ·  {ts}"
+        )
 
     def _do_restore(self, backup_id: str, label: str):
         if not messagebox.askyesno(
