@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { UserCog, Shield, Clock, MapPin, Phone, Mail, Plus, Trash2, Activity, MousePointerClick, History, Eye, EyeOff, Edit3, Lock, Key, Save, X, Search, CheckCircle2 } from 'lucide-react';
+import { UserCog, Shield, Clock, MapPin, Phone, Mail, Plus, Trash2, Activity, MousePointerClick, History, Eye, EyeOff, Edit3, Lock, Key, Save, X, Search, CheckCircle2, LogOut, WifiOff } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import * as Dialog from '@radix-ui/react-dialog';
 import { toast } from 'sonner';
@@ -13,6 +13,7 @@ import { getPagePermissions } from '../utils/permissions';
 import { SyncStatusBar, SyncBadge } from '../components/SyncStatusBar';
 import { getFromStorage, setInStorage, StorageKey } from '../utils/storage';
 import { hashString } from '../utils/security';
+import { supabase } from '../lib/supabase';
 import { analyzePasswordStrength, getSecurityPolicy, checkRateLimit, generateCSRFToken, validateCSRFToken, addSecurityThreat, detectRapidActions, deepSanitize, detectSQLInjection, appendToLogChain } from '../utils/security';
 import { useSecurityMonitor } from '../hooks/useSecurityMonitor';
 import { PasswordStrengthBar } from '../components/PasswordStrengthBar';
@@ -262,7 +263,7 @@ export function PersonelPage() {
     const requestedRole = fd.get('role') as 'Yönetici' | 'Personel';
     if (requestedRole === 'Yönetici' && user?.role !== 'Yönetici') {
       toast.error('Yönetici rolü atama yetkiniz bulunmamaktadır.');
-      logActivity('security_alert', 'Yetkisiz Yönetici Rolü Atama Denemesi', { level: 'critical', employeeName: user?.name, description: 'Personel, yönetici rolü atamaya çalıştı.' });
+      logActivity('security_alert', 'Yetkisiz Yönetici Rolü Atama Denemesi', { level: 'high', employeeName: user?.name, description: 'Personel, yönetici rolü atamaya çalıştı.' });
       addSecurityThreat({ type: 'privilege_escalation', severity: 'critical', title: 'Yetkisiz Rol Atama', description: `${user?.name} yönetici rolü atamaya çalıştı.`, source: 'personel_form', metadata: { userId: user?.id } });
       return;
     }
@@ -338,7 +339,7 @@ export function PersonelPage() {
     // GÜVENLİK: Yalnızca yöneticiler Yönetici rolü atayabilir
     if (editRole === 'Yönetici' && user?.role !== 'Yönetici') {
       toast.error('Yönetici rolü atama yetkiniz bulunmamaktadır.');
-      logActivity('security_alert', 'Yetkisiz Yönetici Rolü Düzenleme Denemesi', { level: 'critical', employeeName: user?.name, description: 'Personel, yönetici rolü atamaya çalıştı.' });
+      logActivity('security_alert', 'Yetkisiz Yönetici Rolü Düzenleme Denemesi', { level: 'high', employeeName: user?.name, description: 'Personel, yönetici rolü atamaya çalıştı.' });
       addSecurityThreat({ type: 'privilege_escalation', severity: 'critical', title: 'Yetkisiz Rol Düzenleme', description: `${user?.name} personel düzenleme ile yönetici rolü atamaya çalıştı.`, source: 'personel_edit', metadata: { userId: user?.id } });
       return;
     }
@@ -363,6 +364,53 @@ export function PersonelPage() {
     } finally {
       setIsSaving(false);
     }
+  };
+
+  // ── Uzaktan Zorla Oturum Kapatma ───────────────────────────────
+  const handleForceLogout = async (e: React.MouseEvent, personId: string, personName: string) => {
+    e.stopPropagation();
+    if (!canEdit) {
+      toast.error('Bu işlem için yönetici yetkisi gereklidir.');
+      return;
+    }
+    if (personId === 'admin-super') {
+      toast.error('Sistem yöneticisi oturumu uzaktan kapatılamaz.');
+      return;
+    }
+    toast(`${personName} adlı kullanıcının oturumu kapatılsın mı?`, {
+      action: {
+        label: 'Evet, Kapat',
+        onClick: async () => {
+          try {
+            // Supabase KV'e force_logout sinyali yaz — kullanıcının tarayıcısı 60s içinde algılar
+            await supabase.from('kv_store_daadfb0c').upsert({
+              key: `sync_force_logout_${personId}`,
+              value: {
+                reason: `Yönetici (${user?.name || 'Admin'}) tarafından oturumunuz sonlandırıldı.`,
+                by: user?.name || 'Admin',
+                at: new Date().toISOString(),
+              },
+            });
+            // Personel durumunu offline olarak işaretle
+            const personnel = getFromStorage<any[]>(StorageKey.PERSONEL_DATA) || [];
+            const updated = personnel.map(p =>
+              p.id === personId ? { ...p, status: 'offline' } : p
+            );
+            setInStorage(StorageKey.PERSONEL_DATA, updated);
+            logActivity('security_alert', 'Uzaktan oturum kapatma tetiklendi', {
+              employeeName: user?.name,
+              level: 'high',
+              description: `${personName} kullanıcısının oturumu uzaktan kapatıldı.`,
+            });
+            toast.success(`${personName} adlı kullanıcının oturumu kapatma sinyali gönderildi.`);
+          } catch {
+            toast.error('İşlem başarısız. Ağ bağlantısını kontrol edin.');
+          }
+        },
+      },
+      cancel: { label: 'İptal', onClick: () => {} },
+      duration: 6000,
+    });
   };
 
   const handleDelete = async (e: React.MouseEvent, id: string, name: string) => {
@@ -553,9 +601,18 @@ export function PersonelPage() {
                     </div>
                   </div>
                   <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <button onClick={(e) => openEditModal(person, e)} className="p-2 bg-white/5 hover:bg-blue-600 rounded-xl text-gray-400 hover:text-white transition-all"><Edit3 className="w-4 h-4" /></button>
+                    <button onClick={(e) => openEditModal(person, e)} className="p-2 bg-white/5 hover:bg-blue-600 rounded-xl text-gray-400 hover:text-white transition-all" title="Düzenle"><Edit3 className="w-4 h-4" /></button>
+                    {person.id !== '1' && person.id !== 'admin-super' && person.status === 'online' && (
+                      <button
+                        onClick={(e) => handleForceLogout(e, person.id, person.name)}
+                        className="p-2 bg-white/5 hover:bg-orange-600 rounded-xl text-gray-400 hover:text-white transition-all"
+                        title="Oturumu Uzaktan Kapat"
+                      >
+                        <WifiOff className="w-4 h-4" />
+                      </button>
+                    )}
                     {person.id !== '1' && person.id !== 'admin-super' && (
-                      <button onClick={(e) => handleDelete(e, person.id, person.name)} className="p-2 bg-white/5 hover:bg-red-600 rounded-xl text-gray-400 hover:text-white transition-all"><Trash2 className="w-4 h-4" /></button>
+                      <button onClick={(e) => handleDelete(e, person.id, person.name)} className="p-2 bg-white/5 hover:bg-red-600 rounded-xl text-gray-400 hover:text-white transition-all" title="Sil"><Trash2 className="w-4 h-4" /></button>
                     )}
                   </div>
                 </div>

@@ -102,6 +102,15 @@ interface SocialLink {
   active: boolean;
 }
 
+interface LoginPageConfig {
+  headline: string;
+  tagline: string;
+  description: string;
+  formTitle: string;
+  formSubtitle: string;
+  trustBar: Array<{ icon: string; text: string }>;
+}
+
 interface PazarlamaContent {
   heroBanners: HeroBanner[];
   announcements: Announcement[];
@@ -120,6 +129,7 @@ interface PazarlamaContent {
     accentColor: string;
     showParticles: boolean;
   };
+  loginPage: LoginPageConfig;
 }
 
 const DEFAULT_CONTENT: PazarlamaContent = {
@@ -164,10 +174,23 @@ const DEFAULT_CONTENT: PazarlamaContent = {
     { platform: 'twitter', url: '', active: false },
   ],
   footerText: 'Tum haklari saklidir.',
-  theme: { primaryColor: 'blue', accentColor: 'cyan', showParticles: true },
+  theme: { primaryColor: 'blue', accentColor: 'cyan', showParticles: false },
+  loginPage: {
+    headline: 'Kalite ve\nGüven\nHer Pakette.',
+    tagline: 'TÜRKİYE\'NİN GÜVENİLİR ET TEDARİKÇİSİ',
+    description: 'ISO 22000 sertifikalı tesislerimizde, soğuk zincir hiçbir aşamada kırılmadan üretim yapıyoruz. 15 yıllık deneyim ve 2500+ mutlu müşteri güvencesiyle yanınızdayız.',
+    formTitle: 'Personel Girişi',
+    formSubtitle: 'Kurumsal hesabınızla giriş yapın',
+    trustBar: [
+      { icon: 'shield', text: 'ISO 22000' },
+      { icon: 'award', text: '15+ Yıl Deneyim' },
+      { icon: 'truck', text: 'Aynı Gün Teslimat' },
+      { icon: 'package', text: 'Soğuk Zincir' },
+    ],
+  },
 };
 
-type TabKey = 'dashboard' | 'hero' | 'haberler' | 'urunler' | 'kampanyalar' | 'firma' | 'referanslar' | 'sss' | 'ayarlar' | 'analytics';
+type TabKey = 'dashboard' | 'haberler' | 'urunler' | 'firma' | 'giris' | 'ayarlar' | 'analytics';
 
 // ─── Content Templates ──────────────────────────────────────────
 const ANNOUNCEMENT_TEMPLATES = [
@@ -462,14 +485,13 @@ function ImageInputField({ value, onChange, placeholder = 'Gorsel URL (Unsplash 
 function ContentHealthScore({ content }: { content: PazarlamaContent }) {
   const checks = useMemo(() => {
     const items: { label: string; ok: boolean; tip: string }[] = [
-{ label: 'En az 2 haber', ok: content.announcements.filter(a => a.active).length >= 2, tip: 'Guncel haberler eklemeye devam edin' },
-      { label: 'Urun vitrini dolu', ok: content.products.filter(p => p.active).length >= 2, tip: 'En az 2 vitrin urunu ekleyin' },
-      { label: 'Firma bilgisi yazilmis', ok: content.companyAbout.length > 50, tip: 'Hakkimizda metnini en az 50 karakter yapin' },
-      { label: 'Misyon & vizyon', ok: content.companyMission.length > 10 && content.companyVision.length > 10, tip: 'Misyon ve vizyon alanlarini doldurun' },
-      { label: 'Musteri referansi var', ok: content.testimonials.filter(t => t.active).length >= 1, tip: 'En az 1 musteri yorumu ekleyin' },
-      { label: 'SSS sorulari', ok: content.faq.filter(f => f.active).length >= 2, tip: 'Sik sorulan sorulari ekleyin' },
-      { label: 'Sosyal medya linki', ok: content.socialLinks.filter(s => s.active && s.url).length >= 1, tip: 'En az 1 sosyal medya linki ekleyin' },
-      { label: 'Istatistik kartlari', ok: content.stats.length >= 3, tip: 'En az 3 istatistik karti olsun' },
+      { label: 'İstatistik kartları (≥3)', ok: content.stats.length >= 3, tip: 'En az 3 istatistik kartı ekleyin (Giriş Sayfası görünür)' },
+      { label: 'Giriş başlığı ayarlı', ok: content.loginPage?.headline?.length > 5, tip: 'Giriş Sayfası › Başlık alanını doldurun' },
+      { label: 'Giriş tagline ayarlı', ok: content.loginPage?.tagline?.length > 5, tip: 'Giriş Sayfası › Tagline alanını doldurun' },
+      { label: 'Firma açıklaması', ok: content.companyAbout.length > 50, tip: 'Firma › Hakkımızda metnini en az 50 karakter yapın' },
+      { label: 'Misyon & vizyon', ok: content.companyMission.length > 10 && content.companyVision.length > 10, tip: 'Firma › Misyon ve vizyon alanlarını doldurun' },
+      { label: 'En az 2 haber', ok: content.announcements.filter(a => a.active).length >= 2, tip: 'Haberler sekmesinden güncel duyuru ekleyin' },
+      { label: 'Ürün vitrini dolu', ok: content.products.filter(p => p.active).length >= 2, tip: 'Ürünler sekmesinden en az 2 vitrin ürünü ekleyin' },
     ];
     return items;
   }, [content]);
@@ -572,99 +594,97 @@ function TemplatePicker<T>({ templates, onSelect, label, color }: {
 }
 
 // ─── Live Mini Preview ───────────────────────────────────────────
-// Yeni giriş sayfası layout'unu yansıtır: sol panel (carousel) + sağ panel (reklam + kartlar)
+// Gerçek giriş sayfası layout'unu yansıtır: sol marka paneli + sağ form paneli
 function LivePreview({ content, companyInfo }: { content: PazarlamaContent; companyInfo: any }) {
-  const activeBanners = content.heroBanners.filter(b => b.active);
-  const banner0 = activeBanners[0];
-  const banner1 = activeBanners[1] ?? banner0;
+  const lp = content.loginPage;
+  const headlineLines = (lp?.headline || 'Kalite ve\nGüven\nHer Pakette.').split('\n');
 
   return (
-    <div className="w-full h-full bg-[#080c14] rounded-xl overflow-hidden border border-white/10 flex">
+    <div className="w-full h-full bg-[#07090f] rounded-xl overflow-hidden border border-white/10 flex">
 
-      {/* Sol panel: carousel */}
-      <div className="w-[38%] flex-shrink-0 flex flex-col border-r border-white/5">
-        {/* Header */}
-        <div className="flex items-center gap-1 px-1.5 py-1 bg-black/50 border-b border-white/5 flex-shrink-0">
-          <div className="w-3 h-3 rounded-sm bg-blue-600 flex items-center justify-center flex-shrink-0">
-            <Sparkles className="w-1.5 h-1.5 text-white" />
+      {/* Sol panel: marka */}
+      <div className="w-[46%] flex-shrink-0 flex flex-col relative overflow-hidden border-r border-white/5">
+        <div className="absolute inset-0 bg-gradient-to-br from-red-950/50 via-[#07090f] to-[#07090f]" />
+        <div className="absolute -top-8 -left-8 w-20 h-20 rounded-full bg-red-900/20 blur-xl" />
+        <div className="relative z-10 flex flex-col h-full p-2.5">
+          {/* Logo */}
+          <div className="flex items-center gap-1.5 mb-2 flex-shrink-0">
+            <div className="w-4 h-4 rounded-md bg-gradient-to-br from-red-800 to-red-950 border border-red-700/30 flex items-center justify-center flex-shrink-0">
+              <span className="text-[5px] text-red-200 font-black">ET</span>
+            </div>
+            <div>
+              <p className="text-[5px] font-black text-white leading-none">{companyInfo.name}</p>
+            </div>
           </div>
-          <span className="text-[5px] font-bold text-white truncate">{companyInfo.name}</span>
-        </div>
-        {/* Banner */}
-        <div className="relative flex-1">
-          {banner0?.imageUrl ? (
-            <img src={banner0.imageUrl} className="w-full h-full object-cover opacity-70" alt="" />
-          ) : (
-            <div className="w-full h-full bg-gradient-to-b from-blue-900/40 to-[#080c14]" />
-          )}
-          <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent" />
-          {banner0 && (
-            <div className="absolute bottom-1.5 left-1.5 right-1.5">
-              <p className="text-[5px] font-bold text-white leading-tight line-clamp-2">{banner0.title}</p>
+          {/* Tagline */}
+          <p className="text-[3.5px] font-bold text-red-400/60 uppercase tracking-wider mb-1.5 flex-shrink-0">
+            {lp?.tagline || 'GÜVENİLİR ET TEDARİKÇİSİ'}
+          </p>
+          {/* Headline */}
+          <div className="flex-1 flex flex-col justify-center">
+            <div className="mb-1.5">
+              {headlineLines.map((line, i) => (
+                <p key={i} className={`text-[7px] font-black leading-tight ${i === 1 ? 'text-transparent' : 'text-white'}`}
+                  style={i === 1 ? { WebkitTextStroke: '0.5px #f87171' } : {}}>
+                  {line}
+                </p>
+              ))}
             </div>
-          )}
-        </div>
-        {/* Trust bar */}
-        <div className="flex items-center gap-1 px-1.5 py-1 bg-black/40 border-t border-white/5 flex-shrink-0">
-          <span className="text-[4px] text-white/30">ISO 22000</span>
-          <span className="w-px h-1.5 bg-white/10" />
-          <span className="text-[4px] text-white/30">15+ Yıl</span>
-          <span className="w-px h-1.5 bg-white/10" />
-          <span className="text-[4px] text-white/30">Aynı Gün</span>
-        </div>
-      </div>
-
-      {/* Sağ panel */}
-      <div className="flex-1 flex flex-col overflow-hidden">
-        {/* Nav */}
-        <div className="flex items-center justify-between px-1.5 py-1 border-b border-white/5 bg-[#080c14]/80 flex-shrink-0">
-          <span className="text-[4px] font-bold text-blue-400/70 uppercase tracking-wider">Müşteri Portali</span>
-          <div className="px-1 py-0.5 rounded bg-blue-600 text-[4px] text-white font-bold">Giriş</div>
-        </div>
-
-        {/* Büyük reklam banner */}
-        <div className="relative flex-1 m-1 rounded-lg overflow-hidden min-h-0">
-          {banner1?.imageUrl ? (
-            <img src={banner1.imageUrl} className="w-full h-full object-cover opacity-60" alt="" />
-          ) : (
-            <div className="w-full h-full bg-gradient-to-r from-blue-900/40 to-[#080c14]" />
-          )}
-          <div className="absolute inset-0 bg-gradient-to-r from-black/80 to-transparent" />
-          {banner1 && (
-            <div className="absolute inset-0 flex flex-col justify-center px-2">
-              <span className="text-[4px] font-bold text-blue-400 uppercase tracking-wider mb-0.5">Kampanya</span>
-              <span className="text-[6px] font-bold text-white leading-tight line-clamp-2">{banner1.title}</span>
-              <span className="text-[4px] text-white/50 mt-0.5 line-clamp-1">{banner1.subtitle}</span>
-            </div>
-          )}
-          {/* Dots */}
-          <div className="absolute bottom-1.5 right-1.5 flex gap-0.5">
-            {activeBanners.slice(0, 3).map((_, j) => (
-              <div key={j} className={`rounded-full bg-white ${j === 0 ? 'w-2.5 h-1 opacity-80' : 'w-1 h-1 opacity-30'}`} />
+            <p className="text-[3.5px] text-white/25 leading-relaxed line-clamp-3">
+              {lp?.description || ''}
+            </p>
+          </div>
+          {/* Stat cards */}
+          <div className="grid grid-cols-2 gap-0.5 mb-1.5 flex-shrink-0">
+            {(content.stats.slice(0, 4).length > 0 ? content.stats.slice(0, 4) : [{id:'1',value:'15+',label:'Yıl'},{id:'2',value:'2500+',label:'Müşteri'},{id:'3',value:'120+',label:'Ürün'},{id:'4',value:'50+',label:'Teslimat'}]).map(s => (
+              <div key={s.id} className="rounded bg-white/[0.04] border border-white/[0.06] p-1">
+                <p className="text-[5px] font-bold text-white">{s.value}</p>
+                <p className="text-[3px] text-white/30 truncate">{s.label}</p>
+              </div>
+            ))}
+          </div>
+          {/* Trust bar */}
+          <div className="flex items-center gap-1 pt-1 border-t border-white/[0.06] flex-shrink-0">
+            {(lp?.trustBar || [{ text: 'ISO 22000' }, { text: '15+ Yıl' }, { text: 'Aynı Gün' }]).slice(0, 3).map((item: any, i: number) => (
+              <React.Fragment key={i}>
+                {i > 0 && <span className="w-px h-1.5 bg-white/10" />}
+                <span className="text-[3px] text-white/20 truncate">{item.text}</span>
+              </React.Fragment>
             ))}
           </div>
         </div>
+      </div>
 
-        {/* Özellik kartları */}
-        <div className="grid grid-cols-4 gap-0.5 mx-1 mb-1 flex-shrink-0">
-          {content.stats.slice(0, 4).map(s => (
-            <div key={s.id} className="rounded bg-white/[0.04] border border-white/[0.06] p-1">
-              <p className="text-[5px] font-bold text-white leading-tight">{s.value}</p>
-              <p className="text-[3.5px] text-white/30 leading-tight line-clamp-1">{s.label}</p>
-            </div>
-          ))}
-          {content.stats.length === 0 && [1, 2, 3, 4].map(i => (
-            <div key={i} className="rounded bg-white/[0.04] border border-white/[0.06] p-1 h-5" />
-          ))}
+      {/* Sağ panel: form */}
+      <div className="flex-1 flex flex-col items-center justify-center p-2.5">
+        {/* Form title */}
+        <p className="text-[6px] font-black text-white mb-0.5">{lp?.formTitle || 'Personel Girişi'}</p>
+        <p className="text-[3.5px] text-white/30 mb-2">{lp?.formSubtitle || 'Kurumsal hesabınızla giriş yapın'}</p>
+        {/* Tab switcher */}
+        <div className="flex w-full rounded-lg overflow-hidden border border-white/10 mb-2">
+          <div className="flex-1 py-1 bg-blue-600 text-center text-[3.5px] font-bold text-white">Personel</div>
+          <div className="flex-1 py-1 bg-transparent text-center text-[3.5px] text-white/30">Yönetici</div>
         </div>
-
+        {/* Input fields */}
+        <div className="w-full space-y-1 mb-2">
+          <div className="h-4 rounded-lg bg-white/[0.04] border border-white/10 px-1.5 flex items-center">
+            <span className="text-[3px] text-white/20">Kullanıcı adı</span>
+          </div>
+          <div className="h-4 rounded-lg bg-white/[0.04] border border-white/10 px-1.5 flex items-center">
+            <span className="text-[3px] text-white/20">Şifre</span>
+          </div>
+        </div>
+        {/* Submit button */}
+        <div className="w-full h-4 rounded-lg bg-gradient-to-r from-blue-600 to-blue-700 flex items-center justify-center mb-2">
+          <span className="text-[3.5px] font-bold text-white">Giriş Yap</span>
+        </div>
         {/* Footer */}
-        <div className="flex items-center justify-between px-1.5 pb-1 flex-shrink-0">
-          <span className="text-[3.5px] text-white/20">{companyInfo.name} © 2026</span>
+        <div className="flex items-center justify-between w-full">
           <div className="flex items-center gap-0.5">
             <div className="w-1 h-1 rounded-full bg-emerald-400/60" />
-            <span className="text-[3.5px] text-white/20">Güvenli</span>
+            <span className="text-[3px] text-white/20">Güvenli</span>
           </div>
+          <span className="text-[3px] text-white/20">{companyInfo.name}</span>
         </div>
       </div>
     </div>
@@ -924,14 +944,12 @@ export function PazarlamaPage() {
 
   // Tabs
   const tabs: { key: TabKey; label: string; icon: React.ElementType; badge?: number; color: string }[] = [
-    { key: 'dashboard', label: 'Genel Bakis', icon: LayoutDashboard, color: 'pink' },
+    { key: 'dashboard', label: 'Genel Bakış', icon: LayoutDashboard, color: 'pink' },
+    { key: 'giris', label: 'Giriş Sayfası', icon: Monitor, color: 'blue' },
+    { key: 'ayarlar', label: 'İstatistikler', icon: BarChart3, color: 'emerald' },
     { key: 'haberler', label: 'Haberler', icon: Newspaper, badge: content.announcements.length, color: 'cyan' },
-    { key: 'urunler', label: 'Urunler', icon: ShoppingBag, badge: content.products.length, color: 'purple' },
-    { key: 'kampanyalar', label: 'Kampanyalar', icon: Gift, badge: content.campaigns.length, color: 'red' },
+    { key: 'urunler', label: 'Ürünler', icon: ShoppingBag, badge: content.products.length, color: 'purple' },
     { key: 'firma', label: 'Firma', icon: Building2, color: 'emerald' },
-    { key: 'referanslar', label: 'Referanslar', icon: Star, badge: content.testimonials.length, color: 'amber' },
-    { key: 'sss', label: 'SSS', icon: HelpCircle, badge: content.faq.length, color: 'orange' },
-    { key: 'ayarlar', label: 'Ayarlar', icon: Palette, color: 'pink' },
     { key: 'analytics', label: 'Vitrin Analitiği', icon: BarChart3, color: 'cyan' },
   ];
 
@@ -1043,11 +1061,11 @@ export function PazarlamaPage() {
                   {/* Content Summary Cards */}
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     {[
-{ key: 'haberler' as TabKey, title: 'Haberler & Duyurular', icon: Newspaper, count: content.announcements.length, active: content.announcements.filter(i => i.active).length, color: 'cyan', desc: 'Firma haberleri ve duyurulari' },
-                      { key: 'urunler' as TabKey, title: 'Urun Vitrini', icon: ShoppingBag, count: content.products.length, active: content.products.filter(i => i.active).length, color: 'purple', desc: 'Vitrin urunleri tanitimi' },
-                      { key: 'kampanyalar' as TabKey, title: 'Kampanyalar', icon: Gift, count: content.campaigns.length, active: content.campaigns.filter(i => i.active).length, color: 'red', desc: 'Indirimler ve promosyonlar' },
-                      { key: 'referanslar' as TabKey, title: 'Musteri Yorumlari', icon: Star, count: content.testimonials.length, active: content.testimonials.filter(i => i.active).length, color: 'amber', desc: 'Referanslar ve degerlendirmeler' },
-                      { key: 'sss' as TabKey, title: 'SSS', icon: HelpCircle, count: content.faq.length, active: content.faq.filter(i => i.active).length, color: 'orange', desc: 'Sik sorulan sorular' },
+                      { key: 'giris' as TabKey, title: 'Giriş Sayfası', icon: Monitor, count: 1, active: 1, color: 'blue', desc: 'Başlık, tagline, açıklama, güven çubuğu' },
+                      { key: 'ayarlar' as TabKey, title: 'İstatistik Kartları', icon: BarChart3, count: content.stats.length, active: content.stats.length, color: 'emerald', desc: 'Sol paneldeki 4\'lü stat kartları' },
+                      { key: 'haberler' as TabKey, title: 'Haberler & Duyurular', icon: Newspaper, count: content.announcements.length, active: content.announcements.filter(i => i.active).length, color: 'cyan', desc: 'Firma haberleri ve duyuruları' },
+                      { key: 'urunler' as TabKey, title: 'Ürün Vitrini', icon: ShoppingBag, count: content.products.length, active: content.products.filter(i => i.active).length, color: 'purple', desc: 'Vitrin ürünleri tanıtımı' },
+                      { key: 'firma' as TabKey, title: 'Firma Bilgileri', icon: Building2, count: 1, active: 1, color: 'emerald', desc: 'Hakkımızda, misyon, vizyon metinleri' },
                     ].map((section, idx) => {
                       const clrMap: Record<string, string> = { blue: 'from-blue-600/15 border-blue-500/15 hover:border-blue-500/30', cyan: 'from-cyan-600/15 border-cyan-500/15 hover:border-cyan-500/30', purple: 'from-purple-600/15 border-purple-500/15 hover:border-purple-500/30', red: 'from-red-600/15 border-red-500/15 hover:border-red-500/30', amber: 'from-amber-600/15 border-amber-500/15 hover:border-amber-500/30', orange: 'from-orange-600/15 border-orange-500/15 hover:border-orange-500/30' };
                       const iclrMap: Record<string, string> = { blue: 'from-blue-600 to-blue-700', cyan: 'from-cyan-600 to-cyan-700', purple: 'from-purple-600 to-purple-700', red: 'from-red-600 to-red-700', amber: 'from-amber-600 to-amber-700', orange: 'from-orange-600 to-orange-700' };
@@ -1100,33 +1118,41 @@ export function PazarlamaPage() {
                     </div>
                   </div>
 
-                  {/* Info */}
-                  {/* Giriş Sayfası Eşleme Haritası */}
+                  {/* Giriş Sayfasına Yansıyan İçerikler */}
                   <div className="bg-[#111] rounded-2xl p-5 border border-white/5">
                     <div className="flex items-center gap-2 mb-4">
                       <Monitor className="w-4 h-4 text-blue-400" />
                       <h3 className="text-sm font-bold text-white">Giriş Sayfasına Yansıyan İçerikler</h3>
                       <span className="px-2 py-0.5 text-[9px] font-bold bg-blue-500/15 text-blue-400 rounded-full border border-blue-500/20">Canlı Sync</span>
                     </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                       {[
+                        {
+                          label: 'Giriş Sayfası Metinleri',
+                          tab: 'giris' as TabKey,
+                          desc: 'Başlık, tagline, açıklama ve form başlığı',
+                          count: content.loginPage?.headline ? '✓ Ayarlı' : '⚠ Varsayılan',
+                          color: 'border-blue-500/20 bg-blue-500/[0.05] text-blue-400',
+                          icon: <Monitor className="w-4 h-4" />,
+                          mapped: true,
+                        },
                         {
                           label: 'İstatistik Kartları',
                           tab: 'ayarlar' as TabKey,
-                          desc: 'Masaüstü sağ paneldeki 4\'lü özellik kartları (Ayarlar › İstatistik Kartları)',
+                          desc: 'Sol paneldeki 4\'lü özellik kartları (değer + etiket)',
                           count: `${content.stats.length} kart`,
                           color: 'border-emerald-500/20 bg-emerald-500/[0.05] text-emerald-400',
                           icon: <BarChart3 className="w-4 h-4" />,
                           mapped: true,
                         },
                         {
-                          label: 'Haberler, Ürünler, Referanslar',
-                          tab: 'haberler' as TabKey,
-                          desc: 'Şu anda giriş sayfasında gösterilmiyor (kaldırıldı); ileride kullanılabilir.',
-                          count: 'Yönetilebilir',
-                          color: 'border-white/5 bg-white/[0.02] text-white/30',
+                          label: 'Güven Çubuğu',
+                          tab: 'giris' as TabKey,
+                          desc: 'Alt barındaki ISO/Teslimat/Deneyim etiketleri',
+                          count: `${content.loginPage?.trustBar?.length || 4} öğe`,
+                          color: 'border-amber-500/20 bg-amber-500/[0.05] text-amber-400',
                           icon: <Layers className="w-4 h-4" />,
-                          mapped: false,
+                          mapped: true,
                         },
                       ].map((item, i) => (
                         <motion.button
@@ -1141,11 +1167,9 @@ export function PazarlamaPage() {
                               {item.icon}
                               <span className="text-sm font-semibold text-white">{item.label}</span>
                             </div>
-                            {item.mapped && (
-                              <span className="flex items-center gap-1 text-[9px] font-bold text-emerald-400">
-                                <Check className="w-3 h-3" /> Aktif Sync
-                              </span>
-                            )}
+                            <span className="flex items-center gap-1 text-[9px] font-bold text-emerald-400">
+                              <Check className="w-3 h-3" /> Aktif
+                            </span>
                           </div>
                           <p className="text-[11px] text-muted-foreground/60 leading-relaxed">{item.desc}</p>
                           <p className="text-[10px] text-muted-foreground/40 mt-1.5">{item.count}</p>
@@ -1159,7 +1183,7 @@ export function PazarlamaPage() {
                       <Rocket className="w-5 h-5 text-pink-400 flex-shrink-0 mt-0.5" />
                       <div className="text-xs text-pink-300/80 space-y-1">
                         <p className="font-semibold text-pink-300">Hızlı Başlangıç</p>
-                        <p>Yukarıdaki kartlara tıklayarak ilgili bölüme geçin. <strong>Şablon</strong> butonlarıyla hızlı içerik ekleyin. <strong>Önizleme</strong> panelini açarak değişiklikleri anlık görün.</p>
+                        <p><strong>Giriş Sayfası</strong> sekmesinden login sayfasının başlık, tagline ve form metinlerini değiştirin. <strong>İstatistikler</strong> sekmesinden sol paneldeki stat kartlarını güncelleyin. Değişikliklerden sonra <strong>Kaydet</strong> butonuna basın.</p>
                       </div>
                     </div>
                   </div>
@@ -1325,49 +1349,6 @@ export function PazarlamaPage() {
                 </div>
               )}
 
-              {/* ─── KAMPANYALAR ───────────────────────────── */}
-              {activeTab === 'kampanyalar' && (
-                <div className="bg-[#111] rounded-3xl p-8 space-y-6 border border-white/5">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-red-600 to-red-700 flex items-center justify-center"><Gift className="w-5 h-5 text-white" /></div>
-                      <div>
-                        <h2 className="text-lg font-bold text-white">Kampanyalar & Promosyonlar</h2>
-                        <p className="text-xs text-muted-foreground/70">Ozel indirimler, sezon kampanyalari</p>
-                      </div>
-                    </div>
-                    {dashboardStats.expiredCampaigns > 0 && (
-                      <span className="px-2.5 py-1 text-[10px] font-bold bg-red-500/10 border border-red-500/20 text-red-400 rounded-lg flex items-center gap-1"><AlertCircle className="w-3 h-3" /> {dashboardStats.expiredCampaigns} suresi dolmus</span>
-                    )}
-                  </div>
-
-                  {content.campaigns.map((campaign, i) => {
-                    const isExpired = campaign.validUntil && new Date(campaign.validUntil) < new Date();
-                    return (
-                      <motion.div key={campaign.id} initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.05 }}
-                        className={`p-4 rounded-xl bg-muted/60 border transition-all ${isExpired ? 'border-red-500/20 bg-red-500/5' : campaign.active ? 'border-red-500/15' : 'border-border/20 opacity-50'}`}>
-                        <div className="flex items-center justify-between mb-3">
-                          <div className="flex items-center gap-2">
-                            <span className="text-xs font-semibold text-white">{campaign.title || 'Isimsiz Kampanya'}</span>
-                            {campaign.discount && <span className="px-1.5 py-0.5 text-[9px] font-bold bg-red-500/15 text-red-400 rounded">{campaign.discount}</span>}
-                            {isExpired && <span className="px-1.5 py-0.5 text-[9px] font-bold bg-red-500/25 text-red-300 rounded animate-pulse">SURESI DOLMUS</span>}
-                          </div>
-                          <ItemActions active={campaign.active} onToggle={() => updateItem<Campaign>('campaigns', campaign.id, { active: !campaign.active })} onDuplicate={() => duplicateItem('campaigns', campaign.id)} onDelete={() => removeItem('campaigns', campaign.id)} />
-                        </div>
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
-                          <input value={campaign.title} onChange={e => updateItem<Campaign>('campaigns', campaign.id, { title: e.target.value })} className={inputClass} placeholder="Kampanya adi" />
-                          <input value={campaign.discount} onChange={e => updateItem<Campaign>('campaigns', campaign.id, { discount: e.target.value })} className={inputClass} placeholder="Indirim (%15, 2 al 1 ode...)" />
-                          <input type="date" value={campaign.validUntil} onChange={e => updateItem<Campaign>('campaigns', campaign.id, { validUntil: e.target.value })} className={inputClass} />
-                        </div>
-                        <textarea value={campaign.description} onChange={e => updateItem<Campaign>('campaigns', campaign.id, { description: e.target.value })} rows={2} className={`${inputClass} resize-none`} placeholder="Kampanya detaylari..." />
-                        <ImageInputField value={campaign.imageUrl} onChange={(v) => updateItem<Campaign>('campaigns', campaign.id, { imageUrl: v })} placeholder="Kampanya gorseli (opsiyonel)" />
-                      </motion.div>
-                    );
-                  })}
-                  <AddButton label="Yeni Kampanya Ekle" onClick={() => addItem('campaigns', { id: crypto.randomUUID(), title: '', description: '', imageUrl: '', validUntil: '', discount: '', active: true })} color="red" />
-                </div>
-              )}
-
               {/* ─── FIRMA HAKKINDA ────────────────────────── */}
               {activeTab === 'firma' && (
                 <div className="space-y-6">
@@ -1408,176 +1389,151 @@ export function PazarlamaPage() {
                 </div>
               )}
 
-              {/* ─── REFERANSLAR ───────────────────────────── */}
-              {activeTab === 'referanslar' && (
-                <div className="bg-[#111] rounded-3xl p-8 space-y-6 border border-white/5">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-600 to-amber-700 flex items-center justify-center"><Star className="w-5 h-5 text-white" /></div>
-                      <div>
-                        <h2 className="text-lg font-bold text-white">Musteri Yorumlari / Referanslar</h2>
-                        <p className="text-xs text-muted-foreground/70">Musteri referanslari ve degerlendirmeleri</p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-amber-400 text-sm">★</span>
-                      <span className="text-xs text-muted-foreground">Ort: {content.testimonials.length > 0 ? (content.testimonials.reduce((s, t) => s + t.rating, 0) / content.testimonials.length).toFixed(1) : '0'}</span>
-                    </div>
-                  </div>
-
-                  {content.testimonials.map((item, i) => (
-                    <motion.div key={item.id} initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.05 }}
-                      className={`p-4 rounded-xl bg-muted/60 border transition-all ${item.active ? 'border-amber-500/15' : 'border-border/20 opacity-50'}`}>
-                      <div className="flex items-center justify-between mb-3">
-                        <div className="flex items-center gap-2">
-                          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-amber-500/20 to-orange-500/20 flex items-center justify-center text-amber-400 text-xs font-bold">
-                            {(item.name || 'M').charAt(0).toUpperCase()}
-                          </div>
-                          <div>
-                            <span className="text-xs font-semibold text-white">{item.name || 'Isimsiz'}</span>
-                            {item.company && <span className="text-[10px] text-muted-foreground/70 ml-1.5">{item.company}</span>}
-                          </div>
-                          <div className="flex ml-2">
-                            {[1,2,3,4,5].map(n => (
-                              <button key={n} onClick={() => updateItem<Testimonial>('testimonials', item.id, { rating: n })}
-                                className={`text-sm ${n <= item.rating ? 'text-amber-400' : 'text-accent'} hover:scale-125 transition-transform`}>★</button>
-                            ))}
-                          </div>
-                        </div>
-                        <ItemActions active={item.active} onToggle={() => updateItem<Testimonial>('testimonials', item.id, { active: !item.active })} onDuplicate={() => duplicateItem('testimonials', item.id)} onDelete={() => removeItem('testimonials', item.id)} />
-                      </div>
-                      <div className="grid grid-cols-2 gap-3 mb-3">
-                        <input value={item.name} onChange={e => updateItem<Testimonial>('testimonials', item.id, { name: e.target.value })} className={inputClass} placeholder="Musteri adi" />
-                        <input value={item.company} onChange={e => updateItem<Testimonial>('testimonials', item.id, { company: e.target.value })} className={inputClass} placeholder="Firma / Isyeri" />
-                      </div>
-                      <textarea value={item.text} onChange={e => updateItem<Testimonial>('testimonials', item.id, { text: e.target.value })} rows={2} className={`${inputClass} resize-none`} placeholder="Musteri yorumu..." />
-                    </motion.div>
-                  ))}
-                  <AddButton label="Yeni Yorum Ekle" onClick={() => addItem('testimonials', { id: crypto.randomUUID(), name: '', company: '', text: '', rating: 5, active: true })} color="amber" />
-                </div>
-              )}
-
-              {/* ─── SSS ───────────────────────────────────── */}
-              {activeTab === 'sss' && (
-                <div className="bg-[#111] rounded-3xl p-8 space-y-6 border border-white/5">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-orange-600 to-orange-700 flex items-center justify-center"><HelpCircle className="w-5 h-5 text-white" /></div>
-                      <div>
-                        <h2 className="text-lg font-bold text-white">Sik Sorulan Sorular (SSS)</h2>
-                        <p className="text-xs text-muted-foreground/70">Musterilerin sik sordugu sorular ve cevaplari</p>
-                      </div>
-                    </div>
-                    <TemplatePicker templates={FAQ_TEMPLATES} label="SSS Sablonlari" color="orange"
-                      onSelect={(t) => addItem('faq', { id: crypto.randomUUID(), question: t.question, answer: t.answer, active: true })} />
-                  </div>
-
-                  {content.faq.map((item, i) => (
-                    <motion.div key={item.id} initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.05 }}
-                      className={`p-4 rounded-xl bg-muted/60 border transition-all ${item.active ? 'border-orange-500/15' : 'border-border/20 opacity-50'}`}>
-                      <div className="flex items-center justify-between mb-3">
-                        <div className="flex items-center gap-2">
-                          <span className="w-6 h-6 rounded-lg bg-orange-600/15 text-orange-400 text-[10px] font-bold flex items-center justify-center">?</span>
-                          <span className="text-xs font-semibold text-foreground/80 line-clamp-1">{item.question || 'Yeni Soru'}</span>
-                        </div>
-                        <ItemActions active={item.active} onToggle={() => updateItem<FAQItem>('faq', item.id, { active: !item.active })} onMoveUp={() => moveItem('faq', item.id, 'up')} onMoveDown={() => moveItem('faq', item.id, 'down')} onDelete={() => removeItem('faq', item.id)} />
-                      </div>
-                      <div className="space-y-2">
-                        <input value={item.question} onChange={e => updateItem<FAQItem>('faq', item.id, { question: e.target.value })} className={inputClass} placeholder="Soru" />
-                        <textarea value={item.answer} onChange={e => updateItem<FAQItem>('faq', item.id, { answer: e.target.value })} rows={2} className={`${inputClass} resize-none`} placeholder="Cevap..." />
-                      </div>
-                    </motion.div>
-                  ))}
-                  <AddButton label="Yeni Soru Ekle" onClick={() => addItem('faq', { id: crypto.randomUUID(), question: '', answer: '', active: true })} color="orange" />
-                </div>
-              )}
-
-              {/* ─── AYARLAR ───────────────────────────────── */}
-              {activeTab === 'ayarlar' && (
+              {/* ─── GİRİŞ SAYFASI ─────────────────────────── */}
+              {activeTab === 'giris' && (
                 <div className="space-y-6">
-                  {/* İstatistik Kartları */}
-                  <div className="bg-[#111] rounded-3xl p-8 space-y-6 border border-white/5">
+                  <div className="bg-[#111] rounded-3xl p-6 sm:p-8 space-y-6 border border-white/5">
                     <div className="flex items-center gap-4">
-                      <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-600 to-emerald-700 flex items-center justify-center"><BarChart3 className="w-5 h-5 text-white" /></div>
+                      <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-600 to-blue-700 flex items-center justify-center"><Monitor className="w-5 h-5 text-white" /></div>
                       <div>
-                        <h2 className="text-lg font-bold text-white">Istatistik Kartlari</h2>
-                        <p className="text-xs text-muted-foreground/70">Login sayfasinda ustte gorunen rakamsal bilgiler</p>
+                        <h2 className="text-lg font-bold text-white">Giriş Sayfası Metinleri</h2>
+                        <p className="text-xs text-muted-foreground/70">Login sayfasının sol paneli ve form başlığı</p>
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                      {content.stats.map((stat, i) => (
-                        <motion.div key={stat.id} initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.04 }}
-                          className="p-3 rounded-xl bg-muted/60 border border-border/30">
-                          <div className="flex items-center justify-between mb-2">
-                            <span className="text-[10px] font-bold text-muted-foreground/70 uppercase">Kart #{i + 1}</span>
-                            <button onClick={() => removeItem('stats', stat.id)} className="p-1 text-red-400/60 hover:bg-red-600/15 hover:text-red-400 rounded-lg transition-all"><Trash2 className="w-3 h-3" /></button>
-                          </div>
-                          <div className="flex gap-2">
-                            <input value={stat.value} onChange={e => updateItem<StatCard>('stats', stat.id, { value: e.target.value })} className={`${inputClass} w-20`} placeholder="15+" />
-                            <input value={stat.label} onChange={e => updateItem<StatCard>('stats', stat.id, { label: e.target.value })} className={`${inputClass} flex-1`} placeholder="Etiket" />
-                            <select value={stat.color} onChange={e => updateItem<StatCard>('stats', stat.id, { color: e.target.value })} className={`${inputClass} w-28`}>
-                              <option value="blue">Mavi</option><option value="emerald">Yesil</option><option value="purple">Mor</option><option value="orange">Turuncu</option><option value="cyan">Camgobegi</option><option value="red">Kirmizi</option>
-                            </select>
-                          </div>
-                        </motion.div>
+                    <div className="p-4 rounded-xl bg-blue-500/5 border border-blue-500/15 text-xs text-blue-300/80">
+                      Bu alandaki değişiklikler kaydettiğinizde login sayfasına anında yansır. Sağdaki <strong>Önizleme</strong> butonunu kullanarak sonucu görebilirsiniz.
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                      {/* Sol: sol panel metinleri */}
+                      <div className="space-y-4">
+                        <h3 className="text-sm font-bold text-white/70 flex items-center gap-2">
+                          <span className="w-5 h-5 rounded-md bg-red-600/20 border border-red-500/20 flex items-center justify-center text-[9px] text-red-400 font-black">SOL</span>
+                          Sol Marka Paneli
+                        </h3>
+                        <div>
+                          <label className="block text-xs font-bold text-muted-foreground/60 uppercase tracking-wider mb-2">Üst Tagline</label>
+                          <input value={content.loginPage?.tagline || ''} onChange={e => updateContent({ loginPage: { ...content.loginPage, tagline: e.target.value } })}
+                            className={inputClass} placeholder="TÜRKİYE'NİN GÜVENİLİR ET TEDARİKÇİSİ" />
+                          <p className="text-[10px] text-muted-foreground/40 mt-1">Büyük başlığın üstündeki kısa slogan</p>
+                        </div>
+                        <div>
+                          <label className="block text-xs font-bold text-muted-foreground/60 uppercase tracking-wider mb-2">Ana Başlık (satır satır, Enter ile böl)</label>
+                          <textarea value={content.loginPage?.headline || ''} onChange={e => updateContent({ loginPage: { ...content.loginPage, headline: e.target.value } })}
+                            rows={4} className={`${inputClass} resize-none`} placeholder={'Kalite ve\nGüven\nHer Pakette.'} />
+                          <p className="text-[10px] text-muted-foreground/40 mt-1">Her satır ayrı bir satırda görünür. Ortadaki satır kırmızı-turuncu gradyan renkte olur.</p>
+                        </div>
+                        <div>
+                          <label className="block text-xs font-bold text-muted-foreground/60 uppercase tracking-wider mb-2">Açıklama Paragrafı</label>
+                          <textarea value={content.loginPage?.description || ''} onChange={e => updateContent({ loginPage: { ...content.loginPage, description: e.target.value } })}
+                            rows={3} className={`${inputClass} resize-none`} placeholder="ISO 22000 sertifikalı tesislerimizde..." />
+                        </div>
+                      </div>
+
+                      {/* Sağ: form metinleri */}
+                      <div className="space-y-4">
+                        <h3 className="text-sm font-bold text-white/70 flex items-center gap-2">
+                          <span className="w-5 h-5 rounded-md bg-blue-600/20 border border-blue-500/20 flex items-center justify-center text-[9px] text-blue-400 font-black">SAĞ</span>
+                          Giriş Form Paneli
+                        </h3>
+                        <div>
+                          <label className="block text-xs font-bold text-muted-foreground/60 uppercase tracking-wider mb-2">Form Başlığı</label>
+                          <input value={content.loginPage?.formTitle || ''} onChange={e => updateContent({ loginPage: { ...content.loginPage, formTitle: e.target.value } })}
+                            className={inputClass} placeholder="Personel Girişi" />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-bold text-muted-foreground/60 uppercase tracking-wider mb-2">Form Alt Başlığı</label>
+                          <input value={content.loginPage?.formSubtitle || ''} onChange={e => updateContent({ loginPage: { ...content.loginPage, formSubtitle: e.target.value } })}
+                            className={inputClass} placeholder="Kurumsal hesabınızla giriş yapın" />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Güven Çubuğu */}
+                  <div className="bg-[#111] rounded-3xl p-6 sm:p-8 space-y-5 border border-white/5">
+                    <div className="flex items-center gap-4">
+                      <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-600 to-amber-700 flex items-center justify-center"><Layers className="w-5 h-5 text-white" /></div>
+                      <div>
+                        <h2 className="text-lg font-bold text-white">Güven Çubuğu</h2>
+                        <p className="text-xs text-muted-foreground/70">Sol panelin alt kısmındaki küçük etiketler (maks. 4)</p>
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      {(content.loginPage?.trustBar || []).map((item, i) => (
+                        <div key={i} className="flex items-center gap-2 p-3 rounded-xl bg-muted/60 border border-border/30">
+                          <select value={item.icon} onChange={e => {
+                            const tb = [...(content.loginPage?.trustBar || [])];
+                            tb[i] = { ...tb[i], icon: e.target.value };
+                            updateContent({ loginPage: { ...content.loginPage, trustBar: tb } });
+                          }} className={`${inputClass} w-32`}>
+                            <option value="shield">Kalkan</option>
+                            <option value="award">Ödül</option>
+                            <option value="truck">Kamyon</option>
+                            <option value="package">Kutu</option>
+                            <option value="star">Yıldız</option>
+                            <option value="check">Onay</option>
+                          </select>
+                          <input value={item.text} onChange={e => {
+                            const tb = [...(content.loginPage?.trustBar || [])];
+                            tb[i] = { ...tb[i], text: e.target.value };
+                            updateContent({ loginPage: { ...content.loginPage, trustBar: tb } });
+                          }} className={`${inputClass} flex-1`} placeholder="ISO 22000" />
+                          <button onClick={() => {
+                            const tb = (content.loginPage?.trustBar || []).filter((_, idx) => idx !== i);
+                            updateContent({ loginPage: { ...content.loginPage, trustBar: tb } });
+                          }} className="p-2 text-red-400/60 hover:bg-red-600/15 hover:text-red-400 rounded-lg transition-all flex-shrink-0">
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
                       ))}
                     </div>
-                    <AddButton label="Yeni Kart Ekle" onClick={() => addItem('stats', { id: crypto.randomUUID(), icon: 'star', value: '', label: '', color: 'blue' })} color="emerald" />
+                    {(content.loginPage?.trustBar?.length || 0) < 4 && (
+                      <AddButton label="Etiket Ekle" onClick={() => {
+                        const tb = [...(content.loginPage?.trustBar || []), { icon: 'shield', text: '' }];
+                        updateContent({ loginPage: { ...content.loginPage, trustBar: tb } });
+                      }} color="amber" />
+                    )}
                   </div>
+                </div>
+              )}
 
-                  {/* Sosyal Medya */}
-                  <div className="bg-[#111] rounded-3xl p-8 space-y-6 border border-white/5">
-                    <div className="flex items-center gap-4">
-                      <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-pink-600 to-pink-700 flex items-center justify-center"><Share2 className="w-5 h-5 text-white" /></div>
-                      <div>
-                        <h2 className="text-lg font-bold text-white">Sosyal Medya Linkleri</h2>
-                        <p className="text-xs text-muted-foreground/70">Bos birakirsaniz gosterilmez</p>
-                      </div>
-                    </div>
-
-                    <div className="space-y-3">
-                      {content.socialLinks.map((link, i) => {
-                        const pIcons: Record<string, React.ElementType> = { instagram: Instagram, facebook: Facebook, youtube: Youtube, twitter: Twitter, linkedin: Linkedin };
-                        const PIcon = pIcons[link.platform] || Globe;
-                        const pColors: Record<string, string> = { instagram: 'from-pink-500/20 to-purple-500/20 border-pink-500/20', facebook: 'from-blue-500/20 to-blue-600/20 border-blue-500/20', youtube: 'from-red-500/20 to-red-600/20 border-red-500/20', twitter: 'from-sky-500/20 to-sky-600/20 border-sky-500/20', linkedin: 'from-blue-600/20 to-blue-700/20 border-blue-600/20' };
-                        return (
-                          <div key={link.platform} className={`flex items-center gap-3 p-3 rounded-xl bg-gradient-to-r ${pColors[link.platform] || 'from-secondary/40 border-border/30'} border`}>
-                            <PIcon className="w-5 h-5 text-white/70 flex-shrink-0" />
-                            <span className="text-xs text-muted-foreground capitalize w-20 flex-shrink-0">{link.platform}</span>
-                            <input value={link.url} onChange={e => { const u = [...content.socialLinks]; u[i] = { ...u[i], url: e.target.value }; updateContent({ socialLinks: u }); }}
-                              className={`${inputClass} flex-1`} placeholder={`https://${link.platform}.com/...`} />
-                            <Toggle value={link.active} size="sm" onChange={(v) => { const u = [...content.socialLinks]; u[i] = { ...u[i], active: v }; updateContent({ socialLinks: u }); }} />
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-
-                  {/* Footer & Tema */}
-                  <div className="bg-[#111] rounded-3xl p-8 space-y-6 border border-white/5">
-                    <div className="flex items-center gap-4">
-                      <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-600 to-indigo-700 flex items-center justify-center"><Palette className="w-5 h-5 text-white" /></div>
-                      <div>
-                        <h2 className="text-lg font-bold text-white">Footer & Tema Ayarlari</h2>
-                        <p className="text-xs text-muted-foreground/70">Genel gorunum ayarlari</p>
-                      </div>
-                    </div>
-
+              {/* ─── İSTATİSTİKLER (AYARLAR) ───────────────── */}
+              {activeTab === 'ayarlar' && (
+                <div className="bg-[#111] rounded-3xl p-8 space-y-6 border border-white/5">
+                  <div className="flex items-center gap-4">
+                    <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-600 to-emerald-700 flex items-center justify-center"><BarChart3 className="w-5 h-5 text-white" /></div>
                     <div>
-                      <label className="block text-sm font-medium text-foreground/80 mb-2">Footer Metni</label>
-                      <input value={content.footerText} onChange={e => updateContent({ footerText: e.target.value })} className={inputClass} placeholder="Tum haklari saklidir." />
-                    </div>
-
-                    <div className="flex items-center gap-4 p-4 rounded-xl bg-muted/60 border border-border/30">
-                      <Toggle value={content.theme.showParticles} onChange={(v) => updateContent({ theme: { ...content.theme, showParticles: v } })} />
-                      <div>
-                        <p className="text-sm font-medium text-white">Parcacik Animasyonu</p>
-                        <p className="text-[10px] text-muted-foreground/70">Login sayfasinda yuzen parcacik efekti</p>
-                      </div>
-                      {content.theme.showParticles && <Sparkles className="w-4 h-4 text-blue-400 animate-pulse ml-auto" />}
+                      <h2 className="text-lg font-bold text-white">İstatistik Kartları</h2>
+                      <p className="text-xs text-muted-foreground/70">Giriş sayfası sol panelindeki 4'lü özellik kartları</p>
                     </div>
                   </div>
+
+                  <div className="p-4 rounded-xl bg-emerald-500/5 border border-emerald-500/15 text-xs text-emerald-300/80">
+                    Bu kartlar giriş sayfasının sol alt bölümünde 2x2 ızgarada görünür. Değer (15+), etiket (Yıl Deneyim) ve renk belirleyin.
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {content.stats.map((stat, i) => (
+                      <motion.div key={stat.id} initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.04 }}
+                        className="p-3 rounded-xl bg-muted/60 border border-border/30">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-[10px] font-bold text-muted-foreground/70 uppercase">Kart #{i + 1}</span>
+                          <button onClick={() => removeItem('stats', stat.id)} className="p-1 text-red-400/60 hover:bg-red-600/15 hover:text-red-400 rounded-lg transition-all"><Trash2 className="w-3 h-3" /></button>
+                        </div>
+                        <div className="flex gap-2">
+                          <input value={stat.value} onChange={e => updateItem<StatCard>('stats', stat.id, { value: e.target.value })} className={`${inputClass} w-20`} placeholder="15+" />
+                          <input value={stat.label} onChange={e => updateItem<StatCard>('stats', stat.id, { label: e.target.value })} className={`${inputClass} flex-1`} placeholder="Etiket" />
+                          <select value={stat.color} onChange={e => updateItem<StatCard>('stats', stat.id, { color: e.target.value })} className={`${inputClass} w-28`}>
+                            <option value="blue">Mavi</option><option value="emerald">Yeşil</option><option value="purple">Mor</option><option value="orange">Turuncu</option><option value="cyan">Camgöbeği</option><option value="red">Kırmızı</option>
+                          </select>
+                        </div>
+                      </motion.div>
+                    ))}
+                  </div>
+                  <AddButton label="Yeni Kart Ekle" onClick={() => addItem('stats', { id: crypto.randomUUID(), icon: 'star', value: '', label: '', color: 'blue' })} color="emerald" />
                 </div>
               )}
 

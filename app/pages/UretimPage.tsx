@@ -116,6 +116,7 @@ interface UretimKayit {
   ciktiUrunAdi: string;
   ciktiStokId: string;
   stokIslemleriYapildi: boolean;
+  uretimTipi?: 'pisirme' | 'kiyma';
   createdAt: string;
 }
 
@@ -501,6 +502,7 @@ function FlowVisualization({ cigKg, copKg, temizKg, ciktiKg, fireKg, copOrani, f
   cigKg: number; copKg: number; temizKg: number; ciktiKg: number; fireKg: number;
   copOrani: number; fireOrani: number; hammaddeAdi: string; ciktiAdi: string;
 }) {
+  const { t } = useLanguage();
   if (cigKg <= 0) return null;
   const verimlilik = cigKg > 0 ? ((ciktiKg / cigKg) * 100) : 0;
   return (
@@ -806,6 +808,8 @@ export function UretimPage() {
     calisanMaliyeti: DEFAULT_URETIM_DEFAULTS.calisanMaliyeti,
     // Çıktı
     ciktiUrunAdi: '',
+    // Üretim tipi
+    uretimTipi: 'pisirme' as 'pisirme' | 'kiyma',
   });
 
   const [profileForm, setProfileForm] = useState({
@@ -927,12 +931,14 @@ export function UretimPage() {
     const copOrani = cigKg > 0 ? ((copKg / cigKg) * 100) : 0;
     const fireKg = Math.max(0, temizKg - ciktiKg);
     const fireOrani = temizKg > 0 ? ((fireKg / temizKg) * 100) : 0;
-    const tupKullanilanKg = kazanSayisi * tupPerKazan;
-    const toplamPisSuresi = kazanSayisi * form.pisSuresiSaat;
+    // Kıyma işlemede kazan/tüp kullanılmaz
+    const isKiyma = form.uretimTipi === 'kiyma';
+    const tupKullanilanKg = isKiyma ? 0 : kazanSayisi * tupPerKazan;
+    const toplamPisSuresi = isKiyma ? 0 : kazanSayisi * form.pisSuresiSaat;
 
     // Maliyet hesaplama
     const hammaddeMaliyet = cigKg * birimFiyat;
-    const tupMaliyet = tupKullanilanKg * tupFiyatKg;
+    const tupMaliyet = isKiyma ? 0 : tupKullanilanKg * tupFiyatKg;
     const paketMaliyet = ciktiKg * paketlemeMaliyeti;
     const isyeriMaliyet = ciktiKg * isyeriMaliyeti;
     const calisanMaliyet = ciktiKg * calisanMaliyeti;
@@ -1099,6 +1105,7 @@ export function UretimPage() {
       ciktiUrunAdi: form.ciktiUrunAdi,
       ciktiStokId: '',
       stokIslemleriYapildi: true,
+      uretimTipi: form.uretimTipi,
       createdAt: new Date().toISOString(),
     };
 
@@ -1339,6 +1346,7 @@ export function UretimPage() {
       isyeriMaliyeti: defaults.isyeriMaliyeti,
       calisanMaliyeti: defaults.calisanMaliyeti,
       ciktiUrunAdi: '',
+      uretimTipi: 'pisirme' as 'pisirme' | 'kiyma',
     });
     setSelectedProfile(null);
     setSelectedStokItem(null);
@@ -1800,6 +1808,39 @@ export function UretimPage() {
                   )}
                 </div>
 
+                {/* Üretim Tipi Seçimi */}
+                <div>
+                  <label className="block text-sm font-medium text-foreground/80 mb-2 flex items-center gap-2">
+                    <Zap className="w-4 h-4 text-amber-400" />
+                    İşlem Tipi
+                  </label>
+                  <div className="flex rounded-xl overflow-hidden border border-border/50 bg-secondary/30">
+                    {([
+                      { key: 'pisirme', label: 'Pişirme / Kavurma', icon: Flame, desc: 'Kazan, tüp ve ateş gerektirir' },
+                      { key: 'kiyma', label: 'Kıyma İşleme', icon: Scissors, desc: 'Sadece temizleme & öğütme' },
+                    ] as const).map(item => (
+                      <button
+                        key={item.key}
+                        type="button"
+                        onClick={() => setForm(prev => ({ ...prev, uretimTipi: item.key, kazanSayisi: 1 }))}
+                        className={`flex-1 flex items-center gap-2 px-3 py-3 text-sm font-medium transition-all ${
+                          form.uretimTipi === item.key
+                            ? item.key === 'pisirme'
+                              ? 'bg-orange-600/20 text-orange-300 border-r border-orange-500/20'
+                              : 'bg-emerald-600/20 text-emerald-300'
+                            : 'text-muted-foreground/70 hover:bg-secondary/60'
+                        }`}
+                      >
+                        <item.icon className="w-4 h-4 flex-shrink-0" />
+                        <div className="text-left min-w-0">
+                          <p className="font-semibold leading-none">{item.label}</p>
+                          <p className="text-[10px] opacity-60 mt-0.5 hidden sm:block">{item.desc}</p>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
                 {/* Stoktan Hammadde Seçimi */}
                 <div>
                   <label className="block text-sm font-medium text-foreground/80 mb-2">
@@ -2048,8 +2089,14 @@ export function UretimPage() {
                     <div className="absolute -inset-0.5 rounded-lg md:rounded-xl bg-orange-500/15 blur-md -z-10" />
                   </div>
                   <div>
-                    <h2 className="text-base md:text-lg font-bold text-white">{t('uretim.step2.title') || 'Temizlik & Pisirme'}</h2>
-                    <p className="text-[11px] md:text-xs text-muted-foreground/70 hidden sm:block">{t('uretim.step2.desc') || 'Cop cikarildiktan sonra kalan miktar otomatik hesaplanir'}</p>
+                    <h2 className="text-base md:text-lg font-bold text-white">
+                      {form.uretimTipi === 'kiyma' ? 'Temizlik & Kıyma İşleme' : (t('uretim.step2.title') || 'Temizlik & Pisirme')}
+                    </h2>
+                    <p className="text-[11px] md:text-xs text-muted-foreground/70 hidden sm:block">
+                      {form.uretimTipi === 'kiyma'
+                        ? 'Cop/Sinir cikarildiktan sonra kalan et kıymaya islenir'
+                        : (t('uretim.step2.desc') || 'Cop cikarildiktan sonra kalan miktar otomatik hesaplanir')}
+                    </p>
                   </div>
                 </div>
 
@@ -2097,11 +2144,15 @@ export function UretimPage() {
                   )}
                 </div>
 
-                {/* Pişirme Bölümü */}
+                {/* Pişirme / Kıyma Bölümü */}
                 <div className="p-3 md:p-5 rounded-xl glass-light space-y-3 md:space-y-4">
                   <div className="flex items-center gap-1.5 md:gap-2">
-                    <Flame className="w-3 h-3 md:w-4 md:h-4 text-red-400" />
-                    <h3 className="text-xs md:text-sm font-semibold text-foreground/90">Pisirme</h3>
+                    {form.uretimTipi === 'kiyma'
+                      ? <Scissors className="w-3 h-3 md:w-4 md:h-4 text-emerald-400" />
+                      : <Flame className="w-3 h-3 md:w-4 md:h-4 text-red-400" />}
+                    <h3 className="text-xs md:text-sm font-semibold text-foreground/90">
+                      {form.uretimTipi === 'kiyma' ? 'Kıyma İşleme' : 'Pisirme'}
+                    </h3>
                   </div>
 
                   <div className="grid grid-cols-3 gap-2 md:gap-4">
@@ -2112,11 +2163,14 @@ export function UretimPage() {
                       </div>
                     </div>
                     <div>
-                      <label className="block text-[9px] md:text-xs font-medium text-muted-foreground mb-1">Cikti (kg)</label>
+                      <label className="block text-[9px] md:text-xs font-medium text-muted-foreground mb-1">
+                        {form.uretimTipi === 'kiyma' ? 'Kıyma Çıktı (kg)' : 'Cikti (kg)'}
+                      </label>
                       <input type="number" value={form.ciktiKg || ''}
                         onChange={e => { const val = Math.min(Number(e.target.value), calc.temizKg); setForm({ ...form, ciktiKg: Math.max(0, val) }); }}
                         className="w-full px-2 md:px-4 py-2 md:py-3 bg-card border border-border rounded-lg md:rounded-xl text-white placeholder-muted-foreground/50 focus:outline-none focus:ring-2 focus:ring-blue-500/40 text-xs md:text-sm"
-                        placeholder={`${(calc.temizKg * 0.7).toFixed(0)}`} min={0} max={calc.temizKg} step={0.1} />
+                        placeholder={form.uretimTipi === 'kiyma' ? `${(calc.temizKg * 0.95).toFixed(0)}` : `${(calc.temizKg * 0.7).toFixed(0)}`}
+                        min={0} max={calc.temizKg} step={0.1} />
                     </div>
                     <div>
                       <label className="block text-[9px] md:text-xs font-medium text-red-400 mb-1">Fire</label>
@@ -2176,8 +2230,8 @@ export function UretimPage() {
                   ciktiAdi={form.ciktiUrunAdi}
                 />
 
-                {/* Kazan & Tüp/Gaz Sistemi */}
-                <div className="p-3 md:p-5 rounded-xl bg-gradient-to-br from-muted/80 to-secondary/50 border border-orange-500/[0.08] space-y-3 md:space-y-5 relative overflow-hidden">
+                {/* Kazan & Tüp/Gaz Sistemi — sadece pişirme modunda */}
+                {form.uretimTipi !== 'kiyma' && (<div className="p-3 md:p-5 rounded-xl bg-gradient-to-br from-muted/80 to-secondary/50 border border-orange-500/[0.08] space-y-3 md:space-y-5 relative overflow-hidden">
                   <div className="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-orange-500/25 to-transparent" />
                   <div className="flex items-center justify-between gap-2">
                     <div className="flex items-center gap-2.5">
@@ -2335,7 +2389,7 @@ export function UretimPage() {
                       )}
                     </div>
                   </div>
-                </div>
+                </div>)}
 
                 <div className="flex flex-col-reverse md:flex-row justify-between gap-3 mt-6">
                   <button onClick={() => setCurrentStep(0)} className="w-full md:w-auto px-6 py-3.5 sm:py-3 bg-secondary/50 hover:bg-accent/50 active:bg-accent/70 text-muted-foreground hover:text-foreground/90 font-medium rounded-xl border border-border/30 transition-all duration-300">
@@ -2377,8 +2431,8 @@ export function UretimPage() {
                   </div>
                 </div>
 
-                {/* Tüp/Gaz Özet Kartı */}
-                <div className="p-2.5 md:p-4 rounded-xl bg-gradient-to-r from-orange-500/5 to-red-500/5 border border-orange-500/15">
+                {/* Tüp/Gaz Özet Kartı — sadece pişirme modunda */}
+                {form.uretimTipi !== 'kiyma' && (<div className="p-2.5 md:p-4 rounded-xl bg-gradient-to-r from-orange-500/5 to-red-500/5 border border-orange-500/15">
                   <div className="flex items-center gap-1.5 mb-2 md:mb-3">
                     <Flame className="w-3 h-3 md:w-4 md:h-4 text-orange-400" />
                     <span className="text-xs md:text-sm font-semibold text-white">Kazan & Tup</span>
@@ -2401,7 +2455,7 @@ export function UretimPage() {
                       <p className="text-[8px] md:text-[10px] text-muted-foreground">Maliyet</p>
                     </div>
                   </div>
-                </div>
+                </div>)}
 
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 md:gap-4">
                   <div>
@@ -3310,6 +3364,11 @@ export function UretimPage() {
                               {kayit.stokIslemleriYapildi && (
                                 <span className="px-1.5 py-0.5 bg-emerald-500/8 text-emerald-400 text-[9px] font-bold rounded-md border border-emerald-500/15 flex items-center gap-0.5">
                                   <CheckCircle className="w-2.5 h-2.5" /> STOK
+                                </span>
+                              )}
+                              {kayit.uretimTipi === 'kiyma' && (
+                                <span className="px-1.5 py-0.5 bg-cyan-500/10 text-cyan-400 text-[9px] font-bold rounded-md border border-cyan-500/15 flex items-center gap-0.5">
+                                  <Scissors className="w-2.5 h-2.5" /> KIYMA
                                 </span>
                               )}
                             </div>
