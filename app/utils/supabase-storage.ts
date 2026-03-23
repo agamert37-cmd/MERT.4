@@ -416,7 +416,7 @@ export async function syncFromCloud(): Promise<{ synced: number; errors: string[
         try {
           const storageKey = row.key.replace(KV_SYNC_PREFIX, '');
           const prefixedKey = getPrefixedKey(storageKey);
-          
+
           if (row.value !== null && row.value !== undefined) {
             localStorage.setItem(prefixedKey, JSON.stringify(row.value));
             synced++;
@@ -425,18 +425,25 @@ export async function syncFromCloud(): Promise<{ synced: number; errors: string[
           errors.push(`Key parse hatasi: ${e.message}`);
         }
       }
-      
+
       if (synced > 0) {
         const source = useLocal ? 'yerel depodan' : 'buluttan';
         console.log(
           `%c[Sync] ${synced} koleksiyon ${source} senkronize edildi!`,
           'color: #22c55e; font-weight: bold'
         );
-        setTimeout(() => window.dispatchEvent(new Event('storage_update')), 100);
+        // React bileşenlerinin yeniden yüklemesi için biraz bekle
+        setTimeout(() => window.dispatchEvent(new Event('storage_update')), 50);
+        setTimeout(() => window.dispatchEvent(new Event('storage_update')), 500);
       }
-    } else {
+    } else if (errors.length === 0) {
+      // Hata yoksa ve bulut boşsa: ilk kurulum, lokalden buluta yükle
       console.log('%c[Sync] Depoda henuz veri yok, ilk senkronizasyon yapiliyor...', 'color: #f59e0b');
       await pushAllToCloud();
+    } else {
+      // Hata varsa bulut verisini KORUMAK için pushAllToCloud ÇAĞIRMA
+      // (ağ hatası/bağlantı sorunu durumunda lokal boş veriyle bulut üzerine yazma)
+      console.warn('%c[Sync] Bulut okuma hatalari var, yerel veriler buluta yazilmiyor (veri koruma)', 'color: #f59e0b; font-weight: bold');
     }
   } catch (e: any) {
     console.error('[Sync] sync error:', e);
@@ -538,13 +545,17 @@ export async function syncKeyToCloud(key: StorageKey | string): Promise<boolean>
  */
 export function startInitialSync(): Promise<void> {
   if (_initialSyncPromise) return _initialSyncPromise;
-  
+
   _initialSyncPromise = syncFromCloud().then(result => {
     if (result.errors.length > 0) {
       console.warn('[CloudSync] Baslangic senkronizasyonunda hatalar:', result.errors);
     }
+    // Senkronizasyon tamamlandıktan sonra tüm bileşenleri güncelle
+    if (result.synced > 0) {
+      window.dispatchEvent(new Event('storage_update'));
+    }
   });
-  
+
   return _initialSyncPromise;
 }
 

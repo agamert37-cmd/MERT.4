@@ -8,7 +8,7 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   Megaphone, Save, Plus, Trash2, X, Edit2, Eye, EyeOff,
   Newspaper, BarChart3, Building2, Star,
-  Gift, HelpCircle, Share2, Image as ImageIcon,
+  Gift, HelpCircle, Share2,
   Sparkles,
   ExternalLink, Globe, ShoppingBag,
   Instagram, Facebook, Youtube, Twitter, Linkedin,
@@ -462,9 +462,7 @@ function ImageInputField({ value, onChange, placeholder = 'Gorsel URL (Unsplash 
 function ContentHealthScore({ content }: { content: PazarlamaContent }) {
   const checks = useMemo(() => {
     const items: { label: string; ok: boolean; tip: string }[] = [
-      { label: 'Hero banner var', ok: content.heroBanners.filter(b => b.active).length > 0, tip: 'En az 1 aktif hero banner ekleyin' },
-      { label: 'Banner gorselleri yuklu', ok: content.heroBanners.filter(b => b.active && b.imageUrl).length === content.heroBanners.filter(b => b.active).length, tip: 'Tum bannerlara gorsel URL ekleyin' },
-      { label: 'En az 2 haber', ok: content.announcements.filter(a => a.active).length >= 2, tip: 'Guncel haberler eklemeye devam edin' },
+{ label: 'En az 2 haber', ok: content.announcements.filter(a => a.active).length >= 2, tip: 'Guncel haberler eklemeye devam edin' },
       { label: 'Urun vitrini dolu', ok: content.products.filter(p => p.active).length >= 2, tip: 'En az 2 vitrin urunu ekleyin' },
       { label: 'Firma bilgisi yazilmis', ok: content.companyAbout.length > 50, tip: 'Hakkimizda metnini en az 50 karakter yapin' },
       { label: 'Misyon & vizyon', ok: content.companyMission.length > 10 && content.companyVision.length > 10, tip: 'Misyon ve vizyon alanlarini doldurun' },
@@ -927,7 +925,6 @@ export function PazarlamaPage() {
   // Tabs
   const tabs: { key: TabKey; label: string; icon: React.ElementType; badge?: number; color: string }[] = [
     { key: 'dashboard', label: 'Genel Bakis', icon: LayoutDashboard, color: 'pink' },
-    { key: 'hero', label: 'Carousel', icon: ImageIcon, badge: content.heroBanners.length, color: 'blue' },
     { key: 'haberler', label: 'Haberler', icon: Newspaper, badge: content.announcements.length, color: 'cyan' },
     { key: 'urunler', label: 'Urunler', icon: ShoppingBag, badge: content.products.length, color: 'purple' },
     { key: 'kampanyalar', label: 'Kampanyalar', icon: Gift, badge: content.campaigns.length, color: 'red' },
@@ -1032,8 +1029,7 @@ export function PazarlamaPage() {
                       { label: 'Toplam Icerik', value: dashboardStats.totalItems, icon: Layers, color: 'from-pink-600/15 to-pink-600/5 border-pink-500/20 text-pink-400' },
                       { label: 'Aktif', value: dashboardStats.activeItems, icon: Eye, color: 'from-emerald-600/15 to-emerald-600/5 border-emerald-500/20 text-emerald-400' },
                       { label: 'Gizli', value: dashboardStats.inactiveItems, icon: EyeOff, color: 'from-orange-600/15 to-orange-600/5 border-orange-500/20 text-orange-400' },
-                      { label: 'Bannerlar', value: content.heroBanners.length, icon: ImageIcon, color: 'from-blue-600/15 to-blue-600/5 border-blue-500/20 text-blue-400' },
-                      { label: 'Sosyal Medya', value: dashboardStats.activeSocial, icon: Share2, color: 'from-purple-600/15 to-purple-600/5 border-purple-500/20 text-purple-400' },
+{ label: 'Sosyal Medya', value: dashboardStats.activeSocial, icon: Share2, color: 'from-purple-600/15 to-purple-600/5 border-purple-500/20 text-purple-400' },
                       { label: 'Kampanyalar', value: content.campaigns.length, icon: Gift, color: 'from-red-600/15 to-red-600/5 border-red-500/20 text-red-400' },
                     ].map((s, i) => (
                       <motion.div key={i} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.04 }}
@@ -1047,8 +1043,7 @@ export function PazarlamaPage() {
                   {/* Content Summary Cards */}
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     {[
-                      { key: 'hero' as TabKey, title: 'Hero Carousel', icon: ImageIcon, count: content.heroBanners.length, active: content.heroBanners.filter(i => i.active).length, color: 'blue', desc: 'Giris sayfasi buyuk gorsel alani' },
-                      { key: 'haberler' as TabKey, title: 'Haberler & Duyurular', icon: Newspaper, count: content.announcements.length, active: content.announcements.filter(i => i.active).length, color: 'cyan', desc: 'Firma haberleri ve duyurulari' },
+{ key: 'haberler' as TabKey, title: 'Haberler & Duyurular', icon: Newspaper, count: content.announcements.length, active: content.announcements.filter(i => i.active).length, color: 'cyan', desc: 'Firma haberleri ve duyurulari' },
                       { key: 'urunler' as TabKey, title: 'Urun Vitrini', icon: ShoppingBag, count: content.products.length, active: content.products.filter(i => i.active).length, color: 'purple', desc: 'Vitrin urunleri tanitimi' },
                       { key: 'kampanyalar' as TabKey, title: 'Kampanyalar', icon: Gift, count: content.campaigns.length, active: content.campaigns.filter(i => i.active).length, color: 'red', desc: 'Indirimler ve promosyonlar' },
                       { key: 'referanslar' as TabKey, title: 'Musteri Yorumlari', icon: Star, count: content.testimonials.length, active: content.testimonials.filter(i => i.active).length, color: 'amber', desc: 'Referanslar ve degerlendirmeler' },
@@ -1116,15 +1111,6 @@ export function PazarlamaPage() {
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                       {[
                         {
-                          label: 'Hero Carousel',
-                          tab: 'hero' as TabKey,
-                          desc: 'Giriş sayfasının sol panelindeki kayan görsel (masaüstü) ve tam ekran reklam (mobil)',
-                          count: `${content.heroBanners.filter(b => b.active).length} aktif banner`,
-                          color: 'border-blue-500/20 bg-blue-500/[0.05] text-blue-400',
-                          icon: <ImageIcon className="w-4 h-4" />,
-                          mapped: true,
-                        },
-                        {
                           label: 'İstatistik Kartları',
                           tab: 'ayarlar' as TabKey,
                           desc: 'Masaüstü sağ paneldeki 4\'lü özellik kartları (Ayarlar › İstatistik Kartları)',
@@ -1178,49 +1164,6 @@ export function PazarlamaPage() {
                     </div>
                   </div>
                 </>
-              )}
-
-              {/* ─── HERO CAROUSEL ─────────────────────────── */}
-              {activeTab === 'hero' && (
-                <div className="bg-[#111] rounded-3xl p-8 space-y-6 border border-white/5">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-600 to-blue-700 flex items-center justify-center"><ImageIcon className="w-5 h-5 text-white" /></div>
-                      <div>
-                        <h2 className="text-lg font-bold text-white">Hero Banner / Carousel</h2>
-                        <p className="text-xs text-muted-foreground/70">Giriş sayfası sol panel (masaüstü) + tam ekran reklam (mobil)</p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className="flex items-center gap-1 px-2 py-1 text-[10px] font-bold bg-emerald-500/10 text-emerald-400 rounded-lg border border-emerald-500/20">
-                        <Check className="w-3 h-3" /> Giriş Sayfasına Yansıyor
-                      </span>
-                      <span className="text-xs text-muted-foreground/70">{content.heroBanners.length} banner</span>
-                    </div>
-                  </div>
-
-                  {content.heroBanners.map((banner, i) => (
-                    <motion.div key={banner.id} initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.05 }}
-                      className={`p-4 rounded-xl bg-muted/60 border transition-all ${banner.active ? 'border-blue-500/15' : 'border-border/20 opacity-50'}`}>
-                      <div className="flex items-center justify-between mb-3">
-                        <div className="flex items-center gap-2">
-                          <span className="w-6 h-6 rounded-lg bg-blue-600/15 text-blue-400 text-[10px] font-bold flex items-center justify-center">{i + 1}</span>
-                          <span className="text-xs font-semibold text-foreground/80">{banner.title || 'Isimsiz Banner'}</span>
-                          {!banner.active && <span className="px-1.5 py-0.5 text-[9px] bg-accent/50 text-muted-foreground/70 rounded">GIZLI</span>}
-                        </div>
-                        <ItemActions active={banner.active} onToggle={() => updateItem<HeroBanner>('heroBanners', banner.id, { active: !banner.active })} onMoveUp={() => moveItem('heroBanners', banner.id, 'up')} onMoveDown={() => moveItem('heroBanners', banner.id, 'down')} onDuplicate={() => duplicateItem('heroBanners', banner.id)} onDelete={() => removeItem('heroBanners', banner.id)} />
-                      </div>
-                      <div className="space-y-3">
-                        <div className="grid grid-cols-2 gap-3">
-                          <input value={banner.title} onChange={e => updateItem<HeroBanner>('heroBanners', banner.id, { title: e.target.value })} className={inputClass} placeholder="Baslik" />
-                          <input value={banner.subtitle} onChange={e => updateItem<HeroBanner>('heroBanners', banner.id, { subtitle: e.target.value })} className={inputClass} placeholder="Alt baslik" />
-                        </div>
-                        <ImageInputField value={banner.imageUrl} onChange={(v) => updateItem<HeroBanner>('heroBanners', banner.id, { imageUrl: v })} placeholder="Banner gorseli URL veya dosya yukle" />
-                      </div>
-                    </motion.div>
-                  ))}
-                  <AddButton label="Yeni Banner Ekle" onClick={() => addItem('heroBanners', { id: crypto.randomUUID(), imageUrl: '', title: '', subtitle: '', buttonText: '', buttonLink: '', active: true })} color="blue" />
-                </div>
               )}
 
               {/* ─── HABERLER ──────────────────────────────── */}
