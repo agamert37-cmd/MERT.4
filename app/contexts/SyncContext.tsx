@@ -6,6 +6,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { checkAllTables, type SetupStatus } from '../lib/auto-setup';
 import { SUPABASE_ANON_KEY } from '../lib/supabase-config';
+import { getSyncState } from '../utils/supabase-storage';
 
 interface SyncContextValue {
   setupStatus: SetupStatus | null;
@@ -13,6 +14,12 @@ interface SyncContextValue {
   lastChecked: Date | null;
   recheckTables: () => Promise<void>;
   isSupabaseConfigured: boolean;
+  // Reaktif sync durumu
+  pendingCount: number;
+  isSyncing: boolean;
+  lastSyncAt: number;
+  isOnline: boolean;
+  syncError: string | null;
 }
 
 const SyncContext = createContext<SyncContextValue>({
@@ -21,6 +28,11 @@ const SyncContext = createContext<SyncContextValue>({
   lastChecked: null,
   recheckTables: async () => {},
   isSupabaseConfigured: false,
+  pendingCount: 0,
+  isSyncing: false,
+  lastSyncAt: 0,
+  isOnline: true,
+  syncError: null,
 });
 
 export function SyncProvider({ children }: { children: React.ReactNode }) {
@@ -28,7 +40,17 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
   const [isChecking, setIsChecking] = useState(false);
   const [lastChecked, setLastChecked] = useState<Date | null>(null);
   const [consecutiveFailures, setConsecutiveFailures] = useState(0);
-  const isCheckingRef = useRef(false); // Eş zamanlı çağrıları engelle
+  const [liveSyncState, setLiveSyncState] = useState(getSyncState());
+  const isCheckingRef = useRef(false);
+
+  // sync_state_change event'ini dinle
+  useEffect(() => {
+    const handler = (e: Event) => {
+      setLiveSyncState((e as CustomEvent).detail);
+    };
+    window.addEventListener('sync_state_change', handler);
+    return () => window.removeEventListener('sync_state_change', handler);
+  }, []);
 
   const isSupabaseConfigured = useMemo(() => {
     return !!SUPABASE_ANON_KEY && SUPABASE_ANON_KEY.length > 10;
@@ -85,7 +107,18 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
   }, [recheckTables, isSupabaseConfigured, consecutiveFailures]);
 
   return (
-    <SyncContext.Provider value={{ setupStatus, isChecking, lastChecked, recheckTables, isSupabaseConfigured }}>
+    <SyncContext.Provider value={{
+      setupStatus,
+      isChecking,
+      lastChecked,
+      recheckTables,
+      isSupabaseConfigured,
+      pendingCount: liveSyncState.pendingCount,
+      isSyncing: liveSyncState.isSyncing,
+      lastSyncAt: liveSyncState.lastSyncAt,
+      isOnline: liveSyncState.isOnline,
+      syncError: liveSyncState.lastError,
+    }}>
       {children}
     </SyncContext.Provider>
   );

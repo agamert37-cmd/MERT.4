@@ -26,6 +26,121 @@ const STORAGE_PREFIX = 'isleyen_et_';
 const KV_SYNC_PREFIX = 'sync_'; // KV store'da her key bu prefix ile saklanir
 const KV_TABLE = 'kv_store_daadfb0c';
 
+// ═══════════════════════════════════════════════════════════════
+// CIHAZ KİMLİĞİ & ZAMAN DAMGASI SARMALAYICI
+// ═══════════════════════════════════════════════════════════════
+
+const DEVICE_ID_KEY = `${STORAGE_PREFIX}_device_id`;
+const QUEUE_PERSIST_KEY = `${STORAGE_PREFIX}_pending_queue`;
+const VERSIONS_KEY = `${STORAGE_PREFIX}_sync_versions`;
+
+function getDeviceId(): string {
+  try {
+    let id = localStorage.getItem(DEVICE_ID_KEY);
+    if (!id) {
+      id = typeof crypto !== 'undefined' && crypto.randomUUID
+        ? crypto.randomUUID()
+        : `dev_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+      localStorage.setItem(DEVICE_ID_KEY, id);
+    }
+    return id;
+  } catch { return 'unknown'; }
+}
+
+// Timestamp sarmalayıcı — her sync_ değeri bu yapıyla saklanır
+interface SyncEnvelope { _v: 1; _updatedAt: number; _deviceId: string; _data: any; }
+
+function wrapEnvelope(data: any): SyncEnvelope {
+  return { _v: 1, _updatedAt: Date.now(), _deviceId: getDeviceId(), _data: data };
+}
+
+function unwrapEnvelope(val: any): { data: any; updatedAt: number } {
+  if (val && val._v === 1 && '_data' in val) {
+    return { data: val._data, updatedAt: val._updatedAt ?? 0 };
+  }
+  // Eski format (sarmalanmamış) — timestamp yok, en eski kabul et
+  return { data: val, updatedAt: 0 };
+}
+
+// ── Yerel sürüm takibi (key başına son yerel yazma zamanı) ────
+
+function getLocalVersions(): Record<string, number> {
+  try { return JSON.parse(localStorage.getItem(VERSIONS_KEY) || '{}'); } catch { return {}; }
+}
+
+function setLocalVersion(key: string, ts: number): void {
+  try {
+    const v = getLocalVersions();
+    v[key] = ts;
+    localStorage.setItem(VERSIONS_KEY, JSON.stringify(v));
+  } catch {}
+}
+
+// ── Kalıcı yazma kuyruğu (sayfa kapanmasında veri kaybını önler) ──
+
+function loadPersistedQueue(): Map<string, any> {
+  try {
+    const raw = localStorage.getItem(QUEUE_PERSIST_KEY);
+    if (!raw) return new Map();
+    return new Map(Object.entries(JSON.parse(raw)));
+  } catch { return new Map(); }
+}
+
+function saveQueueToStorage(): void {
+  try {
+    if (_pendingWrites.size === 0) {
+      localStorage.removeItem(QUEUE_PERSIST_KEY);
+    } else {
+      const obj: Record<string, any> = {};
+      _pendingWrites.forEach((v, k) => { obj[k] = v; });
+      localStorage.setItem(QUEUE_PERSIST_KEY, JSON.stringify(obj));
+    }
+  } catch {}
+}
+
+// ── Echo filtresi (kendi yazdığımız veriyi realtime'dan alma) ──
+
+const _echoKeys = new Map<string, number>(); // key → expiry ms
+
+function markAsEcho(key: string): void {
+  _echoKeys.set(key, Date.now() + 3000); // 3 saniyelik pencere
+}
+
+function isEcho(key: string): boolean {
+  const exp = _echoKeys.get(key);
+  if (!exp) return false;
+  if (Date.now() > exp) { _echoKeys.delete(key); return false; }
+  return true;
+}
+
+// ── Reaktif sync durumu ───────────────────────────────────────
+
+interface SyncState {
+  isSyncing: boolean;
+  pendingCount: number;
+  lastSyncAt: number;     // unix ms
+  lastError: string | null;
+  isOnline: boolean;
+}
+
+const _syncState: SyncState = {
+  isSyncing: false,
+  pendingCount: 0,
+  lastSyncAt: 0,
+  lastError: null,
+  isOnline: typeof navigator !== 'undefined' ? navigator.onLine : true,
+};
+
+export function getSyncState(): Readonly<SyncState> {
+  return { ..._syncState };
+}
+
+function notifySyncStateChange(): void {
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('sync_state_change', { detail: getSyncState() }));
+  }
+}
+
 // Storage Keys Enum
 export enum StorageKey {
   USER = 'user',
@@ -103,9 +218,10 @@ function getHeaders() {
 // DEBOUNCED CLOUD WRITE QUEUE
 // ═══════════════════════════════════════════════════════════════
 
-const _pendingWrites = new Map<string, any>();
+// Kalıcı kuyruktan geri yükle (sayfa çökmesinden kurtarma)
+const _pendingWrites: Map<string, any> = loadPersistedQueue();
 let _writeTimer: ReturnType<typeof setTimeout> | null = null;
-const WRITE_DEBOUNCE_MS = 500; // Yari saniye bekle, sonra toplu yaz
+const WRITE_DEBOUNCE_MS = 500;
 let _isFlushing = false;
 
 function scheduleFlush() {
@@ -116,32 +232,33 @@ function scheduleFlush() {
 async function flushWrites() {
   if (_isFlushing || _pendingWrites.size === 0 || !isConfigured()) return;
   _isFlushing = true;
+  _syncState.isSyncing = true;
+  notifySyncStateChange();
 
   const entries = Array.from(_pendingWrites.entries());
   _pendingWrites.clear();
+  saveQueueToStorage(); // Kuyruk temizlendi → kalıcı depoyu güncelle
 
   try {
+    // entries[k] zaten wrapEnvelope() ile sarmalanmış değer içeriyor
     const keys = entries.map(([k]) => `${KV_SYNC_PREFIX}${k}`);
     const values = entries.map(([, v]) => v);
 
-    // Yerel depo aktifse VE saglikli ise, once oraya yaz (daha hizli)
     const localConfig = getLocalRepoConfig();
     const localReady = localConfig.enabled && localConfig.serviceRoleKey && isLocalHealthy();
 
     if (localReady) {
       try {
         await kvBatchWriteToPrimary(keys, values);
-        const syncedKeys = entries.map(([k]) => k).join(', ');
-        console.log(`%c[LocalSync] ${entries.length} key yerel depoya yazildi: ${syncedKeys}`, 'color: #8b5cf6');
+        console.log(`%c[LocalSync] ${entries.length} key yerel depoya yazıldı`, 'color: #8b5cf6');
         // Arka planda buluta da yaz (yedek)
         fetch(`${SERVER_BASE_URL}/kv/mset`, {
           method: 'POST',
           headers: getHeaders(),
           body: JSON.stringify({ keys, values }),
-        }).catch(() => {}); // Bulut hatasi kritik degil, yerel zaten yazildi
+        }).catch(() => {});
       } catch (localErr: any) {
-        console.warn('[LocalSync] Yerel yazma basarisiz, buluta fallback:', localErr.message);
-        // Yerel basarisizsa buluta yaz
+        console.warn('[LocalSync] Yerel yazma başarısız, buluta fallback:', localErr.message);
         const res = await fetch(`${SERVER_BASE_URL}/kv/mset`, {
           method: 'POST',
           headers: getHeaders(),
@@ -150,7 +267,6 @@ async function flushWrites() {
         if (!res.ok) throw new Error(`Cloud mset failed: ${res.status}`);
       }
     } else {
-      // Yerel depo yok veya sagliksiz, dogrudan buluta yaz
       const res = await fetch(`${SERVER_BASE_URL}/kv/mset`, {
         method: 'POST',
         headers: getHeaders(),
@@ -159,23 +275,28 @@ async function flushWrites() {
 
       if (!res.ok) {
         const text = await res.text().catch(() => 'unknown');
-        console.error(`[CloudSync] mset failed (${res.status}): ${text}`);
-        entries.forEach(([k, v]) => _pendingWrites.set(k, v));
-        scheduleFlush();
-      } else {
-        const syncedKeys = entries.map(([k]) => k).join(', ');
-        console.log(`%c[CloudSync] ${entries.length} key senkronize edildi: ${syncedKeys}`, 'color: #22c55e');
+        throw new Error(`Cloud mset ${res.status}: ${text}`);
       }
+      console.log(`%c[CloudSync] ${entries.length} key senkronize edildi`, 'color: #22c55e');
     }
+
+    // Başarılı → realtime echo filtresi ve durum güncelle
+    entries.forEach(([k]) => markAsEcho(k));
+    _syncState.lastSyncAt = Date.now();
+    _syncState.lastError = null;
   } catch (e: any) {
     console.error('[CloudSync] flush error:', e.message);
+    _syncState.lastError = e.message;
+    // Hata → kuyruğa geri ekle, kalıcı depoya kaydet
     entries.forEach(([k, v]) => _pendingWrites.set(k, v));
+    saveQueueToStorage();
     setTimeout(() => scheduleFlush(), 3000);
   } finally {
     _isFlushing = false;
-    if (_pendingWrites.size > 0) {
-      scheduleFlush();
-    }
+    _syncState.isSyncing = _pendingWrites.size > 0;
+    _syncState.pendingCount = _pendingWrites.size;
+    notifySyncStateChange();
+    if (_pendingWrites.size > 0) scheduleFlush();
   }
 }
 
@@ -192,8 +313,19 @@ if (typeof window !== 'undefined') {
     }
   });
 
+  // Ağ bağlantısı kesilince sync durumunu güncelle
+  window.addEventListener('offline', () => {
+    _syncState.isOnline = false;
+    _syncState.lastError = 'Ağ bağlantısı kesildi';
+    notifySyncStateChange();
+    console.warn('%c[CloudSync] Ağ bağlantısı kesildi', 'color: #ef4444');
+  });
+
   // Ağ bağlantısı geri gelince zorla sync (offline → online geçişi)
   window.addEventListener('online', () => {
+    _syncState.isOnline = true;
+    if (_syncState.lastError === 'Ağ bağlantısı kesildi') _syncState.lastError = null;
+    notifySyncStateChange();
     console.log('%c[CloudSync] Ağ bağlantısı geri geldi, yeniden senkronize ediliyor...', 'color: #22c55e');
     _initialSyncDone = false;
     _lastSyncTime = 0;
@@ -254,20 +386,23 @@ export const getFromStorage = <T = any>(key: StorageKey | string): T | null => {
 };
 
 /**
- * Set item in localStorage + queue cloud sync
+ * Set item in localStorage + queue cloud sync (timestamp sarmalı ile)
  */
 export const setInStorage = <T = any>(key: StorageKey | string, value: T): boolean => {
   try {
     const prefixedKey = getPrefixedKey(key);
     localStorage.setItem(prefixedKey, JSON.stringify(value));
-    
-    // Cloud sync icin kuyruklama (sadece senkronize edilebilir key'ler icin)
+
     if (SYNCABLE_KEYS.has(key as string)) {
-      _pendingWrites.set(key as string, value);
+      const now = Date.now();
+      setLocalVersion(key as string, now);                     // Sürüm takibi
+      _pendingWrites.set(key as string, wrapEnvelope(value));  // Zaman damgalı sarmalayıcı
+      saveQueueToStorage();                                     // Kalıcı kuyruk güncelle
       scheduleFlush();
+      _syncState.pendingCount = _pendingWrites.size;
+      notifySyncStateChange();
     }
-    
-    // Defer event dispatch
+
     setTimeout(() => window.dispatchEvent(new Event('storage_update')), 0);
     return true;
   } catch (error) {
@@ -412,38 +547,58 @@ export async function syncFromCloud(): Promise<{ synced: number; errors: string[
     }
 
     if (rows.length > 0) {
+      const localVersions = getLocalVersions();
+      let skipped = 0;
+
       for (const row of rows) {
         try {
           const storageKey = row.key.replace(KV_SYNC_PREFIX, '');
-          const prefixedKey = getPrefixedKey(storageKey);
+          const { data: cloudData, updatedAt: cloudTs } = unwrapEnvelope(row.value);
+          const localTs = localVersions[storageKey] ?? 0;
 
-          if (row.value !== null && row.value !== undefined) {
-            localStorage.setItem(prefixedKey, JSON.stringify(row.value));
+          if (cloudData === null || cloudData === undefined) continue;
+
+          // En yeni veri kazanır: bulut yerel'den daha yeni veya yerel hiç yazılmamışsa uygula
+          if (cloudTs >= localTs) {
+            const prefixedKey = getPrefixedKey(storageKey);
+            localStorage.setItem(prefixedKey, JSON.stringify(cloudData));
+            if (cloudTs > 0) setLocalVersion(storageKey, cloudTs); // eski format için sıfır yazmayız
             synced++;
+          } else {
+            skipped++;
+            console.log(`%c[Sync] ${storageKey}: yerel (${new Date(localTs).toLocaleTimeString()}) daha yeni, bulut atlandı`, 'color: #f59e0b');
           }
         } catch (e: any) {
-          errors.push(`Key parse hatasi: ${e.message}`);
+          errors.push(`Key parse hatası: ${e.message}`);
         }
       }
 
       if (synced > 0) {
         const source = useLocal ? 'yerel depodan' : 'buluttan';
         console.log(
-          `%c[Sync] ${synced} koleksiyon ${source} senkronize edildi!`,
+          `%c[Sync] ${synced} koleksiyon ${source} senkronize edildi${skipped > 0 ? ` (${skipped} yerel daha yeni, atlandı)` : ''}`,
           'color: #22c55e; font-weight: bold'
         );
-        // React bileşenlerinin yeniden yüklemesi için biraz bekle
         setTimeout(() => window.dispatchEvent(new Event('storage_update')), 50);
         setTimeout(() => window.dispatchEvent(new Event('storage_update')), 500);
       }
     } else if (errors.length === 0) {
-      // Hata yoksa ve bulut boşsa: ilk kurulum, lokalden buluta yükle
-      console.log('%c[Sync] Depoda henuz veri yok, ilk senkronizasyon yapiliyor...', 'color: #f59e0b');
-      await pushAllToCloud();
+      // Bulut boş: ancak yerel'de gerçekten veri varsa güvenli şekilde yükle
+      const hasLocalData = Array.from(SYNCABLE_KEYS).some(k => {
+        const v = getFromStorage(k);
+        if (v === null) return false;
+        if (Array.isArray(v)) return v.length > 0;
+        if (typeof v === 'object') return Object.keys(v as any).length > 0;
+        return true;
+      });
+      if (hasLocalData) {
+        console.log('%c[Sync] Bulut boş, yerel veriler ilk kez yükleniyor...', 'color: #f59e0b');
+        await pushAllToCloud();
+      } else {
+        console.log('%c[Sync] İlk kurulum: hem bulut hem yerel boş.', 'color: #f59e0b');
+      }
     } else {
-      // Hata varsa bulut verisini KORUMAK için pushAllToCloud ÇAĞIRMA
-      // (ağ hatası/bağlantı sorunu durumunda lokal boş veriyle bulut üzerine yazma)
-      console.warn('%c[Sync] Bulut okuma hatalari var, yerel veriler buluta yazilmiyor (veri koruma)', 'color: #f59e0b; font-weight: bold');
+      console.warn('%c[Sync] Bulut okuma hataları var, yerel veriler korunuyor (veri güvenliği)', 'color: #f59e0b; font-weight: bold');
     }
   } catch (e: any) {
     console.error('[Sync] sync error:', e);
@@ -465,12 +620,14 @@ export async function pushAllToCloud(): Promise<{ pushed: number; errors: string
   const keys: string[] = [];
   const values: any[] = [];
 
+  const now = Date.now();
   for (const sk of SYNCABLE_KEYS) {
     try {
       const data = getFromStorage(sk);
       if (data !== null && data !== undefined) {
         keys.push(`${KV_SYNC_PREFIX}${sk}`);
-        values.push(data);
+        values.push(wrapEnvelope(data)); // Zaman damgalı sarmalayıcı
+        setLocalVersion(sk, now);        // Sürüm takibini güncelle
       }
     } catch {}
   }
@@ -582,17 +739,29 @@ export function startRealtimeSync() {
 
         const storageKey = key.replace(KV_SYNC_PREFIX, '');
 
-        // Kendi yazdigimiz veriyi echo olarak aldigimizda atla
-        if (_pendingWrites.has(storageKey)) return;
+        // Kendi yazdığımız verinin echo'sunu atla (zaman damgalı filtre)
+        if (isEcho(storageKey)) {
+          console.log(`%c[CloudSync RT] echo atlandı: ${storageKey}`, 'color: #666; font-size: 10px');
+          return;
+        }
 
         if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
           if (newRow?.value !== undefined) {
-            const prefixedKey = getPrefixedKey(storageKey);
-            try {
-              localStorage.setItem(prefixedKey, JSON.stringify(newRow.value));
-              console.log(`%c[CloudSync RT] ${storageKey} guncellendi (baska cihazdan)`, 'color: #a855f7');
-              setTimeout(() => window.dispatchEvent(new Event('storage_update')), 0);
-            } catch {}
+            const { data: cloudData, updatedAt: cloudTs } = unwrapEnvelope(newRow.value);
+            const localTs = getLocalVersions()[storageKey] ?? 0;
+
+            // Çakışma kontrolü: gelen değer gerçekten daha yeni mi?
+            if (cloudTs >= localTs && cloudData !== null && cloudData !== undefined) {
+              const prefixedKey = getPrefixedKey(storageKey);
+              try {
+                localStorage.setItem(prefixedKey, JSON.stringify(cloudData));
+                if (cloudTs > 0) setLocalVersion(storageKey, cloudTs);
+                console.log(`%c[CloudSync RT] ${storageKey} güncellendi (başka cihazdan, ${new Date(cloudTs).toLocaleTimeString()})`, 'color: #a855f7');
+                setTimeout(() => window.dispatchEvent(new Event('storage_update')), 0);
+              } catch {}
+            } else if (cloudTs < localTs) {
+              console.log(`%c[CloudSync RT] ${storageKey} atlandı — yerel daha yeni (${new Date(localTs).toLocaleTimeString()} > ${new Date(cloudTs).toLocaleTimeString()})`, 'color: #f59e0b; font-size: 10px');
+            }
           }
         } else if (payload.eventType === 'DELETE') {
           const prefixedKey = getPrefixedKey(storageKey);
@@ -607,13 +776,41 @@ export function startRealtimeSync() {
     supabase.removeChannel(channel);
   };
 
-  console.log('%c[CloudSync] Realtime dinleme baslatildi', 'color: #a855f7; font-weight: bold');
+  console.log('%c[CloudSync] Realtime dinleme başlatıldı', 'color: #a855f7; font-weight: bold');
+  startHeartbeat();
 }
 
 export function stopRealtimeSync() {
   if (_realtimeUnsubscribe) {
     _realtimeUnsubscribe();
     _realtimeUnsubscribe = null;
+  }
+  stopHeartbeat();
+}
+
+// ── Periyodik heartbeat (realtime koptuğunda emniyet ağı) ─────
+
+let _heartbeatTimer: ReturnType<typeof setInterval> | null = null;
+const HEARTBEAT_INTERVAL_MS = 5 * 60_000; // 5 dakika
+
+function startHeartbeat(): void {
+  if (_heartbeatTimer) return;
+  _heartbeatTimer = setInterval(() => {
+    if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+      syncIfStale();
+    }
+    // Realtime bağlantısı düşmüşse yeniden başlat
+    if (!_realtimeUnsubscribe && isConfigured()) {
+      console.log('%c[CloudSync] Realtime bağlantısı yok, yeniden başlatılıyor...', 'color: #f59e0b');
+      startRealtimeSync();
+    }
+  }, HEARTBEAT_INTERVAL_MS);
+}
+
+function stopHeartbeat(): void {
+  if (_heartbeatTimer) {
+    clearInterval(_heartbeatTimer);
+    _heartbeatTimer = null;
   }
 }
 
