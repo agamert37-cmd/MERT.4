@@ -1,0 +1,74 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#1a0a00"/>
+      <stop offset="100%" stop-color="#0d0500"/>
+    </radialGradient>
+    <linearGradient id="gold" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FFD700"/>
+      <stop offset="40%" stop-color="#FFA500"/>
+      <stop offset="100%" stop-color="#B8860B"/>
+    </linearGradient>
+    <linearGradient id="goldShine" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#FFE87C"/>
+      <stop offset="50%" stop-color="#DAA520"/>
+      <stop offset="100%" stop-color="#8B6914"/>
+    </linearGradient>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="0.8" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+
+  <!-- Background circle -->
+  <circle cx="32" cy="32" r="31" fill="url(#bg)" stroke="#8B6914" stroke-width="1"/>
+
+  <!-- Gold ring -->
+  <circle cx="32" cy="32" r="29" fill="none" stroke="url(#gold)" stroke-width="0.8" opacity="0.6"/>
+
+  <g filter="url(#glow)">
+    <!-- Bull horns - left -->
+    <path d="M14 26 Q8 18 10 10 Q14 16 16 22" fill="url(#goldShine)" stroke="#8B6914" stroke-width="0.5"/>
+    <!-- Bull horns - right -->
+    <path d="M50 26 Q56 18 54 10 Q50 16 48 22" fill="url(#goldShine)" stroke="#8B6914" stroke-width="0.5"/>
+
+    <!-- Horn tips -->
+    <circle cx="10" cy="10" r="2" fill="#FFD700"/>
+    <circle cx="54" cy="10" r="2" fill="#FFD700"/>
+
+    <!-- Bull head shape -->
+    <ellipse cx="32" cy="36" rx="16" ry="14" fill="url(#goldShine)" stroke="#8B6914" stroke-width="0.6"/>
+
+    <!-- Forehead top -->
+    <path d="M18 30 Q20 20 32 22 Q44 20 46 30 Q44 26 32 27 Q20 26 18 30Z" fill="url(#gold)" stroke="#8B6914" stroke-width="0.4"/>
+
+    <!-- Eyes -->
+    <ellipse cx="25" cy="33" rx="3.5" ry="3" fill="#1a0a00"/>
+    <ellipse cx="39" cy="33" rx="3.5" ry="3" fill="#1a0a00"/>
+    <!-- Eye shine -->
+    <circle cx="24" cy="32" r="1" fill="#FFD700" opacity="0.8"/>
+    <circle cx="38" cy="32" r="1" fill="#FFD700" opacity="0.8"/>
+
+    <!-- Nose bridge -->
+    <ellipse cx="32" cy="42" rx="8" ry="6" fill="#DAA520" stroke="#8B6914" stroke-width="0.5"/>
+
+    <!-- Nostrils -->
+    <ellipse cx="28.5" cy="43.5" rx="2.5" ry="2" fill="#1a0a00"/>
+    <ellipse cx="35.5" cy="43.5" rx="2.5" ry="2" fill="#1a0a00"/>
+
+    <!-- Nose ring -->
+    <path d="M26 44 Q32 48 38 44" fill="none" stroke="#FFD700" stroke-width="1.5" stroke-linecap="round"/>
+
+    <!-- Ear left -->
+    <path d="M16 32 Q11 28 13 36 Q16 38 18 35" fill="url(#goldShine)" stroke="#8B6914" stroke-width="0.5"/>
+    <!-- Ear right -->
+    <path d="M48 32 Q53 28 51 36 Q48 38 46 35" fill="url(#goldShine)" stroke="#8B6914" stroke-width="0.5"/>
+
+    <!-- Inner ear -->
+    <path d="M15 32 Q12 29 13.5 35 Q15.5 36.5 17 34" fill="#DAA520" opacity="0.6"/>
+    <path d="M49 32 Q52 29 50.5 35 Q48.5 36.5 47 34" fill="#DAA520" opacity="0.6"/>
+
+    <!-- Forehead emblem - diamond -->
+    <path d="M32 24 L34 27 L32 30 L30 27 Z" fill="#FFD700" stroke="#8B6914" stroke-width="0.3"/>
+  </g>
+</svg>

@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import OpenAI from 'openai';
-import { Settings, Database, Sparkles, Save, Trash2, Eye, EyeOff, CheckCircle, XCircle, Shield, ExternalLink, Building2, Phone, MapPin, FileText, Hash, Monitor, Upload, Loader2, RefreshCw, X, Plus, AlertTriangle } from 'lucide-react';
+import { Settings, Database, Sparkles, Save, Trash2, Eye, EyeOff, CheckCircle, XCircle, Shield, ExternalLink, Building2, Phone, MapPin, FileText, Hash, Monitor, Upload, Loader2, RefreshCw, X, Plus, AlertTriangle, History, ShieldCheck, Zap, Wrench, Star } from 'lucide-react';
 import { getOpenAIKey, saveOpenAIKey, clearOpenAIKey, isOpenAIConfigured, getEmbeddedSupabaseConfig } from '../lib/api-config';
 import { reinitializeOpenAI } from '../lib/chatgpt-assistant';
 import { testSupabaseConnection } from '../lib/supabase';
@@ -16,6 +16,7 @@ import { logActivity } from '../utils/activityLogger';
 import { useModuleBus } from '../hooks/useModuleBus';
 import { getPagePermissions } from '../utils/permissions';
 import { LocalRepoPanel } from '../components/LocalRepoPanel';
+import { CHANGELOG, type ChangeType } from '../data/changelog';
 
 export interface CompanyInfo {
   companyName: string;
@@ -462,6 +463,62 @@ export function SettingsPage() {
 
       {/* Local Repo Panel */}
       <LocalRepoPanel />
+
+      {/* ── Güncelleme Notları ───────────────────────────────────────── */}
+      <div className="space-y-4">
+        <div className="flex items-center gap-3">
+          <div className="p-2 bg-blue-500/20 rounded-xl border border-blue-500/30">
+            <History className="w-5 h-5 text-blue-400" />
+          </div>
+          <div>
+            <h2 className="text-base font-bold text-white">Güncelleme Notları</h2>
+            <p className="text-xs text-gray-400">Sürüm geçmişi ve değişiklik kayıtları</p>
+          </div>
+        </div>
+
+        <div className="space-y-3">
+          {CHANGELOG.map((entry, idx) => (
+            <div key={entry.version} className={`rounded-2xl border overflow-hidden ${idx === 0 ? 'border-emerald-500/30 bg-emerald-500/5' : 'border-white/8 bg-white/3'}`}>
+              {/* Version header */}
+              <div className={`flex items-center gap-3 px-4 py-3 ${idx === 0 ? 'bg-emerald-500/10' : 'bg-white/4'}`}>
+                <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${idx === 0 ? 'bg-emerald-500/20 border border-emerald-500/30' : 'bg-white/8 border border-white/10'}`}>
+                  <ShieldCheck className={`w-5 h-5 ${idx === 0 ? 'text-emerald-400' : 'text-gray-400'}`} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className={`text-sm font-bold ${idx === 0 ? 'text-emerald-400' : 'text-white'}`}>v{entry.version}</span>
+                    <span className={`text-xs font-mono px-2 py-0.5 rounded-full ${idx === 0 ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' : 'bg-white/8 text-gray-400 border border-white/10'}`}>{entry.codename}</span>
+                    {idx === 0 && <span className="text-[10px] font-bold bg-emerald-500/30 text-emerald-200 px-2 py-0.5 rounded-full border border-emerald-400/30">GÜNCEL</span>}
+                  </div>
+                  <p className="text-xs text-gray-400 mt-0.5 truncate">{entry.summary}</p>
+                </div>
+                <span className="text-[11px] text-gray-500 flex-shrink-0">{entry.date}</span>
+              </div>
+
+              {/* Change list */}
+              <div className="px-4 py-3 space-y-2">
+                {entry.changes.map((change, ci) => {
+                  const typeConfig: Record<ChangeType, { label: string; color: string; icon: React.ReactNode }> = {
+                    yenilik:     { label: 'YENİ',   color: 'text-blue-400 bg-blue-500/15 border-blue-500/25',    icon: <Star className="w-3 h-3" /> },
+                    iyileştirme: { label: 'İYİ',    color: 'text-emerald-400 bg-emerald-500/15 border-emerald-500/25', icon: <Zap className="w-3 h-3" /> },
+                    düzeltme:    { label: 'DÜZ',    color: 'text-amber-400 bg-amber-500/15 border-amber-500/25',   icon: <Wrench className="w-3 h-3" /> },
+                    güvenlik:    { label: 'GÜV',    color: 'text-red-400 bg-red-500/15 border-red-500/25',         icon: <ShieldCheck className="w-3 h-3" /> },
+                  };
+                  const cfg = typeConfig[change.type];
+                  return (
+                    <div key={ci} className="flex items-start gap-2.5">
+                      <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-bold border flex-shrink-0 mt-0.5 ${cfg.color}`}>
+                        {cfg.icon}{cfg.label}
+                      </span>
+                      <p className="text-xs text-gray-300 leading-relaxed">{change.text}</p>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
 
     </div>
   );

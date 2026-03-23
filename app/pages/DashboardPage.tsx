@@ -672,25 +672,6 @@ export function DashboardPage() {
   return (
     <div className="p-3 sm:p-6 lg:p-10 space-y-4 sm:space-y-6 lg:space-y-8 bg-background min-h-screen text-white font-sans pb-28 sm:pb-6 lg:pb-10">
       
-      {/* Release Banner */}
-      <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }}
-        className="relative overflow-hidden flex items-start sm:items-center gap-4 p-4 bg-gradient-to-r from-emerald-500/10 via-blue-500/10 to-transparent border border-emerald-500/20 rounded-2xl"
-      >
-        <div className="absolute top-0 right-0 p-4 opacity-10">
-          <ShieldCheck className="w-24 h-24 text-emerald-400" />
-        </div>
-        <div className="relative z-10 p-2 sm:p-3 bg-emerald-500/20 rounded-xl backdrop-blur-sm border border-emerald-500/30">
-          <ShieldCheck className="w-5 h-5 sm:w-6 sm:h-6 text-emerald-400" />
-        </div>
-        <div className="relative z-10 flex-1">
-          <div className="flex items-center gap-2 mb-1">
-            <h3 className="text-sm sm:text-base font-bold text-emerald-400">{t('dashboard.releaseTitle')}</h3>
-            <span className="px-2 py-0.5 text-[10px] font-bold bg-emerald-500/20 text-emerald-300 rounded-full border border-emerald-500/30">{t('dashboard.releaseNew')}</span>
-          </div>
-          <p className="text-xs sm:text-sm text-gray-400 max-w-3xl leading-relaxed">{t('dashboard.releaseDesc')}</p>
-        </div>
-      </motion.div>
-
       {/* AI Banner — API key eksikse paneli açmaya davet et */}
       {!isOpenAIConfigured() && !showAIChat && (
         <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}
