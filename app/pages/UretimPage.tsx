@@ -253,7 +253,7 @@ function StokSearchSelect({ value, onSelect, stokList }: {
   const selectedItem = stokList.find(s => s.id === value);
 
   return (
-    <div className="relative">
+    <div className="relative z-[10]">
       <div
         onClick={() => setIsOpen(!isOpen)}
         className="w-full px-4 py-3.5 sm:py-3 bg-card border border-border rounded-xl text-white cursor-pointer flex items-center justify-between hover:border-blue-500/30 active:bg-card/80 transition-corporate"
@@ -280,7 +280,7 @@ function StokSearchSelect({ value, onSelect, stokList }: {
             initial={{ opacity: 0, y: -5 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -5 }}
-            className="absolute z-50 top-full left-0 right-0 mt-2 glass-strong rounded-xl shadow-2xl max-h-[60vh] sm:max-h-72 overflow-hidden"
+            className="absolute z-[9999] top-full left-0 right-0 mt-2 glass-strong rounded-xl shadow-2xl max-h-[60vh] sm:max-h-72 overflow-hidden"
           >
             <div className="p-3 border-b border-border/40">
               <div className="relative">
@@ -394,7 +394,7 @@ function CiktiUrunSelect({ value, onChange, stokList, hammaddeAdi }: {
   };
 
   return (
-    <div className="relative" ref={containerRef}>
+    <div className="relative z-[10]" ref={containerRef}>
       <div className="relative">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
         <input
@@ -421,7 +421,7 @@ function CiktiUrunSelect({ value, onChange, stokList, hammaddeAdi }: {
             initial={{ opacity: 0, y: openUpward ? 5 : -5 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: openUpward ? 5 : -5 }}
-            className={`absolute z-50 left-0 right-0 glass-strong rounded-xl shadow-2xl max-h-[60vh] sm:max-h-72 overflow-hidden ${
+            className={`absolute z-[9999] left-0 right-0 glass-strong rounded-xl shadow-2xl max-h-[60vh] sm:max-h-72 overflow-hidden ${
               openUpward ? 'bottom-full mb-2' : 'top-full mt-2'
             }`}
           >
@@ -2741,7 +2741,7 @@ export function UretimPage() {
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-5">
             {/* ── Sol: Giriş & Fire ─────────────────────────── */}
-            <div className="space-y-4">
+            <div className="space-y-4 relative z-[2]">
               {/* Stoktan Ürün Seç */}
               <div className="card-premium rounded-xl md:rounded-2xl p-4 md:p-5 space-y-3 md:space-y-4">
                 <div className="flex items-center gap-2">
@@ -2848,10 +2848,9 @@ export function UretimPage() {
                   <AnimatePresence>
                     {hizliForm.showFire && (
                       <motion.div
-                        initial={{ opacity: 0, height: 0 }}
-                        animate={{ opacity: 1, height: 'auto' }}
-                        exit={{ opacity: 0, height: 0 }}
-                        className="overflow-hidden"
+                        initial={{ opacity: 0, y: -6 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -6 }}
                       >
                         <div className="grid grid-cols-2 gap-3 pt-2">
                           <div>
@@ -2900,7 +2899,7 @@ export function UretimPage() {
             </div>
 
             {/* ── Sağ: Çıktı & Maliyet ─────────────────────── */}
-            <div className="space-y-4">
+            <div className="space-y-4 relative z-[1]">
               {/* Çıktı Ürün */}
               {hizliForm.hammaddeStokId && hizliForm.girisMiktar > 0 && (
                 <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}
@@ -2994,10 +2993,9 @@ export function UretimPage() {
                   <AnimatePresence>
                     {hizliForm.showMaliyet && (
                       <motion.div
-                        initial={{ opacity: 0, height: 0 }}
-                        animate={{ opacity: 1, height: 'auto' }}
-                        exit={{ opacity: 0, height: 0 }}
-                        className="overflow-hidden"
+                        initial={{ opacity: 0, y: -6 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -6 }}
                       >
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
                           <div>
