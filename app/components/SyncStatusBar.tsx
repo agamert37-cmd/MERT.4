@@ -95,7 +95,10 @@ async function pushAllLocalToSupabase(
 }
 
 export function SyncStatusBar({ tableName }: SyncStatusBarProps) {
-  const { setupStatus, isChecking, lastChecked, recheckTables, isSupabaseConfigured } = useSyncContext();
+  const {
+    setupStatus, isChecking, lastChecked, recheckTables, isSupabaseConfigured,
+    pendingCount, isSyncing: isCloudSyncing, lastSyncAt, isOnline: cloudOnline, syncError,
+  } = useSyncContext();
   const [isExpanded, setIsExpanded] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncProgress, setSyncProgress] = useState('');
@@ -214,7 +217,7 @@ export function SyncStatusBar({ tableName }: SyncStatusBarProps) {
 
         {/* Durum metni */}
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <span className={`text-xs font-semibold ${isConnected ? 'text-emerald-300' : 'text-red-300'}`}>
               {isChecking ? 'Kontrol ediliyor...' : isConnected ? 'Bulut Bağlı' : 'Bağlantı Yok'}
             </span>
@@ -231,6 +234,32 @@ export function SyncStatusBar({ tableName }: SyncStatusBarProps) {
             {setupStatus.latencyMs && isConnected && (
               <span className="text-[10px] text-white/20 font-mono hidden sm:inline">
                 {setupStatus.latencyMs}ms
+              </span>
+            )}
+            {/* Canlı sync durumu */}
+            {(isCloudSyncing || pendingCount > 0) && (
+              <motion.span
+                initial={{ opacity: 0, scale: 0.8 }}
+                animate={{ opacity: 1, scale: 1 }}
+                className="flex items-center gap-1 text-[10px] font-semibold text-blue-300 bg-blue-500/10 border border-blue-500/20 px-2 py-0.5 rounded-full"
+              >
+                <Loader2 className="w-2.5 h-2.5 animate-spin" />
+                {pendingCount > 0 ? `${pendingCount} bekliyor` : 'Gönderiliyor'}
+              </motion.span>
+            )}
+            {!isCloudSyncing && pendingCount === 0 && lastSyncAt > 0 && (
+              <span className="text-[10px] text-white/20 font-mono hidden sm:inline">
+                son sync {new Date(lastSyncAt).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}
+              </span>
+            )}
+            {syncError && !isCloudSyncing && (
+              <span className="text-[10px] text-red-400/70 hidden sm:inline truncate max-w-[120px]" title={syncError}>
+                ⚠ {syncError}
+              </span>
+            )}
+            {!cloudOnline && (
+              <span className="text-[10px] text-amber-400/80 font-semibold">
+                Çevrimdışı
               </span>
             )}
           </div>

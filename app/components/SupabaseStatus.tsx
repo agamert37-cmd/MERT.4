@@ -6,46 +6,24 @@
 import React, { useState, useEffect } from 'react';
 import { Cloud, CloudOff, WifiOff, CheckCircle, AlertCircle, Loader2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { useSyncContext } from '../contexts/SyncContext';
 
 export function SupabaseStatus() {
-  const [isOnline, setIsOnline] = useState(navigator.onLine);
-  const [isPending, setIsPending] = useState(false);
+  const { isOnline, isSyncing, pendingCount } = useSyncContext();
   const [showStatus, setShowStatus] = useState(false);
 
+  const isPending = isSyncing || pendingCount > 0;
+
   useEffect(() => {
-    const handleOnline = () => {
-      setIsOnline(true);
+    if (!isOnline) {
       setShowStatus(true);
-      setTimeout(() => setShowStatus(false), 3000);
-    };
-
-    const handleOffline = () => {
-      setIsOnline(false);
+    } else {
+      // Online'a geçişte 3 saniye göster sonra kapat
       setShowStatus(true);
-    };
-
-    window.addEventListener('online', handleOnline);
-    window.addEventListener('offline', handleOffline);
-
-    // Pending changes kontrolü
-    const checkPending = () => {
-      try {
-        const pending = localStorage.getItem('isleyen_et_pending_changes');
-        setIsPending(!!pending && JSON.parse(pending).length > 0);
-      } catch {
-        setIsPending(false);
-      }
-    };
-
-    checkPending();
-    const interval = setInterval(checkPending, 2000);
-
-    return () => {
-      window.removeEventListener('online', handleOnline);
-      window.removeEventListener('offline', handleOffline);
-      clearInterval(interval);
-    };
-  }, []);
+      const t = setTimeout(() => setShowStatus(false), 3000);
+      return () => clearTimeout(t);
+    }
+  }, [isOnline]);
 
   if (!showStatus && isOnline && !isPending) return null;
 
@@ -101,20 +79,9 @@ export function SupabaseStatus() {
  * Kompakt Durum Badge (Sidebar için)
  */
 export function SupabaseStatusBadge() {
-  const [isOnline, setIsOnline] = useState(navigator.onLine);
+  const { isOnline, isSyncing, pendingCount } = useSyncContext();
 
-  useEffect(() => {
-    const handleOnline = () => setIsOnline(true);
-    const handleOffline = () => setIsOnline(false);
-
-    window.addEventListener('online', handleOnline);
-    window.addEventListener('offline', handleOffline);
-
-    return () => {
-      window.removeEventListener('online', handleOnline);
-      window.removeEventListener('offline', handleOffline);
-    };
-  }, []);
+  const hasPending = isSyncing || pendingCount > 0;
 
   return (
     <div className={`flex items-center gap-2 px-3 py-2 rounded-lg ${
@@ -124,8 +91,13 @@ export function SupabaseStatusBadge() {
     }`}>
       {isOnline ? (
         <>
-          <Cloud className="w-4 h-4" />
-          <span className="text-xs font-medium">Çevrimiçi</span>
+          {hasPending
+            ? <Loader2 className="w-4 h-4 animate-spin" />
+            : <Cloud className="w-4 h-4" />
+          }
+          <span className="text-xs font-medium">
+            {hasPending ? `Sync (${pendingCount})` : 'Çevrimiçi'}
+          </span>
         </>
       ) : (
         <>

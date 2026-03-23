@@ -344,9 +344,10 @@ if (typeof window !== 'undefined') {
     if (_pendingWrites.size > 0 && isConfigured()) {
       const entries = Array.from(_pendingWrites.entries());
       const keys = entries.map(([k]) => `${KV_SYNC_PREFIX}${k}`);
-      const values = entries.map(([, v]) => v);
+      const values = entries.map(([, v]) => v); // already wrapped
       _pendingWrites.clear();
-      
+      saveQueueToStorage(); // Kalıcı kuyruğu temizle (keepalive başarılı olursa gereksiz)
+
       try {
         fetch(`${SERVER_BASE_URL}/kv/mset`, {
           method: 'POST',
@@ -419,22 +420,39 @@ export const removeFromStorage = (key: StorageKey | string): boolean => {
     const prefixedKey = getPrefixedKey(key);
     localStorage.removeItem(prefixedKey);
     
-    // Cloud'dan ve yerel depodan da sil (arka planda)
-    if (SYNCABLE_KEYS.has(key as string) && isConfigured()) {
-      const kvKey = `${KV_SYNC_PREFIX}${key}`;
-      
-      // Yerel depo aktifse ondan da sil
-      const localConfig = getLocalRepoConfig();
-      if (localConfig.enabled && localConfig.serviceRoleKey && isLocalHealthy()) {
-        kvDeleteFromPrimary(kvKey).catch(e => console.warn('[LocalSync] delete failed:', e.message));
+    // Sürüm takibinden kaldır ve cloud/yerel depodan sil
+    if (SYNCABLE_KEYS.has(key as string)) {
+      // Yerel sürüm kaydını temizle
+      try {
+        const versions = getLocalVersions();
+        delete versions[key as string];
+        localStorage.setItem(VERSIONS_KEY, JSON.stringify(versions));
+      } catch {}
+
+      // Bekleyen yazma kuyruğundan kaldır
+      if (_pendingWrites.has(key as string)) {
+        _pendingWrites.delete(key as string);
+        saveQueueToStorage();
+        _syncState.pendingCount = _pendingWrites.size;
+        notifySyncStateChange();
       }
-      
-      // Buluttan da sil
-      fetch(`${SERVER_BASE_URL}/kv/del`, {
-        method: 'POST',
-        headers: getHeaders(),
-        body: JSON.stringify({ key: kvKey }),
-      }).catch(e => console.warn('[CloudSync] delete failed:', e.message));
+
+      if (isConfigured()) {
+        const kvKey = `${KV_SYNC_PREFIX}${key}`;
+
+        // Yerel depo aktifse ondan da sil
+        const localConfig = getLocalRepoConfig();
+        if (localConfig.enabled && localConfig.serviceRoleKey && isLocalHealthy()) {
+          kvDeleteFromPrimary(kvKey).catch(e => console.warn('[LocalSync] delete failed:', e.message));
+        }
+
+        // Buluttan da sil
+        fetch(`${SERVER_BASE_URL}/kv/del`, {
+          method: 'POST',
+          headers: getHeaders(),
+          body: JSON.stringify({ key: kvKey }),
+        }).catch(e => console.warn('[CloudSync] delete failed:', e.message));
+      }
     }
     
     return true;
@@ -685,12 +703,17 @@ export async function syncKeyToCloud(key: StorageKey | string): Promise<boolean>
     const data = getFromStorage(key);
     if (data === null) return false;
 
+    const now = Date.now();
+    setLocalVersion(key as string, now);
+    const wrapped = wrapEnvelope(data);
+
     const res = await fetch(`${SERVER_BASE_URL}/kv/set`, {
       method: 'POST',
       headers: getHeaders(),
-      body: JSON.stringify({ key: `${KV_SYNC_PREFIX}${key}`, value: data }),
+      body: JSON.stringify({ key: `${KV_SYNC_PREFIX}${key}`, value: wrapped }),
     });
 
+    if (res.ok) markAsEcho(key as string);
     return res.ok;
   } catch {
     return false;

@@ -242,6 +242,35 @@ function StokSearchSelect({ value, onSelect, stokList }: {
   const { t } = useLanguage();
   const [search, setSearch] = useState('');
   const [isOpen, setIsOpen] = useState(false);
+  const [openUpward, setOpenUpward] = useState(false);
+  const [dropdownMaxH, setDropdownMaxH] = useState(300);
+  const containerRef = React.useRef<HTMLDivElement>(null);
+
+  // Dışarı tıklayınca kapat
+  useEffect(() => {
+    if (!isOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [isOpen]);
+
+  // Akıllı açılış: aşağıda yer yoksa yukarı aç, mevcut alana göre max-h hesapla
+  const handleOpen = () => {
+    if (isOpen) { setIsOpen(false); return; }
+    if (containerRef.current) {
+      const rect = containerRef.current.getBoundingClientRect();
+      const spaceBelow = window.innerHeight - rect.bottom;
+      const spaceAbove = rect.top;
+      const goUpward = spaceBelow < 300 && spaceAbove > spaceBelow;
+      setOpenUpward(goUpward);
+      setDropdownMaxH(Math.min(340, Math.max(160, (goUpward ? spaceAbove : spaceBelow) - 12)));
+    }
+    setIsOpen(true);
+  };
 
   const filtered = useMemo(() => {
     const validStok = stokList.filter(s => (s.name || '').trim().length > 0 && (s.currentStock || s.stock || 0) > 0);
@@ -253,9 +282,9 @@ function StokSearchSelect({ value, onSelect, stokList }: {
   const selectedItem = stokList.find(s => s.id === value);
 
   return (
-    <div className="relative z-[10]">
+    <div className="relative z-[10]" ref={containerRef}>
       <div
-        onClick={() => setIsOpen(!isOpen)}
+        onClick={handleOpen}
         className="w-full px-4 py-3.5 sm:py-3 bg-card border border-border rounded-xl text-white cursor-pointer flex items-center justify-between hover:border-blue-500/30 active:bg-card/80 transition-corporate"
       >
         {selectedItem ? (
@@ -271,18 +300,21 @@ function StokSearchSelect({ value, onSelect, stokList }: {
         ) : (
           <span className="text-muted-foreground/60 text-sm">{t('uretim.labels.select_placeholder') || 'Stoktan urun secin...'}</span>
         )}
-        <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+        <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform flex-shrink-0 ${isOpen ? 'rotate-180' : ''}`} />
       </div>
 
       <AnimatePresence>
         {isOpen && (
           <motion.div
-            initial={{ opacity: 0, y: -5 }}
+            initial={{ opacity: 0, y: openUpward ? 5 : -5 }}
             animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -5 }}
-            className="absolute z-[9999] top-full left-0 right-0 mt-2 glass-strong rounded-xl shadow-2xl max-h-[60vh] sm:max-h-72 overflow-hidden"
+            exit={{ opacity: 0, y: openUpward ? 5 : -5 }}
+            style={{ maxHeight: dropdownMaxH }}
+            className={`absolute z-[9999] left-0 right-0 glass-strong rounded-xl shadow-2xl flex flex-col overflow-hidden ${
+              openUpward ? 'bottom-full mb-2' : 'top-full mt-2'
+            }`}
           >
-            <div className="p-3 border-b border-border/40">
+            <div className="p-3 border-b border-border/40 flex-shrink-0">
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                 <input
@@ -294,7 +326,7 @@ function StokSearchSelect({ value, onSelect, stokList }: {
                 />
               </div>
             </div>
-            <div className="overflow-y-auto max-h-[45vh] sm:max-h-52 custom-scrollbar">
+            <div className="overflow-y-auto flex-1 min-h-0 custom-scrollbar">
               {filtered.length === 0 ? (
                 <div className="p-6 text-center text-muted-foreground text-sm">
                   {stokList.length === 0 ? (t('uretim.messages.noStock') || 'Stokta urun bulunamadi') : (t('uretim.messages.noMatch') || 'Aramayla eslesen urun yok')}
@@ -343,9 +375,10 @@ function CiktiUrunSelect({ value, onChange, stokList, hammaddeAdi }: {
   const [search, setSearch] = useState('');
   const [isOpen, setIsOpen] = useState(false);
   const [openUpward, setOpenUpward] = useState(false);
+  const [dropdownMaxH, setDropdownMaxH] = useState(300);
   const containerRef = React.useRef<HTMLDivElement>(null);
 
-  // Dışarı tıklayınca kapat (onBlur yerine daha güvenilir)
+  // Dışarı tıklayınca kapat
   useEffect(() => {
     if (!isOpen) return;
     const handleClickOutside = (e: MouseEvent) => {
@@ -357,14 +390,17 @@ function CiktiUrunSelect({ value, onChange, stokList, hammaddeAdi }: {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [isOpen]);
 
-  // Açılış yönünü hesapla - altta yeterli alan yoksa yukarı aç
-  useEffect(() => {
-    if (!isOpen || !containerRef.current) return;
+  // Açılış yönünü + max-h hesapla — altta yer yoksa yukarı aç
+  const openMenu = () => {
+    if (!containerRef.current) { setIsOpen(true); return; }
     const rect = containerRef.current.getBoundingClientRect();
     const spaceBelow = window.innerHeight - rect.bottom;
     const spaceAbove = rect.top;
-    setOpenUpward(spaceBelow < 300 && spaceAbove > spaceBelow);
-  }, [isOpen]);
+    const goUpward = spaceBelow < 300 && spaceAbove > spaceBelow;
+    setOpenUpward(goUpward);
+    setDropdownMaxH(Math.min(360, Math.max(160, (goUpward ? spaceAbove : spaceBelow) - 12)));
+    setIsOpen(true);
+  };
 
   // Mevcut stok ürünlerini filtrele (isimsizleri hariç tut)
   const suggestions = useMemo(() => {
@@ -400,7 +436,7 @@ function CiktiUrunSelect({ value, onChange, stokList, hammaddeAdi }: {
         <input
           value={isOpen ? search : value}
           onChange={e => { setSearch(e.target.value); onChange(e.target.value); }}
-          onFocus={() => { setIsOpen(true); setSearch(value || ''); }}
+          onFocus={() => { setSearch(value || ''); openMenu(); }}
           className="w-full pl-9 pr-4 py-3 bg-card border border-border rounded-xl text-white text-sm placeholder-muted-foreground/50 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-500/50 transition-corporate focus-corporate"
           placeholder={t('uretim.labels.output_placeholder') || 'Urun adi yazin veya stoktan secin...'}
         />
@@ -421,15 +457,16 @@ function CiktiUrunSelect({ value, onChange, stokList, hammaddeAdi }: {
             initial={{ opacity: 0, y: openUpward ? 5 : -5 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: openUpward ? 5 : -5 }}
-            className={`absolute z-[9999] left-0 right-0 glass-strong rounded-xl shadow-2xl max-h-[60vh] sm:max-h-72 overflow-hidden ${
+            style={{ maxHeight: dropdownMaxH }}
+            className={`absolute z-[9999] left-0 right-0 glass-strong rounded-xl shadow-2xl flex flex-col overflow-hidden ${
               openUpward ? 'bottom-full mb-2' : 'top-full mt-2'
             }`}
           >
-            {/* Hızlı öneriler */}
+            {/* Hızlı öneriler — sadece arama yokken göster */}
             {quickSuggestions.length > 0 && !search.trim() && (
-              <div className="p-3 border-b border-border/40">
+              <div className="p-3 border-b border-border/40 flex-shrink-0">
                 <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-bold mb-2">{t('uretim.labels.quick_suggestions') || 'Hizli Oneriler'}</p>
-                <div className="flex flex-wrap gap-1.5 stagger-fast">
+                <div className="flex flex-wrap gap-1.5">
                   {quickSuggestions.map(suggestion => (
                     <button
                       key={suggestion}
@@ -448,11 +485,11 @@ function CiktiUrunSelect({ value, onChange, stokList, hammaddeAdi }: {
               </div>
             )}
 
-            {/* Mevcut stok ürünleri */}
-            <div className="overflow-y-auto max-h-48">
+            {/* Mevcut stok ürünleri — flex-1 ile kalan alanı doldur */}
+            <div className="overflow-y-auto flex-1 min-h-0 custom-scrollbar">
               {suggestions.length > 0 && (
-                <div className="p-2 border-b border-border/40">
-                  <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-bold px-2 py-1">{t('uretim.labels.existing_stock') || 'Mevcut Stok Urunleri'}</p>
+                <div className="px-4 py-2 border-b border-border/40 sticky top-0 bg-card/80 backdrop-blur-sm">
+                  <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-bold">{t('uretim.labels.existing_stock') || 'Mevcut Stok Urunleri'}</p>
                 </div>
               )}
               {suggestions.map(item => (
@@ -488,6 +525,11 @@ function CiktiUrunSelect({ value, onChange, stokList, hammaddeAdi }: {
                     "<span className="font-bold text-white">{search.trim()}</span>" {t('uretim.labels.create_new') || 'olarak yeni urun olustur'}
                   </span>
                 </button>
+              )}
+              {suggestions.length === 0 && !search.trim() && (
+                <div className="p-4 text-center text-muted-foreground/60 text-xs">
+                  Stokta kayıtlı ürün yok — yukarıdan hızlı öneri seçin veya yeni isim yazın
+                </div>
               )}
             </div>
           </motion.div>
@@ -2741,7 +2783,7 @@ export function UretimPage() {
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-5">
             {/* ── Sol: Giriş & Fire ─────────────────────────── */}
-            <div className="space-y-4 relative z-[2]">
+            <div className="space-y-4 relative">
               {/* Stoktan Ürün Seç */}
               <div className="card-premium rounded-xl md:rounded-2xl p-4 md:p-5 space-y-3 md:space-y-4">
                 <div className="flex items-center gap-2">
@@ -2899,7 +2941,7 @@ export function UretimPage() {
             </div>
 
             {/* ── Sağ: Çıktı & Maliyet ─────────────────────── */}
-            <div className="space-y-4 relative z-[1]">
+            <div className="space-y-4 relative">
               {/* Çıktı Ürün */}
               {hizliForm.hammaddeStokId && hizliForm.girisMiktar > 0 && (
                 <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}
