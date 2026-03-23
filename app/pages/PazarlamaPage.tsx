@@ -28,7 +28,6 @@ import { logActivity } from '../utils/activityLogger';
 import { useModuleBus } from '../hooks/useModuleBus';
 import { getPagePermissions } from '../utils/permissions';
 import { usePageSecurity } from '../hooks/usePageSecurity';
-import { useTableSync } from '../hooks/useTableSync';
 import { getVitrinAnalytics, getPopularProducts, getDailyStats, getVitrinEventsToday, clearVitrinAnalytics } from '../utils/vitrinAnalytics';
 
 // ─── Interfaces ──────────────────────────────────────────────────
@@ -560,7 +559,7 @@ function TemplatePicker<T>({ templates, onSelect, label, color }: {
             <p className="text-[9px] text-muted-foreground/60 uppercase tracking-wider font-bold mb-2">{label}</p>
             <div className="space-y-1.5 max-h-48 overflow-y-auto">
               {templates.map((t: any, i) => (
-                <button key={i} onClick={() => { onSelect(t); setOpen(false); toast.success('Sablon uyguland!'); }}
+                <button key={i} onClick={() => { onSelect(t); setOpen(false); toast.success('Şablon uygulandı!'); }}
                   className="w-full text-left p-2.5 rounded-lg hover:bg-white/5 transition-all group">
                   <p className="text-xs font-medium text-white group-hover:text-blue-300 transition-colors">{t.title || t.name || t.question}</p>
                   <p className="text-[10px] text-muted-foreground/50 line-clamp-1 mt-0.5">{t.text || t.description || t.answer || ''}</p>
@@ -842,10 +841,10 @@ export function PazarlamaPage() {
 
   const handleSave = useCallback(() => {
     if (!canEdit) {
+      toast.error('Pazarlama içeriğini kaydetmek için yönetici yetkisi gereklidir.');
       sec.logUnauthorized('pazarlama_edit', 'Kullanıcı pazarlama içeriğini kaydetmeye çalıştı ancak yetkisi yoktu.');
       return;
     }
-    if (!sec.checkRate('edit')) return;
     setInStorage(StorageKey.PAZARLAMA_CONTENT, content);
     setInStorage(StorageKey.LOGIN_CONTENT, {
       announcements: content.announcements,
@@ -865,25 +864,35 @@ export function PazarlamaPage() {
   const inputClass = "w-full px-3 py-2.5 bg-card border border-border rounded-xl text-white placeholder-muted-foreground/40 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500/50 transition-all text-sm";
 
   // CRUD Helpers
+  const checkEditPerm = (action: string): boolean => {
+    if (!canEdit) {
+      toast.error('Bu işlem için yönetici yetkisi gereklidir.');
+      sec.logUnauthorized(`pazarlama_${action}`, `Pazarlama ${action} yetkisi yok`);
+      return false;
+    }
+    return true;
+  };
+
   const addItem = <T extends { id: string }>(key: keyof PazarlamaContent, newItem: T) => {
-    if (!canEdit) { sec.logUnauthorized('pazarlama_add', `Pazarlama öğe ekleme yetkisi yok: ${key}`); return; }
+    if (!checkEditPerm('add')) return;
     updateContent({ [key]: [...(content[key] as T[]), newItem] } as any);
     sec.auditLog('pazarlama_item_add', newItem.id, String(key));
     logActivity('custom', `Pazarlama öğesi eklendi: ${key}`, { employeeName: user?.name, page: 'Pazarlama' });
   };
   const removeItem = (key: keyof PazarlamaContent, id: string) => {
-    if (!canEdit) { sec.logUnauthorized('pazarlama_delete', `Pazarlama öğe silme yetkisi yok: ${key}`); return; }
-    if (!confirm('Bu ogevi silmek istediginize emin misiniz?')) return;
+    if (!checkEditPerm('delete')) return;
+    if (!window.confirm('Bu öğeyi silmek istediğinize emin misiniz?')) return;
     updateContent({ [key]: (content[key] as any[]).filter((i: any) => i.id !== id) } as any);
     sec.auditLog('pazarlama_item_delete', id, String(key));
     logActivity('custom', `Pazarlama öğesi silindi: ${key}`, { employeeName: user?.name, page: 'Pazarlama' });
+    toast.success('Öğe silindi');
   };
   const updateItem = <T extends { id: string }>(key: keyof PazarlamaContent, id: string, updates: Partial<T>) => {
-    if (!canEdit) { toast.error('Düzenleme yetkiniz yok.'); return; }
+    if (!canEdit) { toast.error('Düzenleme için yönetici yetkisi gereklidir.'); return; }
     updateContent({ [key]: (content[key] as T[]).map((i: any) => i.id === id ? { ...i, ...updates } : i) } as any);
   };
   const moveItem = (key: keyof PazarlamaContent, id: string, direction: 'up' | 'down') => {
-    if (!canEdit) { toast.error('Düzenleme yetkiniz yok.'); return; }
+    if (!checkEditPerm('move')) return;
     const arr = [...(content[key] as any[])];
     const idx = arr.findIndex((i: any) => i.id === id);
     if (direction === 'up' && idx > 0) [arr[idx], arr[idx - 1]] = [arr[idx - 1], arr[idx]];
@@ -891,14 +900,14 @@ export function PazarlamaPage() {
     updateContent({ [key]: arr } as any);
   };
   const duplicateItem = (key: keyof PazarlamaContent, id: string) => {
-    if (!canEdit) { toast.error('Düzenleme yetkiniz yok.'); return; }
+    if (!checkEditPerm('duplicate')) return;
     const arr = content[key] as any[];
     const item = arr.find((i: any) => i.id === id);
     if (item) {
       const copy = { ...item, id: crypto.randomUUID(), title: (item.title || item.name || item.question || '') + ' (Kopya)' };
       if (copy.name) copy.name = copy.name + ' (Kopya)';
       updateContent({ [key]: [...arr, copy] } as any);
-      toast.success('Oge kopyalandi');
+      toast.success('Öğe kopyalandı');
     }
   };
 
@@ -1081,7 +1090,7 @@ export function PazarlamaPage() {
                         <h2 className="text-sm font-bold text-white">Istatistik Kartlari</h2>
                         <span className="px-2 py-0.5 text-[10px] font-bold bg-accent/50 text-foreground/80 rounded-full">{content.stats.length}</span>
                       </div>
-                      <button onClick={() => setActiveTab('ayarlar')} className="text-xs text-muted-foreground/70 hover:text-pink-400 transition-colors flex items-center gap-1"><Edit2 className="w-3 h-3" /> Duzenle</button>
+                      <button onClick={() => setActiveTab('ayarlar')} className="text-xs text-muted-foreground/70 hover:text-pink-400 transition-colors flex items-center gap-1"><Edit2 className="w-3 h-3" /> Düzenle</button>
                     </div>
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                       {content.stats.map(stat => {

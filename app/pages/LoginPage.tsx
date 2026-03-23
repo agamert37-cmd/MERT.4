@@ -518,12 +518,6 @@ export function LoginPage() {
   const [adminPassword, setAdminPassword] = useState('');
   const [adminTab, setAdminTab] = useState<'admin' | 'user'>('user');
   const [activeRecipe, setActiveRecipe] = useState(0);
-  const [mobileSlide, setMobileSlide] = useState(0);
-
-  useEffect(() => {
-    const timer = setInterval(() => setMobileSlide(i => (i + 1) % activeBanners.length), 4500);
-    return () => clearInterval(timer);
-  }, []);
 
   // ── Gizli admin tetikleyici (logo'ya 5 hızlı tıklama) ──────────────────
   const secretTapCount = React.useRef(0);
@@ -815,601 +809,289 @@ export function LoginPage() {
   };
 
   return (
-    <div className="relative h-[100dvh] bg-[#080c14] text-white overflow-hidden font-sans">
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_left,rgba(37,99,235,0.06)_0%,transparent_60%)] pointer-events-none" />
+    <div className="relative h-[100dvh] bg-[#07090f] text-white overflow-hidden font-sans">
 
-      {/* ═══════════ MOBİL LAYOUT (lg altı) ═══════════ */}
+      {/* ── Arka plan dekorasyonları ── */}
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_900px_700px_at_-5%_-5%,rgba(127,29,29,0.12)_0%,transparent_65%)] pointer-events-none" />
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_600px_400px_at_105%_105%,rgba(30,58,138,0.07)_0%,transparent_65%)] pointer-events-none" />
+
+      {/* ═════════════════════════════════════════════════
+           MOBİL LAYOUT  (lg altı)
+         ═════════════════════════════════════════════════ */}
       <div className="flex flex-col lg:hidden h-full">
 
         {/* Üst header */}
-        <div className="flex items-center gap-3 px-4 py-3.5 border-b border-white/[0.07] bg-black/50 backdrop-blur-sm flex-shrink-0">
+        <div className="flex items-center gap-3 px-5 py-4 border-b border-white/[0.06] bg-black/50 backdrop-blur-sm flex-shrink-0">
           <div
             onClick={handleSecretTap}
-            className="w-9 h-9 rounded-xl bg-blue-600 flex items-center justify-center flex-shrink-0 shadow-lg shadow-blue-600/40 cursor-default select-none"
+            className="w-11 h-11 rounded-xl bg-gradient-to-br from-red-800 to-red-950 border border-red-700/40 flex items-center justify-center flex-shrink-0 shadow-lg shadow-red-900/40 cursor-default select-none"
           >
-            <Sparkles className="w-4 h-4 text-white" />
+            <Beef className="w-5.5 h-5.5 text-red-200" />
           </div>
           <div className="min-w-0">
-            <h1 className="text-white font-bold text-[15px] leading-none tracking-tight truncate">{companyInfo.name}</h1>
-            <p className="text-blue-200/50 text-[11px] mt-0.5 truncate">{companyInfo.slogan}</p>
+            <h1 className="text-white font-black text-base leading-none tracking-tight truncate">{companyInfo.name}</h1>
+            <p className="text-white/30 text-[11px] mt-0.5 truncate">{companyInfo.slogan}</p>
+          </div>
+          <div className="ml-auto flex items-center gap-1.5 flex-shrink-0">
+            <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+            <span className="text-[10px] text-white/20 font-medium">Güvenli</span>
           </div>
         </div>
 
-        {/* Kurumsal Reklam Karüseli */}
-        <div className="relative flex-1 overflow-hidden">
-          {activeBanners.map((slide, i) => (
-            <div
-              key={slide.id}
-              className={`absolute inset-0 transition-opacity duration-700 ${i === mobileSlide ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
-            >
-              <img src={slide.imageUrl} alt={slide.title} className="w-full h-full object-cover" />
-              <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/30 to-transparent" />
-              <div className="absolute bottom-0 left-0 right-0 p-5 pb-4">
-                <p className="text-[11px] font-bold text-blue-400 uppercase tracking-widest mb-1.5">
-                  {i === 0 ? 'Özel Kampanya' : 'Premium Kalite'}
-                </p>
-                <h2 className="text-[22px] font-bold text-white leading-tight">{slide.title}</h2>
-                <p className="text-sm text-white/55 mt-1.5 leading-relaxed">{slide.subtitle}</p>
-              </div>
-            </div>
-          ))}
-          {/* Nokta göstergeler */}
-          <div className="absolute top-4 right-4 flex gap-1.5 z-10">
-            {activeBanners.map((_, i) => (
-              <button
-                key={i}
-                onClick={() => setMobileSlide(i)}
-                className={`rounded-full transition-all bg-white ${i === mobileSlide ? 'w-5 h-1.5 opacity-90' : 'w-1.5 h-1.5 opacity-30'}`}
-              />
-            ))}
-          </div>
-        </div>
+        {/* Form alanı */}
+        <div className="flex-1 overflow-y-auto px-5 py-5 space-y-4">
 
-        {/* Alt bar: güven rozeti + giriş butonu */}
-        <div
-          className="flex-shrink-0 bg-[#0a0f1a]/98 backdrop-blur-sm border-t border-white/[0.06] px-4 pt-3.5"
-          style={{ paddingBottom: 'max(1rem, env(safe-area-inset-bottom))' }}
-        >
-          <div className="flex items-center justify-center gap-3 mb-3.5">
-            {[
-              { icon: <Shield className="w-3 h-3" />, text: 'ISO 22000' },
-              { icon: <Award className="w-3 h-3" />, text: '15+ Yıl' },
-              { icon: <Truck className="w-3 h-3" />, text: 'Aynı Gün' },
-              { icon: <Package className="w-3 h-3" />, text: 'Soğuk Zincir' },
-            ].map((item, i) => (
-              <React.Fragment key={i}>
-                {i > 0 && <span className="w-px h-3 bg-white/10" />}
-                <span className="flex items-center gap-1 text-[10px] text-white/35 font-medium whitespace-nowrap">
-                  <span className="text-white/25">{item.icon}</span>
-                  {item.text}
-                </span>
-              </React.Fragment>
-            ))}
-          </div>
-          <button
-            onClick={() => setShowAdminPanel(true)}
-            className="w-full flex items-center justify-center gap-2 py-3.5 bg-blue-600 active:bg-blue-700 rounded-xl text-white font-bold text-sm transition-colors"
-          >
-            <LogIn className="w-4 h-4" />
-            Personel Girişi
-          </button>
-        </div>
-      </div>
-
-      {/* ═══════════ DESKTOP LAYOUT (lg+) ═══════════ */}
-      <div className="hidden lg:flex h-full">
-
-        {/* Sol panel: marka + hero carousel */}
-        <div className="w-[42%] h-full flex flex-col flex-shrink-0">
-
-          {/* Şirket header */}
-          <div className="relative z-20 flex items-center gap-3 px-6 py-4 bg-black/60 backdrop-blur-sm border-b border-white/5 flex-shrink-0">
-            <div
-              onClick={handleSecretTap}
-              className="w-10 h-10 rounded-xl bg-blue-600 flex items-center justify-center flex-shrink-0 shadow-lg shadow-blue-600/40 cursor-default select-none"
-            >
-              <Sparkles className="w-5 h-5 text-white" />
-            </div>
-            <div>
-              <h1 className="text-white font-bold text-lg leading-none tracking-tight">{companyInfo.name}</h1>
-              <p className="text-blue-200/60 text-xs mt-0.5">{companyInfo.slogan}</p>
-            </div>
+          {/* Hoşgeldiniz */}
+          <div className="mb-1">
+            <h2 className="text-xl font-bold text-white">Hoş Geldiniz</h2>
+            <p className="text-white/35 text-sm mt-0.5">Hesabınızla giriş yapın</p>
           </div>
 
-          {/* Hero carousel */}
-          <div className="relative flex-1">
-            <HeroCarousel banners={activeBanners} />
-          </div>
-
-          {/* Güven rozeti şeridi */}
-          <div className="flex items-center gap-5 px-7 py-3.5 bg-black/50 backdrop-blur-sm border-t border-white/5 flex-shrink-0">
-            {[
-              { icon: <Award className="w-3.5 h-3.5" />, text: '15+ Yıl Deneyim' },
-              { icon: <Shield className="w-3.5 h-3.5" />, text: 'ISO 22000' },
-              { icon: <Truck className="w-3.5 h-3.5" />, text: 'Aynı Gün Teslimat' },
-              { icon: <Package className="w-3.5 h-3.5" />, text: 'Soğuk Zincir' },
-            ].map((item, i) => (
-              <React.Fragment key={i}>
-                {i > 0 && <span className="w-px h-3 bg-white/10 flex-shrink-0" />}
-                <span className="flex items-center gap-1.5 text-[11px] text-white/35 font-medium whitespace-nowrap">
-                  <span className="text-white/30">{item.icon}</span>
-                  {item.text}
-                </span>
-              </React.Fragment>
-            ))}
-          </div>
-        </div>
-
-        {/* Sağ panel: kurumsal reklam panosu */}
-        <div className="flex-1 flex flex-col h-full overflow-hidden border-l border-white/[0.05]">
-
-          {/* Üst nav */}
-          <div className="flex items-center justify-between px-8 py-4 border-b border-white/[0.06] bg-[#080c14]/80 backdrop-blur-sm flex-shrink-0">
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-bold text-blue-400/80 uppercase tracking-widest">Müşteri Portali</span>
-              <span className="w-px h-3 bg-white/10" />
-              <span className="text-sm text-white/40 font-medium">Hoş Geldiniz</span>
-            </div>
-            <motion.button
-              whileTap={{ scale: 0.97 }}
-              onClick={() => setShowAdminPanel(true)}
-              className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 rounded-lg text-white text-sm font-semibold transition-colors shadow-md shadow-blue-600/20"
-            >
-              <LogIn className="w-3.5 h-3.5" />
-              Personel Girişi
-            </motion.button>
-          </div>
-
-          {/* Ana içerik */}
-          <div className="flex-1 flex flex-col px-8 py-6 gap-5 overflow-hidden min-h-0">
-
-            {/* Büyük reklam panosu */}
-            <div className="relative rounded-2xl overflow-hidden flex-1 min-h-0">
-              {activeBanners.map((slide, i) => (
-                <div
-                  key={slide.id}
-                  className={`absolute inset-0 transition-opacity duration-700 ${i === mobileSlide ? 'opacity-100' : 'opacity-0'}`}
-                >
-                  <img src={slide.imageUrl} alt={slide.title} className="w-full h-full object-cover" />
-                  <div className="absolute inset-0 bg-gradient-to-r from-black/85 via-black/40 to-transparent" />
-                  <div className="absolute left-0 bottom-0 top-0 flex flex-col justify-center px-10 max-w-lg">
-                    <span className="text-xs font-bold text-blue-400 uppercase tracking-widest mb-2">
-                      {i === 0 ? 'Özel Kampanya' : 'Premium Kalite'}
-                    </span>
-                    <h2 className="text-3xl font-bold text-white leading-tight mb-2.5">{slide.title}</h2>
-                    <p className="text-sm text-white/60 leading-relaxed">{slide.subtitle}</p>
-                  </div>
-                  {/* Slayt göstergesi */}
-                  <div className="absolute bottom-4 right-5 flex gap-1.5">
-                    {activeBanners.map((_, j) => (
-                      <button
-                        key={j}
-                        onClick={() => setMobileSlide(j)}
-                        className={`rounded-full transition-all bg-white ${j === mobileSlide ? 'w-5 h-1.5 opacity-80' : 'w-1.5 h-1.5 opacity-30'}`}
-                      />
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            {/* Özellik kartları — Pazarlama > İstatistik Kartlarından */}
-            <div className="grid grid-cols-4 gap-4 flex-shrink-0">
-              {featureCards.map((card, i) => (
-                <div key={i} className={`rounded-xl border p-4 ${card.bg} flex flex-col gap-2.5`}>
-                  <div className="w-9 h-9 rounded-lg bg-white/5 flex items-center justify-center">{card.icon}</div>
-                  <div>
-                    <p className="text-white text-sm font-semibold leading-tight">{card.title}</p>
-                    <p className="text-white/40 text-[11px] mt-0.5">{card.sub}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            {/* Alt footer */}
-            <div className="flex items-center justify-between flex-shrink-0 pt-1 border-t border-white/[0.05]">
-              <p className="text-[10px] text-white/20 font-medium">{companyInfo.name} &copy; {new Date().getFullYear()}</p>
-              <div className="flex items-center gap-3">
-                <div className="flex items-center gap-1.5">
-                  <div className="w-1.5 h-1.5 rounded-full bg-emerald-400/60 animate-pulse" />
-                  <span className="text-[10px] text-white/20 font-medium">Güvenli Bağlantı</span>
-                </div>
-                <button
-                  onClick={() => setShowChangelog(true)}
-                  className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-blue-600/10 hover:bg-blue-600/20 border border-blue-500/15 transition-colors group"
-                >
-                  <History className="w-2.5 h-2.5 text-blue-400/60 group-hover:text-blue-400 transition-colors" />
-                  <span className="text-[10px] font-bold text-blue-400/60 group-hover:text-blue-400 transition-colors">v{CURRENT_VERSION.version}</span>
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-
-      {/* ═══════════════════════════════════════════════════════════
-           GİRİŞ PANELİ - Desktop: Slide-in, Mobile: Bottom Sheet
-         ═══════════════════════════════════════════════════════════ */}
-
-      {/* Desktop centered modal panel */}
-      <AnimatePresence>
-        {showAdminPanel && (
-          <div className="hidden sm:block">
-            <motion.div
-              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-              onClick={() => setShowAdminPanel(false)}
-              className="fixed inset-0 bg-black/75 backdrop-blur-sm z-[90]"
-            />
-            <motion.div
-              initial={{ opacity: 0, y: 24 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: 16 }}
-              transition={{ type: 'spring', stiffness: 240, damping: 30 }}
-              className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-[420px] max-h-[92vh] z-[100] flex flex-col overflow-hidden rounded-2xl"
-            >
-              {/* Temiz, katmansız arka plan */}
-              <div className="absolute inset-0 bg-[#0d111b] rounded-2xl border border-white/[0.08]" />
-
-              {/* ── Kurumsal modal header ── */}
-              <div className="relative flex items-center justify-between px-6 py-5 border-b border-white/[0.07]">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-blue-600 flex items-center justify-center flex-shrink-0 shadow-md shadow-blue-600/30">
-                    <LogIn className="w-5 h-5 text-white" />
-                  </div>
-                  <div>
-                    <h3 className="text-white font-bold text-base leading-tight">{t('auth.systemLogin')}</h3>
-                    <p className="text-white/35 text-[11px] font-medium">{companyInfo.name} · Yönetim Portalı</p>
-                  </div>
-                </div>
-                <button
-                  onClick={() => { setShowAdminPanel(false); setError(''); setShowPassword(false); setShowAdminPw(false); }}
-                  className="p-2 bg-white/5 hover:bg-white/10 rounded-lg transition-colors"
-                >
-                  <X className="w-4 h-4 text-white/40" />
-                </button>
-              </div>
-
-              {/* ── Tab Switcher — temiz, düz ── */}
-              <div className="px-6 pt-5 pb-1">
-                <div className="flex rounded-xl overflow-hidden border border-white/[0.08] bg-white/[0.03]">
-                  <button
-                    onClick={() => { setAdminTab('user'); setError(''); setShowPassword(false); }}
-                    className={`flex-1 py-2.5 text-sm font-semibold flex items-center justify-center gap-2 transition-colors ${
-                      adminTab === 'user'
-                        ? 'bg-blue-600 text-white'
-                        : 'text-white/40 hover:text-white/70 hover:bg-white/5'
-                    }`}
-                  >
-                    <User className="w-3.5 h-3.5" /> Personel
-                  </button>
-                  <button
-                    onClick={() => { setAdminTab('admin'); setError(''); setShowAdminPw(false); }}
-                    className={`flex-1 py-2.5 text-sm font-semibold flex items-center justify-center gap-2 transition-colors border-l border-white/[0.08] ${
-                      adminTab === 'admin'
-                        ? 'bg-red-600 text-white'
-                        : 'text-white/40 hover:text-white/70 hover:bg-white/5'
-                    }`}
-                  >
-                    <ShieldCheck className="w-3.5 h-3.5" /> Yönetici
-                  </button>
-                </div>
-              </div>
-
-              {/* Form Area */}
-              <div className="flex-1 px-6 overflow-y-auto relative">
-                {/* Error */}
-                <AnimatePresence>
-                  {error && (
-                    <motion.div
-                      initial={{ opacity: 0, y: -10, height: 0 }}
-                      animate={{ opacity: 1, y: 0, height: 'auto' }}
-                      exit={{ opacity: 0, y: -10, height: 0 }}
-                      className="mb-5 p-4 bg-red-500/10 border border-red-500/20 rounded-2xl flex items-start gap-3 backdrop-blur-xl"
-                    >
-                      <div className="w-8 h-8 rounded-lg bg-red-500/20 flex items-center justify-center flex-shrink-0">
-                        <AlertCircle className="w-4 h-4 text-red-400" />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-red-300 text-sm font-medium leading-relaxed">{error}</p>
-                        {attempts > 0 && !lockoutUntil && (
-                          <div className="flex gap-1 mt-2">
-                            {Array.from({ length: MAX_ATTEMPTS }).map((_, i) => (
-                              <div key={i} className={`h-1 flex-1 rounded-full transition-all ${i < attempts ? 'bg-red-500' : 'bg-white/10'}`} />
-                            ))}
-                          </div>
-                        )}
-                        {failedAttemptInfo && (
-                          <div className="mt-2 pt-2 border-t border-red-500/15 space-y-0.5">
-                            <p className="text-[10px] text-red-300/50 font-mono break-all"><span className="text-red-400/70">IP:</span> {failedAttemptInfo.ip}</p>
-                            <p className="text-[10px] text-red-300/50 font-mono break-all"><span className="text-red-400/70">Cihaz:</span> {failedAttemptInfo.ua.substring(0, 80)}{failedAttemptInfo.ua.length > 80 ? '...' : ''}</p>
-                            <p className="text-[10px] text-red-300/50 font-mono"><span className="text-red-400/70">Zaman:</span> {failedAttemptInfo.time}</p>
-                          </div>
-                        )}
-                      </div>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-
-                {/* Lockout */}
-                {lockoutUntil && (
-                  <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }}
-                    className="mb-6 p-8 rounded-3xl border border-red-500/30 text-center relative overflow-hidden"
-                  >
-                    <div className="absolute inset-0 bg-gradient-to-br from-red-950/60 via-red-900/40 to-transparent" />
-                    <div className="absolute top-0 right-0 w-32 h-32 bg-red-500/10 rounded-full blur-3xl" />
-                    <div className="relative z-10">
-                      <motion.div
-                        animate={{ scale: [1, 1.1, 1] }}
-                        transition={{ duration: 2, repeat: Infinity }}
-                        className="w-20 h-20 rounded-full bg-red-500/15 border-2 border-red-500/30 flex items-center justify-center mx-auto mb-4"
-                      >
-                        <Lock className="w-9 h-9 text-red-500" />
-                      </motion.div>
-                      <h4 className="text-xl font-extrabold text-red-400 mb-1">Güvenlik Kilidi</h4>
-                      <p className="text-sm text-red-300/70 mb-4">Çok fazla hatalı deneme yapıldı</p>
-                      <div className="inline-flex items-center gap-1 px-6 py-3 rounded-2xl bg-black/40 border border-red-500/20">
-                        <span className="text-4xl font-mono font-black text-white tabular-nums">
-                          {Math.floor(lockoutRemaining / 60).toString().padStart(2, '0')}
-                        </span>
-                        <motion.span
-                          animate={{ opacity: [1, 0.3, 1] }}
-                          transition={{ duration: 1, repeat: Infinity }}
-                          className="text-4xl font-mono font-black text-red-400"
-                        >:</motion.span>
-                        <span className="text-4xl font-mono font-black text-white tabular-nums">
-                          {(lockoutRemaining % 60).toString().padStart(2, '0')}
-                        </span>
-                      </div>
-                    </div>
-                  </motion.div>
-                )}
-
-                {/* User Form */}
-                {!lockoutUntil && adminTab === 'user' && (
-                  <motion.form key="user-form" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ type: 'spring', stiffness: 180, damping: 26 }} onSubmit={handleSubmit} className="space-y-5">
-                    {/* Avatar area */}
-                    <div className="text-center mb-2">
-                      <motion.div
-                        animate={username ? { scale: [1, 1.05, 1] } : {}}
-                        transition={{ duration: 0.3 }}
-                        className="w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-600/20 to-cyan-600/20 border border-blue-500/20 flex items-center justify-center mx-auto mb-3"
-                      >
-                        {username ? (
-                          <span className="text-2xl font-black text-blue-400 uppercase">{username.charAt(0)}</span>
-                        ) : (
-                          <User className="w-7 h-7 text-blue-400/50" />
-                        )}
-                      </motion.div>
-                      <p className="text-xs text-gray-500 font-medium">Personel hesabınızla giriş yapın</p>
-                    </div>
-
-                    <div className="space-y-1.5">
-                      <label className="flex items-center gap-2 text-xs font-bold text-gray-400 uppercase tracking-wider">
-                        <User className="w-3 h-3" /> {t('auth.username')}
-                      </label>
-                      <div className="relative group">
-                        <div className="absolute -inset-0.5 bg-gradient-to-r from-blue-600/20 to-cyan-600/20 rounded-2xl opacity-0 group-focus-within:opacity-100 blur transition-opacity" />
-                        <div className="relative flex items-center bg-white/[0.03] border border-white/10 rounded-2xl group-focus-within:border-blue-500/50 transition-colors">
-                          <div className="pl-4 pr-2 py-4 text-gray-600 group-focus-within:text-blue-400 transition-colors">
-                            <User className="w-5 h-5" />
-                          </div>
-                          <input type="text" value={username} onChange={e => setUsername(e.target.value)}
-                            placeholder={t('auth.enterUsername')}
-                            className="flex-1 bg-transparent py-4 pr-4 text-white placeholder-gray-600 focus:outline-none text-sm font-medium"
-                            required autoFocus />
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="space-y-1.5">
-                      <label className="flex items-center gap-2 text-xs font-bold text-gray-400 uppercase tracking-wider">
-                        <KeyRound className="w-3 h-3" /> {t('auth.password')}
-                      </label>
-                      <div className="relative group">
-                        <div className="absolute -inset-0.5 bg-gradient-to-r from-blue-600/20 to-cyan-600/20 rounded-2xl opacity-0 group-focus-within:opacity-100 blur transition-opacity" />
-                        <div className="relative flex items-center bg-white/[0.03] border border-white/10 rounded-2xl group-focus-within:border-blue-500/50 transition-colors">
-                          <div className="pl-4 pr-2 py-4 text-gray-600 group-focus-within:text-blue-400 transition-colors">
-                            <Lock className="w-5 h-5" />
-                          </div>
-                          <input type={showPassword ? 'text' : 'password'} value={password} onChange={e => setPassword(e.target.value)}
-                            placeholder={t('auth.enterPassword')}
-                            className="flex-1 bg-transparent py-4 pr-2 text-white placeholder-gray-600 focus:outline-none text-sm font-medium"
-                            required />
-                          <button type="button" onClick={() => setShowPassword(!showPassword)}
-                            className="pr-4 pl-2 py-4 text-gray-600 hover:text-gray-300 transition-colors">
-                            {showPassword ? <EyeOff className="w-4.5 h-4.5" /> : <Eye className="w-4.5 h-4.5" />}
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-
-                    <motion.button
-                      type="submit"
-                      disabled={isLoading}
-                      whileHover={{ scale: 1.01, y: -1 }}
-                      whileTap={{ scale: 0.98 }}
-                      className="w-full py-4 mt-2 bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-500 hover:to-cyan-500 disabled:from-gray-800 disabled:to-gray-800 disabled:text-gray-500 text-white font-bold rounded-2xl transition-all shadow-xl shadow-blue-600/25 text-base flex items-center justify-center gap-2.5 relative overflow-hidden group"
-                    >
-                      <div className="absolute inset-0 bg-gradient-to-r from-white/0 via-white/10 to-white/0 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-700" />
-                      {isLoading ? (
-                        <><Loader2 className="w-5 h-5 animate-spin" /> Giriş Yapılıyor...</>
-                      ) : (
-                        <><LogIn className="w-5 h-5" /> Giriş Yap</>
-                      )}
-                    </motion.button>
-
-                    <p className="text-[11px] text-gray-600 text-center mt-4 leading-relaxed">
-                      Sisteme erişim yetkiniz yoksa yöneticinizle iletişime geçin.
-                    </p>
-                  </motion.form>
-                )}
-
-                {/* Admin Form */}
-                {!lockoutUntil && adminTab === 'admin' && (
-                  <motion.form key="admin-form" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ type: 'spring', stiffness: 180, damping: 26 }} onSubmit={handleAdminLogin} className="space-y-5">
-                    {/* Security Icon */}
-                    <div className="text-center mb-2">
-                      <motion.div
-                        animate={{ rotate: [0, 3, -3, 0] }}
-                        transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut' }}
-                        className="w-16 h-16 rounded-2xl bg-gradient-to-br from-red-600/20 to-orange-600/20 border border-red-500/20 flex items-center justify-center mx-auto mb-3"
-                      >
-                        <ShieldCheck className="w-7 h-7 text-red-400" />
-                      </motion.div>
-                    </div>
-
-                    <div className="p-4 rounded-2xl bg-gradient-to-r from-red-500/5 to-orange-500/5 border border-red-500/15 backdrop-blur-xl">
-                      <div className="flex items-start gap-3">
-                        <div className="w-8 h-8 rounded-lg bg-red-500/15 flex items-center justify-center flex-shrink-0 mt-0.5">
-                          <Shield className="w-4 h-4 text-red-400" />
-                        </div>
-                        <div>
-                          <p className="text-red-400 text-xs font-bold mb-0.5">Yüksek Güvenlik Alanı</p>
-                          <p className="text-red-300/60 text-[11px] leading-relaxed">
-                            Bu alan sadece sistem yöneticileri içindir. Yetkisiz erişim girişimleri kayıt altına alınmaktadır.
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="space-y-1.5">
-                      <label className="flex items-center gap-2 text-xs font-bold text-gray-400 uppercase tracking-wider">
-                        <KeyRound className="w-3 h-3" /> Yönetici Şifresi
-                      </label>
-                      <div className="relative group">
-                        <div className="absolute -inset-0.5 bg-gradient-to-r from-red-600/20 to-orange-600/20 rounded-2xl opacity-0 group-focus-within:opacity-100 blur transition-opacity" />
-                        <div className="relative flex items-center bg-white/[0.03] border border-red-500/20 rounded-2xl group-focus-within:border-red-500/50 transition-colors">
-                          <div className="pl-4 pr-2 py-4 text-red-500/40 group-focus-within:text-red-400 transition-colors">
-                            <Lock className="w-5 h-5" />
-                          </div>
-                          <input type={showAdminPw ? 'text' : 'password'} value={adminPassword} onChange={e => setAdminPassword(e.target.value)}
-                            placeholder="Admin şifresini girin"
-                            className="flex-1 bg-transparent py-4 pr-2 text-white placeholder-gray-600 focus:outline-none text-sm font-medium"
-                            required autoFocus />
-                          <button type="button" onClick={() => setShowAdminPw(!showAdminPw)}
-                            className="pr-4 pl-2 py-4 text-gray-600 hover:text-gray-300 transition-colors">
-                            {showAdminPw ? <EyeOff className="w-4.5 h-4.5" /> : <Eye className="w-4.5 h-4.5" />}
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-
-                    <motion.button
-                      type="submit"
-                      disabled={isLoading}
-                      whileHover={{ scale: 1.01, y: -1 }}
-                      whileTap={{ scale: 0.98 }}
-                      className="w-full py-4 mt-2 bg-gradient-to-r from-red-600 to-orange-600 hover:from-red-500 hover:to-orange-500 disabled:from-gray-800 disabled:to-gray-800 disabled:text-gray-500 text-white font-bold rounded-2xl transition-all shadow-xl shadow-red-600/25 text-base flex items-center justify-center gap-2.5 relative overflow-hidden group"
-                    >
-                      <div className="absolute inset-0 bg-gradient-to-r from-white/0 via-white/10 to-white/0 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-700" />
-                      {isLoading ? (
-                        <><Loader2 className="w-5 h-5 animate-spin" /> Doğrulanıyor...</>
-                      ) : (
-                        <><ShieldCheck className="w-5 h-5" /> Yönetici Girişi Yap</>
-                      )}
-                    </motion.button>
-                  </motion.form>
-                )}
-              </div>
-
-              {/* Footer */}
-              <div className="relative flex items-center justify-between px-6 py-3 border-t border-white/[0.07] bg-black/20">
-                <div className="flex items-center gap-1.5">
-                  <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                  <span className="text-[10px] text-white/25 font-medium">Güvenli Bağlantı</span>
-                </div>
-                {/* Sürüm rozeti */}
-                <button
-                  onClick={() => { setShowAdminPanel(false); setShowChangelog(true); }}
-                  className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-blue-600/10 hover:bg-blue-600/20 border border-blue-500/15 transition-colors group"
-                >
-                  <History className="w-3 h-3 text-blue-400/50 group-hover:text-blue-400 transition-colors" />
-                  <span className="text-[10px] font-bold text-blue-400/50 group-hover:text-blue-400 transition-colors">
-                    v{CURRENT_VERSION.version} {CURRENT_VERSION.codename}
-                  </span>
-                </button>
-              </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
-
-      {/* Mobile bottom sheet panel */}
-      <MobileBottomSheet show={showAdminPanel} onClose={() => { setShowAdminPanel(false); setError(''); setShowPassword(false); setShowAdminPw(false); }}>
-        <div className="flex flex-col max-h-[88vh] relative">
-          {/* Glow decorations */}
-          <div className="absolute top-0 left-1/2 -translate-x-1/2 w-48 h-48 bg-blue-600/8 rounded-full blur-[80px] pointer-events-none" />
-
-          {/* ── Mobil header: kurumsal ── */}
-          <div className="flex items-center justify-between px-5 py-4 border-b border-white/[0.07]">
-            <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-xl bg-blue-600 flex items-center justify-center flex-shrink-0">
-                <LogIn className="w-4 h-4 text-white" />
-              </div>
-              <div>
-                <h3 className="text-white font-bold text-sm leading-tight">{t('auth.systemLogin')}</h3>
-                <p className="text-white/30 text-[10px] font-medium">{companyInfo.name} · Yönetim Portalı</p>
-              </div>
-            </div>
+          {/* Tab switcher */}
+          <div className="flex rounded-xl overflow-hidden border border-white/[0.08] bg-white/[0.03]">
             <button
-              onClick={() => { setShowAdminPanel(false); setError(''); setShowPassword(false); setShowAdminPw(false); }}
-              className="p-1.5 bg-white/5 hover:bg-white/10 rounded-lg transition-colors"
+              onClick={() => { setAdminTab('user'); setError(''); setShowPassword(false); }}
+              className={`flex-1 py-2.5 text-sm font-semibold flex items-center justify-center gap-2 transition-colors ${adminTab === 'user' ? 'bg-blue-600 text-white' : 'text-white/40 hover:text-white/70 hover:bg-white/5'}`}
             >
-              <X className="w-4 h-4 text-white/40" />
+              <User className="w-3.5 h-3.5" /> Personel
+            </button>
+            <button
+              onClick={() => { setAdminTab('admin'); setError(''); setShowAdminPw(false); }}
+              className={`flex-1 py-2.5 text-sm font-semibold flex items-center justify-center gap-2 border-l border-white/[0.08] transition-colors ${adminTab === 'admin' ? 'bg-red-700 text-white' : 'text-white/40 hover:text-white/70 hover:bg-white/5'}`}
+            >
+              <ShieldCheck className="w-3.5 h-3.5" /> Yönetici
             </button>
           </div>
 
-          {/* ── Mobil Tab Switcher — temiz ── */}
-          <div className="px-5 pt-4 pb-1">
-            <div className="flex rounded-xl overflow-hidden border border-white/[0.08] bg-white/[0.03]">
+          {/* Hata */}
+          <AnimatePresence>
+            {error && (
+              <motion.div initial={{ opacity: 0, y: -8, height: 0 }} animate={{ opacity: 1, y: 0, height: 'auto' }} exit={{ opacity: 0, height: 0 }}
+                className="p-3.5 bg-red-500/10 border border-red-500/20 rounded-xl flex items-start gap-3">
+                <AlertCircle className="w-4 h-4 text-red-400 flex-shrink-0 mt-0.5" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-red-300 text-sm leading-relaxed">{error}</p>
+                  {attempts > 0 && !lockoutUntil && (
+                    <div className="flex gap-1 mt-2">
+                      {Array.from({ length: MAX_ATTEMPTS }).map((_, i) => (
+                        <div key={i} className={`h-1 flex-1 rounded-full transition-all ${i < attempts ? 'bg-red-500' : 'bg-white/10'}`} />
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* Kilit ekranı */}
+          {lockoutUntil && (
+            <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}
+              className="p-6 rounded-2xl border border-red-500/30 bg-red-950/30 text-center">
+              <div className="w-14 h-14 rounded-full border-2 border-red-500/30 bg-red-500/10 flex items-center justify-center mx-auto mb-3">
+                <Lock className="w-6 h-6 text-red-400" />
+              </div>
+              <p className="text-red-400 font-bold text-sm mb-1">Güvenlik Kilidi</p>
+              <div className="font-mono text-3xl font-black text-white tabular-nums">
+                {Math.floor(lockoutRemaining / 60).toString().padStart(2, '0')}
+                <motion.span animate={{ opacity: [1, 0.2, 1] }} transition={{ duration: 1, repeat: Infinity }} className="text-red-400 mx-1">:</motion.span>
+                {(lockoutRemaining % 60).toString().padStart(2, '0')}
+              </div>
+            </motion.div>
+          )}
+
+          {/* Personel formu */}
+          {!lockoutUntil && adminTab === 'user' && (
+            <motion.form key="mob-user" initial={{ opacity: 0, x: 15 }} animate={{ opacity: 1, x: 0 }} transition={{ type: 'spring', stiffness: 200, damping: 28 }} onSubmit={handleSubmit} className="space-y-4">
+              <div className="relative flex items-center bg-white/[0.04] border border-white/10 rounded-xl focus-within:border-blue-500/50 transition-colors">
+                <User className="w-4.5 h-4.5 text-gray-600 ml-4 flex-shrink-0 focus-within:text-blue-400" />
+                <input type="text" value={username} onChange={e => setUsername(e.target.value)}
+                  placeholder={t('auth.enterUsername')} required autoFocus
+                  className="flex-1 bg-transparent py-3.5 px-3 text-white placeholder-gray-600 focus:outline-none text-sm" />
+              </div>
+              <div className="relative flex items-center bg-white/[0.04] border border-white/10 rounded-xl focus-within:border-blue-500/50 transition-colors">
+                <Lock className="w-4.5 h-4.5 text-gray-600 ml-4 flex-shrink-0" />
+                <input type={showPassword ? 'text' : 'password'} value={password} onChange={e => setPassword(e.target.value)}
+                  placeholder={t('auth.enterPassword')} required
+                  className="flex-1 bg-transparent py-3.5 px-3 text-white placeholder-gray-600 focus:outline-none text-sm" />
+                <button type="button" onClick={() => setShowPassword(!showPassword)} className="pr-4 pl-2 text-gray-600 hover:text-gray-300 transition-colors">
+                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+              <motion.button type="submit" disabled={isLoading} whileTap={{ scale: 0.98 }}
+                className="w-full py-3.5 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-500 hover:to-blue-600 disabled:opacity-50 text-white font-bold rounded-xl text-sm flex items-center justify-center gap-2 transition-all shadow-lg shadow-blue-600/25">
+                {isLoading ? <><Loader2 className="w-4 h-4 animate-spin" /> Giriş Yapılıyor...</> : <><LogIn className="w-4 h-4" /> Giriş Yap</>}
+              </motion.button>
+            </motion.form>
+          )}
+
+          {/* Yönetici formu */}
+          {!lockoutUntil && adminTab === 'admin' && (
+            <motion.form key="mob-admin" initial={{ opacity: 0, x: 15 }} animate={{ opacity: 1, x: 0 }} transition={{ type: 'spring', stiffness: 200, damping: 28 }} onSubmit={handleAdminLogin} className="space-y-4">
+              <div className="p-3.5 rounded-xl bg-red-500/5 border border-red-500/15 text-xs text-red-300/70 flex items-start gap-2">
+                <Shield className="w-3.5 h-3.5 text-red-400 flex-shrink-0 mt-0.5" />
+                Yüksek güvenlik alanı. Yetkisiz erişimler kayıt altına alınır.
+              </div>
+              <div className="relative flex items-center bg-white/[0.04] border border-red-500/20 rounded-xl focus-within:border-red-500/50 transition-colors">
+                <Lock className="w-4.5 h-4.5 text-red-500/40 ml-4 flex-shrink-0" />
+                <input type={showAdminPw ? 'text' : 'password'} value={adminPassword} onChange={e => setAdminPassword(e.target.value)}
+                  placeholder="Yönetici şifresi" required autoFocus
+                  className="flex-1 bg-transparent py-3.5 px-3 text-white placeholder-gray-600 focus:outline-none text-sm" />
+                <button type="button" onClick={() => setShowAdminPw(!showAdminPw)} className="pr-4 pl-2 text-gray-600 hover:text-gray-300 transition-colors">
+                  {showAdminPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+              <motion.button type="submit" disabled={isLoading} whileTap={{ scale: 0.98 }}
+                className="w-full py-3.5 bg-gradient-to-r from-red-700 to-red-800 hover:from-red-600 hover:to-red-700 disabled:opacity-50 text-white font-bold rounded-xl text-sm flex items-center justify-center gap-2 transition-all shadow-lg shadow-red-700/25">
+                {isLoading ? <><Loader2 className="w-4 h-4 animate-spin" /> Doğrulanıyor...</> : <><ShieldCheck className="w-4 h-4" /> Yönetici Girişi</>}
+              </motion.button>
+            </motion.form>
+          )}
+
+        </div>
+
+        {/* Alt trust bar */}
+        <div className="flex-shrink-0 border-t border-white/[0.05] bg-black/50 backdrop-blur-sm px-5 py-3 flex items-center justify-center gap-4"
+          style={{ paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))' }}>
+          {[
+            { icon: <Shield className="w-3 h-3" />, text: 'ISO 22000' },
+            { icon: <Award className="w-3 h-3" />, text: '15+ Yıl' },
+            { icon: <Truck className="w-3 h-3" />, text: 'Aynı Gün' },
+            { icon: <Package className="w-3 h-3" />, text: 'Soğuk Zincir' },
+          ].map((item, i) => (
+            <React.Fragment key={i}>
+              {i > 0 && <span className="w-px h-3 bg-white/10" />}
+              <span className="flex items-center gap-1 text-[10px] text-white/25 font-medium whitespace-nowrap">
+                <span className="text-white/20">{item.icon}</span>{item.text}
+              </span>
+            </React.Fragment>
+          ))}
+        </div>
+      </div>
+
+      {/* ═════════════════════════════════════════════════
+           DESKTOP LAYOUT  (lg+)
+         ═════════════════════════════════════════════════ */}
+      <div className="hidden lg:flex h-full">
+
+        {/* ── Sol Panel: Marka ── */}
+        <div className="w-[46%] xl:w-[44%] h-full flex flex-col relative overflow-hidden border-r border-white/[0.04]">
+
+          {/* Arka plan katmanları */}
+          <div className="absolute inset-0 bg-gradient-to-br from-red-950/50 via-[#07090f] to-[#07090f]" />
+          <div className="absolute -top-32 -left-32 w-80 h-80 rounded-full bg-red-900/20 blur-3xl" />
+          <div className="absolute -bottom-32 -right-20 w-64 h-64 rounded-full bg-red-950/20 blur-3xl" />
+          {/* Dekoratif çizgiler */}
+          <div className="absolute inset-0 opacity-[0.03]" style={{backgroundImage: 'repeating-linear-gradient(135deg, white 0px, white 1px, transparent 1px, transparent 60px)'}} />
+
+          <div className="relative z-10 flex flex-col h-full p-10 xl:p-12">
+
+            {/* Logo + marka */}
+            <div className="flex items-center gap-4 flex-shrink-0">
+              <div
+                onClick={handleSecretTap}
+                className="w-14 h-14 rounded-2xl bg-gradient-to-br from-red-800 to-red-950 border border-red-700/30 flex items-center justify-center shadow-2xl shadow-red-900/50 cursor-default select-none flex-shrink-0"
+              >
+                <Beef className="w-7 h-7 text-red-200" />
+              </div>
+              <div>
+                <h1 className="text-white font-black text-xl leading-none tracking-tight">{companyInfo.name}</h1>
+                <p className="text-red-300/40 text-xs mt-1 font-medium">{companyInfo.slogan}</p>
+              </div>
+            </div>
+
+            {/* Ana mesaj */}
+            <div className="flex-1 flex flex-col justify-center py-10">
+              <p className="text-red-400/60 text-xs font-bold uppercase tracking-[0.2em] mb-4">TÜRKİYE'NİN GÜVENİLİR ET TEDARİKÇİSİ</p>
+              <h2 className="text-4xl xl:text-5xl font-black text-white leading-[1.1] mb-5">
+                Kalite ve<br />
+                <span className="text-transparent bg-clip-text bg-gradient-to-r from-red-400 to-orange-400">Güven</span><br />
+                Her Pakette.
+              </h2>
+              <p className="text-white/30 text-sm leading-relaxed max-w-xs">
+                ISO 22000 sertifikalı tesislerimizde, soğuk zincir hiçbir aşamada kırılmadan üretim yapıyoruz. 
+                15 yıllık deneyim ve 2500+ mutlu müşteri güvencesiyle yanınızdayız.
+              </p>
+            </div>
+
+            {/* Stat kartları */}
+            <div className="grid grid-cols-2 gap-3 mb-8 flex-shrink-0">
+              {featureCards.map((card, i) => (
+                <div key={i} className={`flex items-center gap-3 p-3.5 rounded-xl border ${card.bg}`}>
+                  <div className="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center flex-shrink-0">
+                    {card.icon}
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-white text-sm font-bold leading-none truncate">{card.title}</p>
+                    <p className="text-white/30 text-[11px] mt-0.5 truncate">{card.sub}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Alt trust bar */}
+            <div className="flex items-center gap-5 pt-6 border-t border-white/[0.06] flex-shrink-0">
+              {[
+                { icon: <Shield className="w-3.5 h-3.5" />, text: 'ISO 22000' },
+                { icon: <Award className="w-3.5 h-3.5" />, text: '15+ Yıl Deneyim' },
+                { icon: <Truck className="w-3.5 h-3.5" />, text: 'Aynı Gün Teslimat' },
+                { icon: <Package className="w-3.5 h-3.5" />, text: 'Soğuk Zincir' },
+              ].map((item, i) => (
+                <React.Fragment key={i}>
+                  {i > 0 && <span className="w-px h-3 bg-white/8 flex-shrink-0" />}
+                  <span className="flex items-center gap-1.5 text-[11px] text-white/25 font-medium whitespace-nowrap">
+                    <span className="text-white/20">{item.icon}</span>{item.text}
+                  </span>
+                </React.Fragment>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* ── Sağ Panel: Giriş Formu ── */}
+        <div className="flex-1 flex items-center justify-center p-10 xl:p-14">
+          <div className="w-full max-w-[420px]">
+
+            {/* Başlık */}
+            <div className="mb-8">
+              <h3 className="text-2xl font-black text-white tracking-tight">Personel Girişi</h3>
+              <p className="text-white/30 text-sm mt-1.5">Kurumsal hesabınızla giriş yapın</p>
+            </div>
+
+            {/* Tab switcher */}
+            <div className="flex rounded-xl overflow-hidden border border-white/[0.08] bg-white/[0.03] mb-6">
               <button
                 onClick={() => { setAdminTab('user'); setError(''); setShowPassword(false); }}
-                className={`flex-1 py-2.5 text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors ${
-                  adminTab === 'user' ? 'bg-blue-600 text-white' : 'text-white/40 hover:text-white/70'
-                }`}
+                className={`flex-1 py-2.5 text-sm font-semibold flex items-center justify-center gap-2 transition-colors ${adminTab === 'user' ? 'bg-blue-600 text-white' : 'text-white/40 hover:text-white/70 hover:bg-white/5'}`}
               >
                 <User className="w-3.5 h-3.5" /> Personel
               </button>
               <button
                 onClick={() => { setAdminTab('admin'); setError(''); setShowAdminPw(false); }}
-                className={`flex-1 py-2.5 text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors border-l border-white/[0.08] ${
-                  adminTab === 'admin' ? 'bg-red-600 text-white' : 'text-white/40 hover:text-white/70'
-                }`}
+                className={`flex-1 py-2.5 text-sm font-semibold flex items-center justify-center gap-2 border-l border-white/[0.08] transition-colors ${adminTab === 'admin' ? 'bg-red-700 text-white' : 'text-white/40 hover:text-white/70 hover:bg-white/5'}`}
               >
                 <ShieldCheck className="w-3.5 h-3.5" /> Yönetici
               </button>
             </div>
-          </div>
 
-          {/* Form Area */}
-          <div className="flex-1 px-5 pb-4 overflow-y-auto relative">
-            {/* Error */}
+            {/* Hata */}
             <AnimatePresence>
               {error && (
-                <motion.div
-                  initial={{ opacity: 0, y: -10, height: 0 }}
-                  animate={{ opacity: 1, y: 0, height: 'auto' }}
-                  exit={{ opacity: 0, y: -10, height: 0 }}
-                  className="mb-4 p-3 bg-red-500/10 border border-red-500/20 rounded-xl flex items-start gap-2.5"
-                >
-                  <div className="w-7 h-7 rounded-lg bg-red-500/20 flex items-center justify-center flex-shrink-0">
-                    <AlertCircle className="w-3.5 h-3.5 text-red-400" />
-                  </div>
+                <motion.div initial={{ opacity: 0, y: -8, height: 0 }} animate={{ opacity: 1, y: 0, height: 'auto' }} exit={{ opacity: 0, height: 0 }}
+                  className="mb-5 p-4 bg-red-500/10 border border-red-500/20 rounded-xl flex items-start gap-3">
+                  <AlertCircle className="w-4 h-4 text-red-400 flex-shrink-0 mt-0.5" />
                   <div className="flex-1 min-w-0">
-                    <p className="text-red-300 text-xs font-medium">{error}</p>
+                    <p className="text-red-300 text-sm leading-relaxed">{error}</p>
                     {attempts > 0 && !lockoutUntil && (
-                      <div className="flex gap-1 mt-1.5">
+                      <div className="flex gap-1 mt-2">
                         {Array.from({ length: MAX_ATTEMPTS }).map((_, i) => (
-                          <div key={i} className={`h-0.5 flex-1 rounded-full ${i < attempts ? 'bg-red-500' : 'bg-white/10'}`} />
+                          <div key={i} className={`h-1 flex-1 rounded-full transition-all ${i < attempts ? 'bg-red-500' : 'bg-white/10'}`} />
                         ))}
                       </div>
                     )}
                     {failedAttemptInfo && (
-                      <div className="mt-1.5 pt-1.5 border-t border-red-500/15 space-y-0.5">
-                        <p className="text-[9px] text-red-300/50 font-mono break-all"><span className="text-red-400/70">IP:</span> {failedAttemptInfo.ip}</p>
-                        <p className="text-[9px] text-red-300/50 font-mono break-all"><span className="text-red-400/70">Cihaz:</span> {failedAttemptInfo.ua.substring(0, 60)}{failedAttemptInfo.ua.length > 60 ? '...' : ''}</p>
-                        <p className="text-[9px] text-red-300/50 font-mono"><span className="text-red-400/70">Zaman:</span> {failedAttemptInfo.time}</p>
+                      <div className="mt-2 pt-2 border-t border-red-500/15 space-y-0.5">
+                        <p className="text-[10px] text-red-300/50 font-mono"><span className="text-red-400/70">IP:</span> {failedAttemptInfo.ip}</p>
+                        <p className="text-[10px] text-red-300/50 font-mono break-all"><span className="text-red-400/70">Cihaz:</span> {failedAttemptInfo.ua.substring(0, 60)}{failedAttemptInfo.ua.length > 60 ? '…' : ''}</p>
                       </div>
                     )}
                   </div>
@@ -1417,807 +1099,126 @@ export function LoginPage() {
               )}
             </AnimatePresence>
 
-            {/* Lockout */}
+            {/* Kilit */}
             {lockoutUntil && (
-              <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }}
-                className="mb-4 p-6 rounded-2xl border border-red-500/30 text-center relative overflow-hidden"
-              >
-                <div className="absolute inset-0 bg-gradient-to-br from-red-950/60 via-red-900/40 to-transparent" />
-                <div className="relative z-10">
-                  <motion.div
-                    animate={{ scale: [1, 1.1, 1] }}
-                    transition={{ duration: 2, repeat: Infinity }}
-                    className="w-16 h-16 rounded-full bg-red-500/15 border-2 border-red-500/30 flex items-center justify-center mx-auto mb-3"
-                  >
-                    <Lock className="w-7 h-7 text-red-500" />
-                  </motion.div>
-                  <h4 className="text-base font-extrabold text-red-400 mb-1">Güvenlik Kilidi</h4>
-                  <p className="text-xs text-red-300/70 mb-3">Çok fazla hatalı deneme</p>
-                  <div className="inline-flex items-center gap-0.5 px-4 py-2 rounded-xl bg-black/40 border border-red-500/20">
-                    <span className="text-2xl font-mono font-black text-white tabular-nums">
-                      {Math.floor(lockoutRemaining / 60).toString().padStart(2, '0')}
-                    </span>
-                    <motion.span animate={{ opacity: [1, 0.3, 1] }} transition={{ duration: 1, repeat: Infinity }}
-                      className="text-2xl font-mono font-black text-red-400">:</motion.span>
-                    <span className="text-2xl font-mono font-black text-white tabular-nums">
-                      {(lockoutRemaining % 60).toString().padStart(2, '0')}
-                    </span>
-                  </div>
+              <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}
+                className="mb-6 p-8 rounded-2xl border border-red-500/30 bg-red-950/30 text-center">
+                <motion.div animate={{ scale: [1, 1.08, 1] }} transition={{ duration: 2, repeat: Infinity }}
+                  className="w-16 h-16 rounded-full border-2 border-red-500/30 bg-red-500/10 flex items-center justify-center mx-auto mb-4">
+                  <Lock className="w-7 h-7 text-red-500" />
+                </motion.div>
+                <h4 className="text-lg font-extrabold text-red-400 mb-1">Güvenlik Kilidi</h4>
+                <p className="text-xs text-red-300/60 mb-4">Çok fazla hatalı deneme yapıldı</p>
+                <div className="inline-flex items-center gap-1 px-6 py-3 rounded-2xl bg-black/40 border border-red-500/20 font-mono text-4xl font-black text-white tabular-nums">
+                  {Math.floor(lockoutRemaining / 60).toString().padStart(2, '0')}
+                  <motion.span animate={{ opacity: [1, 0.2, 1] }} transition={{ duration: 1, repeat: Infinity }} className="text-red-400 mx-1">:</motion.span>
+                  {(lockoutRemaining % 60).toString().padStart(2, '0')}
                 </div>
               </motion.div>
             )}
 
-            {/* User Form - Mobile */}
+            {/* Personel formu */}
             {!lockoutUntil && adminTab === 'user' && (
-              <motion.form key="user-form-mobile" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} onSubmit={handleSubmit} className="space-y-4">
-                {/* Mini avatar */}
-                <div className="text-center mb-1">
-                  <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-600/20 to-cyan-600/20 border border-blue-500/15 flex items-center justify-center mx-auto mb-2">
-                    {username ? (
-                      <span className="text-lg font-black text-blue-400 uppercase">{username.charAt(0)}</span>
-                    ) : (
-                      <User className="w-5 h-5 text-blue-400/50" />
-                    )}
-                  </div>
-                  <p className="text-[10px] text-gray-500">Personel hesabınızla giriş yapın</p>
-                </div>
-
+              <motion.form key="desk-user" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ type: 'spring', stiffness: 200, damping: 28 }} onSubmit={handleSubmit} className="space-y-4">
                 <div className="space-y-1">
-                  <label className="flex items-center gap-1.5 text-[10px] font-bold text-gray-400 uppercase tracking-wider">
-                    <User className="w-2.5 h-2.5" /> {t('auth.username')}
+                  <label className="text-xs font-bold text-gray-500 uppercase tracking-wider flex items-center gap-1.5">
+                    <User className="w-3 h-3" /> {t('auth.username')}
                   </label>
-                  <div className="flex items-center bg-white/[0.03] border border-white/10 rounded-xl focus-within:border-blue-500/50 transition-colors">
-                    <div className="pl-3.5 pr-1.5 py-3.5 text-gray-600">
-                      <User className="w-4 h-4" />
+                  <div className="relative group">
+                    <div className="absolute -inset-0.5 bg-gradient-to-r from-blue-600/15 to-cyan-600/15 rounded-2xl opacity-0 group-focus-within:opacity-100 blur transition-opacity" />
+                    <div className="relative flex items-center bg-white/[0.04] border border-white/10 rounded-2xl group-focus-within:border-blue-500/50 transition-colors">
+                      <div className="pl-4 pr-2 py-4 text-gray-600 group-focus-within:text-blue-400 transition-colors"><User className="w-5 h-5" /></div>
+                      <input type="text" value={username} onChange={e => setUsername(e.target.value)}
+                        placeholder={t('auth.enterUsername')} required autoFocus
+                        className="flex-1 bg-transparent py-4 pr-4 text-white placeholder-gray-600 focus:outline-none text-sm font-medium" />
                     </div>
-                    <input type="text" value={username} onChange={e => setUsername(e.target.value)}
-                      placeholder={t('auth.enterUsername')}
-                      className="flex-1 bg-transparent py-3.5 pr-3.5 text-white text-sm placeholder-gray-600 focus:outline-none"
-                      required autoFocus />
                   </div>
                 </div>
-
                 <div className="space-y-1">
-                  <label className="flex items-center gap-1.5 text-[10px] font-bold text-gray-400 uppercase tracking-wider">
-                    <KeyRound className="w-2.5 h-2.5" /> {t('auth.password')}
+                  <label className="text-xs font-bold text-gray-500 uppercase tracking-wider flex items-center gap-1.5">
+                    <KeyRound className="w-3 h-3" /> {t('auth.password')}
                   </label>
-                  <div className="flex items-center bg-white/[0.03] border border-white/10 rounded-xl focus-within:border-blue-500/50 transition-colors">
-                    <div className="pl-3.5 pr-1.5 py-3.5 text-gray-600">
-                      <Lock className="w-4 h-4" />
+                  <div className="relative group">
+                    <div className="absolute -inset-0.5 bg-gradient-to-r from-blue-600/15 to-cyan-600/15 rounded-2xl opacity-0 group-focus-within:opacity-100 blur transition-opacity" />
+                    <div className="relative flex items-center bg-white/[0.04] border border-white/10 rounded-2xl group-focus-within:border-blue-500/50 transition-colors">
+                      <div className="pl-4 pr-2 py-4 text-gray-600 group-focus-within:text-blue-400 transition-colors"><Lock className="w-5 h-5" /></div>
+                      <input type={showPassword ? 'text' : 'password'} value={password} onChange={e => setPassword(e.target.value)}
+                        placeholder={t('auth.enterPassword')} required
+                        className="flex-1 bg-transparent py-4 pr-2 text-white placeholder-gray-600 focus:outline-none text-sm font-medium" />
+                      <button type="button" onClick={() => setShowPassword(!showPassword)} className="pr-4 pl-2 py-4 text-gray-600 hover:text-gray-300 transition-colors">
+                        {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
                     </div>
-                    <input type={showPassword ? 'text' : 'password'} value={password} onChange={e => setPassword(e.target.value)}
-                      placeholder={t('auth.enterPassword')}
-                      className="flex-1 bg-transparent py-3.5 pr-1 text-white text-sm placeholder-gray-600 focus:outline-none"
-                      required />
-                    <button type="button" onClick={() => setShowPassword(!showPassword)}
-                      className="pr-3.5 pl-1.5 py-3.5 text-gray-600 active:text-gray-300">
-                      {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                    </button>
                   </div>
                 </div>
-
-                <motion.button
-                  type="submit"
-                  disabled={isLoading}
-                  whileTap={{ scale: 0.97 }}
-                  className="w-full py-3.5 mt-1 bg-gradient-to-r from-blue-600 to-cyan-600 active:from-blue-700 active:to-cyan-700 disabled:from-gray-800 disabled:to-gray-800 disabled:text-gray-500 text-white font-bold rounded-xl transition-all shadow-lg shadow-blue-600/20 text-sm flex items-center justify-center gap-2 relative overflow-hidden"
-                >
-                  {isLoading ? (
-                    <><Loader2 className="w-4 h-4 animate-spin" /> Giriş Yapılıyor...</>
-                  ) : (
-                    <><LogIn className="w-4 h-4" /> Giriş Yap</>
-                  )}
+                <motion.button type="submit" disabled={isLoading} whileHover={{ scale: 1.01, y: -1 }} whileTap={{ scale: 0.98 }}
+                  className="w-full py-4 mt-2 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-500 hover:to-blue-600 disabled:from-gray-800 disabled:to-gray-800 disabled:text-gray-500 text-white font-bold rounded-2xl transition-all shadow-xl shadow-blue-600/20 text-base flex items-center justify-center gap-2.5 relative overflow-hidden group">
+                  <div className="absolute inset-0 bg-gradient-to-r from-white/0 via-white/8 to-white/0 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-700" />
+                  {isLoading ? <><Loader2 className="w-5 h-5 animate-spin" /> Giriş Yapılıyor...</> : <><LogIn className="w-5 h-5" /> Giriş Yap</>}
                 </motion.button>
-                <p className="text-[10px] text-gray-600 text-center mt-2">Sisteme erişim yetkiniz yoksa yöneticinizle iletişime geçin.</p>
+                <p className="text-[11px] text-gray-600 text-center leading-relaxed">
+                  Hesap bilgileriniz için sistem yöneticinizle iletişime geçin.
+                </p>
               </motion.form>
             )}
 
-            {/* Admin Form - Mobile */}
+            {/* Yönetici formu */}
             {!lockoutUntil && adminTab === 'admin' && (
-              <motion.form key="admin-form-mobile" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} onSubmit={handleAdminLogin} className="space-y-4">
-                <div className="text-center mb-1">
-                  <motion.div
-                    animate={{ rotate: [0, 3, -3, 0] }}
-                    transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut' }}
-                    className="w-12 h-12 rounded-xl bg-gradient-to-br from-red-600/20 to-orange-600/20 border border-red-500/15 flex items-center justify-center mx-auto mb-2"
-                  >
-                    <ShieldCheck className="w-5 h-5 text-red-400" />
-                  </motion.div>
-                </div>
-
-                <div className="p-3 rounded-xl bg-gradient-to-r from-red-500/5 to-orange-500/5 border border-red-500/15">
-                  <div className="flex items-start gap-2">
-                    <Shield className="w-3.5 h-3.5 text-red-400 shrink-0 mt-0.5" />
-                    <p className="text-red-300/70 text-[10px] leading-relaxed">
-                      <span className="text-red-400 font-bold">Yüksek Güvenlik Alanı</span> — Sadece sistem yöneticileri için.
-                    </p>
-                  </div>
-                </div>
-
-                <div className="space-y-1">
-                  <label className="flex items-center gap-1.5 text-[10px] font-bold text-gray-400 uppercase tracking-wider">
-                    <KeyRound className="w-2.5 h-2.5" /> Yönetici Şifresi
-                  </label>
-                  <div className="flex items-center bg-white/[0.03] border border-red-500/20 rounded-xl focus-within:border-red-500/50 transition-colors">
-                    <div className="pl-3.5 pr-1.5 py-3.5 text-red-500/40">
-                      <Lock className="w-4 h-4" />
+              <motion.form key="desk-admin" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ type: 'spring', stiffness: 200, damping: 28 }} onSubmit={handleAdminLogin} className="space-y-4">
+                <div className="p-4 rounded-2xl bg-gradient-to-r from-red-500/5 to-orange-500/5 border border-red-500/15">
+                  <div className="flex items-start gap-3">
+                    <div className="w-8 h-8 rounded-lg bg-red-500/15 flex items-center justify-center flex-shrink-0 mt-0.5">
+                      <Shield className="w-4 h-4 text-red-400" />
                     </div>
-                    <input type={showAdminPw ? 'text' : 'password'} value={adminPassword} onChange={e => setAdminPassword(e.target.value)}
-                      placeholder="Admin şifresini girin"
-                      className="flex-1 bg-transparent py-3.5 pr-1 text-white text-sm placeholder-gray-600 focus:outline-none"
-                      required autoFocus />
-                    <button type="button" onClick={() => setShowAdminPw(!showAdminPw)}
-                      className="pr-3.5 pl-1.5 py-3.5 text-gray-600 active:text-gray-300">
-                      {showAdminPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                    </button>
+                    <div>
+                      <p className="text-red-400 text-xs font-bold mb-0.5">Yüksek Güvenlik Alanı</p>
+                      <p className="text-red-300/50 text-[11px] leading-relaxed">Bu alan sadece sistem yöneticileri içindir. Yetkisiz erişim girişimleri kayıt altına alınmaktadır.</p>
+                    </div>
                   </div>
                 </div>
-
-                <motion.button
-                  type="submit"
-                  disabled={isLoading}
-                  whileTap={{ scale: 0.97 }}
-                  className="w-full py-3.5 mt-1 bg-gradient-to-r from-red-600 to-orange-600 active:from-red-700 active:to-orange-700 disabled:from-gray-800 disabled:to-gray-800 disabled:text-gray-500 text-white font-bold rounded-xl transition-all shadow-lg shadow-red-600/20 text-sm flex items-center justify-center gap-2 relative overflow-hidden"
-                >
-                  {isLoading ? (
-                    <><Loader2 className="w-4 h-4 animate-spin" /> Doğrulanıyor...</>
-                  ) : (
-                    <><ShieldCheck className="w-4 h-4" /> Yönetici Girişi</>
-                  )}
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-gray-500 uppercase tracking-wider flex items-center gap-1.5">
+                    <KeyRound className="w-3 h-3" /> Yönetici Şifresi
+                  </label>
+                  <div className="relative group">
+                    <div className="absolute -inset-0.5 bg-gradient-to-r from-red-600/15 to-orange-600/15 rounded-2xl opacity-0 group-focus-within:opacity-100 blur transition-opacity" />
+                    <div className="relative flex items-center bg-white/[0.04] border border-red-500/20 rounded-2xl group-focus-within:border-red-500/50 transition-colors">
+                      <div className="pl-4 pr-2 py-4 text-red-500/40 group-focus-within:text-red-400 transition-colors"><Lock className="w-5 h-5" /></div>
+                      <input type={showAdminPw ? 'text' : 'password'} value={adminPassword} onChange={e => setAdminPassword(e.target.value)}
+                        placeholder="Admin şifresini girin" required autoFocus
+                        className="flex-1 bg-transparent py-4 pr-2 text-white placeholder-gray-600 focus:outline-none text-sm font-medium" />
+                      <button type="button" onClick={() => setShowAdminPw(!showAdminPw)} className="pr-4 pl-2 py-4 text-gray-600 hover:text-gray-300 transition-colors">
+                        {showAdminPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+                <motion.button type="submit" disabled={isLoading} whileHover={{ scale: 1.01, y: -1 }} whileTap={{ scale: 0.98 }}
+                  className="w-full py-4 mt-2 bg-gradient-to-r from-red-700 to-red-800 hover:from-red-600 hover:to-red-700 disabled:from-gray-800 disabled:to-gray-800 disabled:text-gray-500 text-white font-bold rounded-2xl transition-all shadow-xl shadow-red-700/20 text-base flex items-center justify-center gap-2.5 relative overflow-hidden group">
+                  <div className="absolute inset-0 bg-gradient-to-r from-white/0 via-white/8 to-white/0 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-700" />
+                  {isLoading ? <><Loader2 className="w-5 h-5 animate-spin" /> Doğrulanıyor...</> : <><ShieldCheck className="w-5 h-5" /> Yönetici Girişi Yap</>}
                 </motion.button>
               </motion.form>
             )}
-          </div>
 
-          {/* Footer */}
-          <div
-            className="flex items-center justify-between px-5 py-3 border-t border-white/5 bg-black/20"
-            style={{ paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))' }}
-          >
-            <div className="flex items-center gap-1.5">
-              <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-              <span className="text-[9px] text-white/25 font-medium">Güvenli Bağlantı</span>
+            {/* Footer */}
+            <div className="flex items-center justify-between mt-8 pt-5 border-t border-white/[0.06]">
+              <div className="flex items-center gap-1.5">
+                <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                <span className="text-[10px] text-white/20 font-medium">Güvenli Bağlantı</span>
+              </div>
+              <button onClick={() => setShowChangelog(true)}
+                className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-blue-600/10 hover:bg-blue-600/20 border border-blue-500/15 transition-colors group">
+                <History className="w-3 h-3 text-blue-400/50 group-hover:text-blue-400 transition-colors" />
+                <span className="text-[10px] font-bold text-blue-400/50 group-hover:text-blue-400 transition-colors">v{CURRENT_VERSION.version} {CURRENT_VERSION.codename}</span>
+              </button>
             </div>
-            {/* Sürüm rozeti */}
-            <button
-              onClick={() => { setShowAdminPanel(false); setShowChangelog(true); }}
-              className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-blue-600/10 active:bg-blue-600/20 border border-blue-500/15"
-            >
-              <History className="w-2.5 h-2.5 text-blue-400/50" />
-              <span className="text-[9px] font-bold text-blue-400/50">
-                v{CURRENT_VERSION.version} {CURRENT_VERSION.codename}
-              </span>
-            </button>
+
           </div>
         </div>
-      </MobileBottomSheet>
+      </div>
 
-      {/* ═══════════════════════════════════════════════════════════
-           HABER DETAY MODALI
-         ═══════════════════════════════════════════════════════════ */}
-      <AnimatePresence>
-        {selectedNews && (
-          <>
-            <motion.div
-              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-              onClick={() => setSelectedNews(null)}
-              className="fixed inset-0 bg-black/85 backdrop-blur-md z-[110]"
-            />
-            <motion.div
-              initial={{ opacity: 0, scale: 0.9, y: 40 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.9, y: 40 }}
-              transition={{ type: 'spring', stiffness: 200, damping: 30 }}
-              className="fixed inset-4 sm:inset-auto sm:top-1/2 sm:left-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 sm:w-full sm:max-w-2xl sm:max-h-[85vh] z-[120] bg-[#111] border border-white/10 rounded-2xl sm:rounded-3xl shadow-2xl overflow-hidden flex flex-col"
-            >
-              {/* Haber Görseli */}
-              <div className="relative w-full h-48 sm:h-64 flex-shrink-0">
-                <img src={selectedNews.image} alt={selectedNews.title} className="w-full h-full object-cover" />
-                <div className="absolute inset-0 bg-gradient-to-t from-[#111] via-black/40 to-transparent" />
-                <button
-                  onClick={() => setSelectedNews(null)}
-                  className="absolute top-3 right-3 sm:top-4 sm:right-4 p-2 sm:p-2.5 bg-black/60 hover:bg-black/80 backdrop-blur-md rounded-xl sm:rounded-2xl transition-colors border border-white/10"
-                >
-                  <X className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
-                </button>
-                <div className="absolute bottom-4 left-4 sm:bottom-6 sm:left-6 right-4 sm:right-6">
-                  <span className="inline-block px-2.5 py-0.5 sm:px-3 sm:py-1 bg-blue-600/80 text-white text-[10px] sm:text-xs font-bold rounded-lg mb-2 backdrop-blur-md border border-blue-500/50">
-                    {selectedNews.category}
-                  </span>
-                  <h2 className="text-lg sm:text-2xl font-extrabold text-white leading-tight drop-shadow-lg">
-                    {selectedNews.title}
-                  </h2>
-                </div>
-              </div>
-
-              {/* Haber İçeriği */}
-              <div className="flex-1 overflow-y-auto px-5 py-4 sm:px-8 sm:py-6">
-                <div className="flex items-center gap-3 mb-4 sm:mb-5 text-xs sm:text-sm text-muted-foreground">
-                  <Clock className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-                  <span className="font-medium">{selectedNews.date}</span>
-                  <span className="w-1 h-1 rounded-full bg-white/30" />
-                  <Newspaper className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-                  <span className="font-medium">{companyInfo.name}</span>
-                </div>
-                <p className="text-sm sm:text-base text-gray-300 leading-relaxed whitespace-pre-line">
-                  {selectedNews.fullContent}
-                </p>
-              </div>
-
-              {/* Alt Bar */}
-              <div className="px-5 py-3 sm:px-8 sm:py-4 border-t border-white/5 flex items-center justify-between bg-black/20">
-                <p className="text-[10px] sm:text-xs text-gray-500">{companyInfo.name} Haber Merkezi</p>
-                <button
-                  onClick={() => setSelectedNews(null)}
-                  className="px-4 py-2 sm:px-5 sm:py-2.5 bg-white/5 hover:bg-white/10 active:bg-white/15 rounded-xl text-xs sm:text-sm font-semibold text-white transition-colors"
-                >
-                  Kapat
-                </button>
-              </div>
-            </motion.div>
-          </>
-        )}
-      </AnimatePresence>
-
-      {/* ═══════════════════════════════════════════════════════════
-           TÜM HABERLER MODALI
-         ═══════════════════════════════════════════════════════════ */}
-      <AnimatePresence>
-        {showAllNews && (
-          <>
-            <motion.div
-              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-              onClick={() => setShowAllNews(false)}
-              className="fixed inset-0 bg-black/85 backdrop-blur-md z-[110]"
-            />
-            <motion.div
-              initial={{ opacity: 0, scale: 0.9, y: 40 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.9, y: 40 }}
-              transition={{ type: 'spring', stiffness: 200, damping: 30 }}
-              className="fixed inset-4 sm:inset-auto sm:top-1/2 sm:left-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 sm:w-full sm:max-w-2xl sm:max-h-[85vh] z-[120] bg-[#111] border border-white/10 rounded-2xl sm:rounded-3xl shadow-2xl overflow-hidden flex flex-col"
-            >
-              {/* Header */}
-              <div className="flex items-center justify-between px-5 py-4 sm:px-8 sm:py-6 border-b border-white/10">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl bg-blue-500/20 flex items-center justify-center">
-                    <Newspaper className="w-5 h-5 sm:w-6 sm:h-6 text-blue-400" />
-                  </div>
-                  <div>
-                    <h3 className="text-base sm:text-xl font-bold text-white">Tüm Haberler</h3>
-                    <p className="text-[11px] sm:text-xs text-muted-foreground">{NEWS_ITEMS.length} haber bulundu</p>
-                  </div>
-                </div>
-                <button onClick={() => setShowAllNews(false)}
-                  className="p-2 sm:p-2.5 bg-white/5 hover:bg-white/10 rounded-xl transition-colors">
-                  <X className="w-4 h-4 sm:w-5 sm:h-5 text-gray-400" />
-                </button>
-              </div>
-
-              {/* Haberler Listesi */}
-              <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-3 sm:space-y-4">
-                {NEWS_ITEMS.map((news) => (
-                  <motion.div
-                    key={news.id}
-                    whileHover={{ scale: 1.01 }}
-                    whileTap={{ scale: 0.99 }}
-                    onClick={() => { setShowAllNews(false); setSelectedNews(news); }}
-                    className="flex gap-3 sm:gap-5 p-3 sm:p-4 rounded-xl sm:rounded-2xl bg-white/5 hover:bg-white/10 active:bg-white/15 border border-white/5 transition-all cursor-pointer group"
-                  >
-                    <div className="w-20 h-20 sm:w-28 sm:h-28 rounded-lg sm:rounded-xl overflow-hidden flex-shrink-0">
-                      <img src={news.image} alt="" className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
-                    </div>
-                    <div className="flex-1 flex flex-col justify-center min-w-0">
-                      <span className="text-[9px] sm:text-[10px] font-bold text-blue-400 mb-1 tracking-wider uppercase">
-                        {news.category} &bull; {news.date}
-                      </span>
-                      <h4 className="text-sm sm:text-base font-bold text-white mb-1 sm:mb-2 group-hover:text-blue-400 transition-colors">
-                        {news.title}
-                      </h4>
-                      <p className="text-[11px] sm:text-sm text-muted-foreground line-clamp-2">{news.desc}</p>
-                      <span className="mt-2 text-[10px] sm:text-xs text-blue-400 font-semibold flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                        Devamını Oku <ChevronRight className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
-                      </span>
-                    </div>
-                  </motion.div>
-                ))}
-              </div>
-            </motion.div>
-          </>
-        )}
-      </AnimatePresence>
-
-      {/* ═══════════════════════════════════════════════════════════
-           ÜRÜN DETAY MODALI
-         ═══════════════════════════════════════════════════════════ */}
-      <AnimatePresence>
-        {selectedProduct && (
-          <>
-            <motion.div
-              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-              onClick={() => setSelectedProduct(null)}
-              className="fixed inset-0 bg-black/90 backdrop-blur-md z-[110]"
-            />
-            <motion.div
-              initial={{ opacity: 0, scale: 0.9, y: 40 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.9, y: 40 }}
-              transition={{ type: 'spring', stiffness: 200, damping: 30 }}
-              className="fixed inset-3 sm:inset-auto sm:top-1/2 sm:left-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 sm:w-full sm:max-w-3xl sm:max-h-[90vh] z-[120] bg-[#0d0d0d] border border-white/10 rounded-2xl sm:rounded-3xl shadow-2xl overflow-hidden flex flex-col"
-            >
-              {/* Product Hero Image */}
-              <div className="relative w-full h-44 sm:h-56 lg:h-72 flex-shrink-0">
-                <img src={selectedProduct.image} alt={selectedProduct.name} className="w-full h-full object-cover" />
-                <div className="absolute inset-0 bg-gradient-to-t from-[#0d0d0d] via-black/50 to-transparent" />
-                <div className="absolute inset-0 bg-gradient-to-r from-[#0d0d0d]/60 to-transparent" />
-
-                <button
-                  onClick={() => setSelectedProduct(null)}
-                  className="absolute top-3 right-3 sm:top-4 sm:right-4 p-2 sm:p-2.5 bg-black/60 hover:bg-black/80 backdrop-blur-md rounded-xl transition-colors border border-white/10"
-                >
-                  <X className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
-                </button>
-
-                {/* Badge */}
-                {selectedProduct.badge && (
-                  <div className="absolute top-3 left-3 sm:top-4 sm:left-4">
-                    <span className={`px-2.5 py-1 sm:px-3 sm:py-1.5 text-[10px] sm:text-xs font-bold rounded-lg border ${BADGE_COLORS[selectedProduct.badgeColor] || BADGE_COLORS.blue}`}>
-                      {selectedProduct.badge}
-                    </span>
-                  </div>
-                )}
-
-                {/* Title & Price overlay */}
-                <div className="absolute bottom-4 left-4 sm:bottom-6 sm:left-6 right-4 sm:right-6">
-                  <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-2 sm:gap-4">
-                    <div>
-                      <p className="text-[10px] sm:text-xs text-red-400 font-bold uppercase tracking-wider mb-1">{selectedProduct.origin} • {selectedProduct.cutType}</p>
-                      <h2 className="text-xl sm:text-3xl font-extrabold text-white leading-tight drop-shadow-lg">{selectedProduct.name}</h2>
-                    </div>
-                    <div className="flex-shrink-0 px-3 py-2 sm:px-5 sm:py-3 rounded-xl sm:rounded-2xl bg-white/10 backdrop-blur-xl border border-white/20 text-center">
-                      <p className="text-[9px] sm:text-[10px] text-gray-400 uppercase tracking-wider font-bold mb-0.5">Ort. Fiyat</p>
-                      <p className="text-xl sm:text-3xl font-black text-white">₺{selectedProduct.avgPrice}</p>
-                      <p className="text-[9px] sm:text-[10px] text-gray-400">/ {selectedProduct.priceUnit}</p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Content */}
-              <div className="flex-1 overflow-y-auto px-4 py-4 sm:px-6 sm:py-5 lg:px-8 lg:py-6 space-y-4 sm:space-y-5">
-
-                {/* Price Range Bar */}
-                {selectedProduct.priceRange.min > 0 && (
-                  <div className="p-3 sm:p-4 rounded-xl sm:rounded-2xl bg-white/5 border border-white/5">
-                    <div className="flex items-center justify-between mb-2 sm:mb-3">
-                      <span className="text-[10px] sm:text-xs font-bold text-gray-400 uppercase tracking-wider">Fiyat Aralığı</span>
-                      <span className="text-[10px] sm:text-xs text-muted-foreground">Son 30 gün ortalaması</span>
-                    </div>
-                    <div className="flex items-center gap-3 sm:gap-4">
-                      <span className="text-sm sm:text-base font-bold text-emerald-400">₺{selectedProduct.priceRange.min}</span>
-                      <div className="flex-1 h-2 sm:h-2.5 bg-black/40 rounded-full overflow-hidden relative">
-                        <div className="absolute inset-y-0 bg-gradient-to-r from-emerald-500 via-amber-500 to-red-500 rounded-full"
-                          style={{
-                            left: '0%',
-                            right: '0%',
-                          }}
-                        />
-                        {/* Average marker */}
-                        <div
-                          className="absolute top-[-3px] w-3 h-3 sm:w-4 sm:h-4 bg-white rounded-full border-2 border-red-500 shadow-lg"
-                          style={{
-                            left: `${((selectedProduct.avgPrice - selectedProduct.priceRange.min) / (selectedProduct.priceRange.max - selectedProduct.priceRange.min)) * 100}%`,
-                            transform: 'translateX(-50%)',
-                          }}
-                        />
-                      </div>
-                      <span className="text-sm sm:text-base font-bold text-red-400">₺{selectedProduct.priceRange.max}</span>
-                    </div>
-                    <p className="text-center text-[10px] sm:text-xs text-gray-500 mt-1.5 sm:mt-2">
-                      Ortalama: <span className="text-white font-bold">₺{selectedProduct.avgPrice}</span> / {selectedProduct.priceUnit}
-                    </p>
-                  </div>
-                )}
-
-                {/* Nutrition Cards */}
-                {selectedProduct.protein > 0 && (
-                  <div className="grid grid-cols-3 gap-2 sm:gap-3">
-                    <div className="p-2.5 sm:p-4 rounded-xl sm:rounded-2xl bg-orange-500/10 border border-orange-500/20 text-center">
-                      <Flame className="w-4 h-4 sm:w-5 sm:h-5 text-orange-400 mx-auto mb-1" />
-                      <p className="text-base sm:text-xl font-black text-white">{selectedProduct.calories}</p>
-                      <p className="text-[9px] sm:text-[10px] text-orange-300/70 font-bold uppercase">Kalori</p>
-                    </div>
-                    <div className="p-2.5 sm:p-4 rounded-xl sm:rounded-2xl bg-red-500/10 border border-red-500/20 text-center">
-                      <Beef className="w-4 h-4 sm:w-5 sm:h-5 text-red-400 mx-auto mb-1" />
-                      <p className="text-base sm:text-xl font-black text-white">{selectedProduct.protein}g</p>
-                      <p className="text-[9px] sm:text-[10px] text-red-300/70 font-bold uppercase">Protein</p>
-                    </div>
-                    <div className="p-2.5 sm:p-4 rounded-xl sm:rounded-2xl bg-amber-500/10 border border-amber-500/20 text-center">
-                      <Weight className="w-4 h-4 sm:w-5 sm:h-5 text-amber-400 mx-auto mb-1" />
-                      <p className="text-base sm:text-xl font-black text-white">{selectedProduct.fat}g</p>
-                      <p className="text-[9px] sm:text-[10px] text-amber-300/70 font-bold uppercase">Yağ</p>
-                    </div>
-                  </div>
-                )}
-
-                {/* Description */}
-                <div>
-                  <h4 className="text-sm sm:text-base font-bold text-white mb-1.5 sm:mb-2 flex items-center gap-2">
-                    <Info className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-blue-400" />
-                    Ürün Hakkında
-                  </h4>
-                  <p className="text-xs sm:text-sm text-gray-300 leading-relaxed">{selectedProduct.longDescription}</p>
-                </div>
-
-                {/* Chef Tips */}
-                {selectedProduct.tips && (
-                  <div className="p-3 sm:p-4 rounded-xl sm:rounded-2xl bg-gradient-to-r from-orange-500/10 to-red-500/10 border border-orange-500/20">
-                    <div className="flex items-start gap-2.5 sm:gap-3">
-                      <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg sm:rounded-xl bg-orange-500/20 flex items-center justify-center flex-shrink-0">
-                        <ChefHat className="w-4 h-4 sm:w-5 sm:h-5 text-orange-400" />
-                      </div>
-                      <div>
-                        <p className="text-xs sm:text-sm font-bold text-orange-400 mb-0.5 sm:mb-1">Şefin Önerisi</p>
-                        <p className="text-[11px] sm:text-xs text-orange-200/80 leading-relaxed">{selectedProduct.tips}</p>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* Product Info Grid */}
-                <div className="grid grid-cols-2 gap-2 sm:gap-3">
-                  <div className="flex items-center gap-2 sm:gap-3 p-2.5 sm:p-3 rounded-xl bg-white/5 border border-white/5">
-                    <Tag className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-blue-400" />
-                    <div>
-                      <p className="text-[9px] sm:text-[10px] text-gray-500">Kategori</p>
-                      <p className="text-xs sm:text-sm font-semibold text-white capitalize">{selectedProduct.category === 'islenmiş' ? 'İşlenmiş' : selectedProduct.category === 'dana' ? 'Dana Eti' : selectedProduct.category === 'kuzu' ? 'Kuzu Eti' : 'Tavuk'}</p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2 sm:gap-3 p-2.5 sm:p-3 rounded-xl bg-white/5 border border-white/5">
-                    <Package className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-emerald-400" />
-                    <div>
-                      <p className="text-[9px] sm:text-[10px] text-gray-500">Kesim Tipi</p>
-                      <p className="text-xs sm:text-sm font-semibold text-white">{selectedProduct.cutType || '-'}</p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2 sm:gap-3 p-2.5 sm:p-3 rounded-xl bg-white/5 border border-white/5">
-                    <MapPin className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-purple-400" />
-                    <div>
-                      <p className="text-[9px] sm:text-[10px] text-gray-500">Menşei</p>
-                      <p className="text-xs sm:text-sm font-semibold text-white">{selectedProduct.origin || '-'}</p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2 sm:gap-3 p-2.5 sm:p-3 rounded-xl bg-white/5 border border-white/5">
-                    <Eye className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-cyan-400" />
-                    <div>
-                      <p className="text-[9px] sm:text-[10px] text-gray-500">Stok Durumu</p>
-                      <p className={`text-xs sm:text-sm font-semibold ${selectedProduct.inStock ? 'text-emerald-400' : 'text-red-400'}`}>
-                        {selectedProduct.inStock ? 'Stokta Var' : 'Tükendi'}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* ─── İlgili Haberler ───────────────────────────────────────── */}
-              {(() => {
-                const related = pazarlamaAnnouncements.filter(
-                  (a: any) => (a.relatedProducts || []).some(
-                    (rp: string) => rp.toLowerCase().trim() === selectedProduct.name.toLowerCase().trim()
-                  )
-                );
-                if (!related.length) return null;
-                return (
-                  <div className="px-4 sm:px-6 lg:px-8 pb-1">
-                    <h4 className="text-xs sm:text-sm font-bold text-white mb-2.5 flex items-center gap-2">
-                      <Newspaper className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-cyan-400" />
-                      Bu Ürünle İlgili Haberler
-                      <span className="ml-1 px-1.5 py-0.5 text-[9px] font-bold bg-cyan-500/20 text-cyan-400 rounded-md">{related.length}</span>
-                    </h4>
-                    <div className="space-y-2">
-                      {related.map((news: any) => (
-                        <motion.div
-                          key={news.id}
-                          initial={{ opacity: 0, x: -8 }}
-                          animate={{ opacity: 1, x: 0 }}
-                          className="flex gap-3 p-3 rounded-xl bg-cyan-500/5 border border-cyan-500/10 hover:border-cyan-500/20 transition-colors"
-                        >
-                          {news.imageUrl && (
-                            <img
-                              src={news.imageUrl}
-                              alt=""
-                              className="w-12 h-12 sm:w-14 sm:h-14 rounded-lg object-cover flex-shrink-0"
-                            />
-                          )}
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-1.5 mb-0.5">
-                              {news.badge && (
-                                <span className={`px-1.5 py-0.5 text-[9px] font-bold rounded ${
-                                  news.badge === 'Onemli' || news.badge === 'Acil' ? 'bg-red-500/20 text-red-400' :
-                                  news.badge === 'Yeni' ? 'bg-blue-500/20 text-blue-400' :
-                                  news.badge === 'Kampanya' ? 'bg-orange-500/20 text-orange-400' :
-                                  news.badge === 'Basari' ? 'bg-emerald-500/20 text-emerald-400' :
-                                  'bg-cyan-500/20 text-cyan-400'
-                                }`}>{news.badge}</span>
-                              )}
-                              <span className="text-[9px] sm:text-[10px] text-gray-500">{news.date}</span>
-                            </div>
-                            <p className="text-[11px] sm:text-xs font-semibold text-white leading-snug mb-0.5">{news.title}</p>
-                            <p className="text-[10px] sm:text-[11px] text-gray-400 line-clamp-2 leading-relaxed">{news.text}</p>
-                          </div>
-                        </motion.div>
-                      ))}
-                    </div>
-                  </div>
-                );
-              })()}
-
-              {/* Footer */}
-              <div className="px-4 py-3 sm:px-6 sm:py-4 border-t border-white/5 bg-black/30">
-                <div className="flex items-center gap-2 text-[10px] sm:text-xs text-gray-500 mb-3">
-                  <Phone className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
-                  <span>Sipariş için: <span className="text-white font-semibold">0850 XXX XX XX</span></span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => { if (selectedProduct) addToCart(selectedProduct); setSelectedProduct(null); }}
-                    className="flex-1 py-2.5 sm:py-3 bg-gradient-to-r from-red-600 to-orange-600 hover:from-red-500 hover:to-orange-500 active:from-red-700 active:to-orange-700 rounded-xl text-xs sm:text-sm font-bold text-white flex items-center justify-center gap-2 transition-all shadow-lg shadow-red-600/20"
-                  >
-                    <ShoppingBag className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-                    Sepete Ekle
-                  </button>
-                  <button
-                    onClick={() => { if (selectedProduct && !cart.find(c => c.product.id === selectedProduct.id)) addToCart(selectedProduct); setSelectedProduct(null); setShowQuoteForm(true); }}
-                    className="flex-1 py-2.5 sm:py-3 bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-500 hover:to-cyan-500 active:from-blue-700 active:to-cyan-700 rounded-xl text-xs sm:text-sm font-bold text-white flex items-center justify-center gap-2 transition-all shadow-lg shadow-blue-600/20"
-                  >
-                    <FileText className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-                    Teklif İste
-                  </button>
-                  <button
-                    onClick={() => setSelectedProduct(null)}
-                    className="px-4 py-2.5 sm:py-3 bg-white/5 hover:bg-white/10 active:bg-white/15 rounded-xl text-xs sm:text-sm font-semibold text-gray-400 transition-colors"
-                  >
-                    Kapat
-                  </button>
-                </div>
-              </div>
-            </motion.div>
-          </>
-        )}
-      </AnimatePresence>
-
-      {/* ═══════════════════════════════════════════════════════════
-           FLOATING CART BUTTON
-         ═══════════════════════════════════════════════════════════ */}
-      <AnimatePresence>
-        {cartCount > 0 && !showAdminPanel && !showCart && !showQuoteForm && (
-          <motion.button
-            initial={{ scale: 0, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            exit={{ scale: 0, opacity: 0 }}
-            whileHover={{ scale: 1.1 }}
-            whileTap={{ scale: 0.9 }}
-            onClick={() => setShowCart(true)}
-            className="fixed bottom-20 sm:bottom-8 right-4 sm:right-8 z-[80] w-14 h-14 sm:w-16 sm:h-16 rounded-full bg-gradient-to-br from-red-600 to-orange-600 shadow-2xl shadow-red-600/40 flex items-center justify-center text-white"
-          >
-            <ShoppingBag className="w-6 h-6 sm:w-7 sm:h-7" />
-            <span className="absolute -top-1 -right-1 w-6 h-6 rounded-full bg-white text-red-600 text-xs font-black flex items-center justify-center shadow-lg">
-              {cartCount}
-            </span>
-          </motion.button>
-        )}
-      </AnimatePresence>
-
-      {/* ═══════════════════════════════════════════════════════════
-           CART MODAL
-         ═══════════════════════════════════════════════════════════ */}
-      <AnimatePresence>
-        {showCart && (
-          <>
-            <motion.div
-              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-              onClick={() => setShowCart(false)}
-              className="fixed inset-0 bg-black/85 backdrop-blur-md z-[110]"
-            />
-            <motion.div
-              initial={{ opacity: 0, scale: 0.9, y: 40 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.9, y: 40 }}
-              transition={{ type: 'spring', stiffness: 200, damping: 30 }}
-              className="fixed inset-3 sm:inset-auto sm:top-1/2 sm:left-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 sm:w-full sm:max-w-lg sm:max-h-[85vh] z-[120] bg-[#0d0d0d] border border-white/10 rounded-2xl sm:rounded-3xl shadow-2xl overflow-hidden flex flex-col"
-            >
-              {/* Header */}
-              <div className="flex items-center justify-between px-5 py-4 sm:px-6 sm:py-5 border-b border-white/10">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl bg-red-500/20 flex items-center justify-center">
-                    <ShoppingBag className="w-5 h-5 sm:w-6 sm:h-6 text-red-400" />
-                  </div>
-                  <div>
-                    <h3 className="text-base sm:text-lg font-bold text-white">Sepetim</h3>
-                    <p className="text-[10px] sm:text-xs text-gray-500">{cartCount} ürün</p>
-                  </div>
-                </div>
-                <button onClick={() => setShowCart(false)} className="p-2 bg-white/5 hover:bg-white/10 rounded-xl transition-colors">
-                  <X className="w-4 h-4 sm:w-5 sm:h-5 text-gray-400" />
-                </button>
-              </div>
-
-              {/* Cart Items */}
-              <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-3">
-                {cart.length === 0 ? (
-                  <div className="text-center py-12">
-                    <ShoppingBag className="w-12 h-12 text-gray-700 mx-auto mb-3" />
-                    <p className="text-gray-500 font-medium">Sepetiniz boş</p>
-                    <p className="text-xs text-gray-600 mt-1">Katalogdan ürün ekleyerek başlayın</p>
-                  </div>
-                ) : (
-                  cart.map(item => (
-                    <div key={item.product.id} className="flex gap-3 p-3 rounded-xl bg-white/5 border border-white/5">
-                      <img src={item.product.image} alt={item.product.name} className="w-16 h-16 sm:w-20 sm:h-20 rounded-lg object-cover flex-shrink-0" />
-                      <div className="flex-1 min-w-0">
-                        <h4 className="text-sm font-bold text-white truncate">{item.product.name}</h4>
-                        <p className="text-xs text-gray-500">{item.product.origin}</p>
-                        <p className="text-sm font-bold text-red-400 mt-1">₺{item.product.avgPrice}/{item.product.priceUnit}</p>
-                      </div>
-                      <div className="flex flex-col items-end justify-between">
-                        <button onClick={() => removeFromCart(item.product.id)} className="p-1 text-gray-600 hover:text-red-400 transition-colors">
-                          <X className="w-3.5 h-3.5" />
-                        </button>
-                        <div className="flex items-center gap-1.5 bg-black/40 rounded-lg border border-white/10 p-0.5">
-                          <button onClick={() => updateCartQty(item.product.id, item.quantity - 1)} className="w-6 h-6 flex items-center justify-center rounded text-gray-400 hover:text-white hover:bg-white/10 transition-colors">
-                            <Minus className="w-3 h-3" />
-                          </button>
-                          <span className="text-xs font-bold text-white w-6 text-center">{item.quantity}</span>
-                          <button onClick={() => updateCartQty(item.product.id, item.quantity + 1)} className="w-6 h-6 flex items-center justify-center rounded text-gray-400 hover:text-white hover:bg-white/10 transition-colors">
-                            <Plus className="w-3 h-3" />
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
-
-              {/* Footer */}
-              {cart.length > 0 && (
-                <div className="px-4 py-4 sm:px-5 sm:py-5 border-t border-white/10 bg-black/30 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-gray-400 font-medium">Tahmini Toplam</span>
-                    <span className="text-xl font-black text-white">₺{cartTotal.toLocaleString('tr-TR')}</span>
-                  </div>
-                  <p className="text-[10px] text-gray-600">* Fiyatlar tahminidir, kesin fiyat teklif aşamasında belirlenir.</p>
-                  <button
-                    onClick={() => { setShowCart(false); setShowQuoteForm(true); }}
-                    className="w-full py-3.5 bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-500 hover:to-cyan-500 active:from-blue-700 active:to-cyan-700 text-white font-bold rounded-xl text-sm flex items-center justify-center gap-2 transition-all shadow-lg shadow-blue-600/20"
-                  >
-                    <Send className="w-4 h-4" />
-                    Teklif İste
-                  </button>
-                </div>
-              )}
-            </motion.div>
-          </>
-        )}
-      </AnimatePresence>
-
-      {/* ═══════════════════════════════════════════════════════════
-           QUOTE REQUEST FORM MODAL
-         ═══════════════════════════════════════════════════════════ */}
-      <AnimatePresence>
-        {showQuoteForm && (
-          <>
-            <motion.div
-              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-              onClick={() => { if (!quoteSent) setShowQuoteForm(false); }}
-              className="fixed inset-0 bg-black/85 backdrop-blur-md z-[110]"
-            />
-            <motion.div
-              initial={{ opacity: 0, scale: 0.9, y: 40 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.9, y: 40 }}
-              transition={{ type: 'spring', stiffness: 200, damping: 30 }}
-              className="fixed inset-3 sm:inset-auto sm:top-1/2 sm:left-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 sm:w-full sm:max-w-lg sm:max-h-[85vh] z-[120] bg-[#0d0d0d] border border-white/10 rounded-2xl sm:rounded-3xl shadow-2xl overflow-hidden flex flex-col"
-            >
-              {quoteSent ? (
-                <div className="flex-1 flex flex-col items-center justify-center p-8 text-center">
-                  <motion.div
-                    initial={{ scale: 0 }} animate={{ scale: 1 }}
-                    transition={{ type: 'spring', stiffness: 200, damping: 24 }}
-                    className="w-20 h-20 rounded-full bg-emerald-500/20 border-2 border-emerald-500/40 flex items-center justify-center mb-5"
-                  >
-                    <CheckCircle className="w-10 h-10 text-emerald-400" />
-                  </motion.div>
-                  <h3 className="text-xl font-bold text-white mb-2">Talebiniz Alındı!</h3>
-                  <p className="text-sm text-gray-400 max-w-sm">En kısa sürede müşteri temsilcimiz sizinle iletişime geçecektir. Teşekkür ederiz!</p>
-                </div>
-              ) : (
-                <>
-                  {/* Header */}
-                  <div className="flex items-center justify-between px-5 py-4 sm:px-6 sm:py-5 border-b border-white/10">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl bg-blue-500/20 flex items-center justify-center">
-                        <FileText className="w-5 h-5 sm:w-6 sm:h-6 text-blue-400" />
-                      </div>
-                      <div>
-                        <h3 className="text-base sm:text-lg font-bold text-white">Teklif Talebi</h3>
-                        <p className="text-[10px] sm:text-xs text-gray-500">{cart.length > 0 ? `${cartCount} ürün • ₺${cartTotal.toLocaleString('tr-TR')}` : 'Bilgilerinizi doldurun'}</p>
-                      </div>
-                    </div>
-                    <button onClick={() => setShowQuoteForm(false)} className="p-2 bg-white/5 hover:bg-white/10 rounded-xl transition-colors">
-                      <X className="w-4 h-4 sm:w-5 sm:h-5 text-gray-400" />
-                    </button>
-                  </div>
-
-                  {/* Cart Summary */}
-                  {cart.length > 0 && (
-                    <div className="px-5 py-3 sm:px-6 border-b border-white/5 max-h-32 overflow-y-auto">
-                      {cart.map(item => (
-                        <div key={item.product.id} className="flex items-center justify-between py-1.5 text-xs">
-                          <span className="text-gray-300">{item.product.name} <span className="text-gray-600">x{item.quantity}</span></span>
-                          <span className="text-white font-bold">₺{(item.product.avgPrice * item.quantity).toLocaleString('tr-TR')}</span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-
-                  {/* Form */}
-                  <div className="flex-1 overflow-y-auto p-5 sm:p-6 space-y-4">
-                    <div>
-                      <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1.5 block">Ad Soyad *</label>
-                      <input
-                        type="text" value={quoteForm.name} onChange={e => setQuoteForm(p => ({ ...p, name: e.target.value }))}
-                        placeholder="Adınız Soyadınız"
-                        className="w-full px-4 py-3 bg-white/[0.03] border border-white/10 rounded-xl text-white text-sm placeholder-gray-600 focus:outline-none focus:border-blue-500/50 transition-colors"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1.5 block">Telefon *</label>
-                      <input
-                        type="tel" value={quoteForm.phone} onChange={e => setQuoteForm(p => ({ ...p, phone: e.target.value }))}
-                        placeholder="05XX XXX XX XX"
-                        className="w-full px-4 py-3 bg-white/[0.03] border border-white/10 rounded-xl text-white text-sm placeholder-gray-600 focus:outline-none focus:border-blue-500/50 transition-colors"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1.5 block">E-posta</label>
-                      <input
-                        type="email" value={quoteForm.email} onChange={e => setQuoteForm(p => ({ ...p, email: e.target.value }))}
-                        placeholder="ornek@email.com"
-                        className="w-full px-4 py-3 bg-white/[0.03] border border-white/10 rounded-xl text-white text-sm placeholder-gray-600 focus:outline-none focus:border-blue-500/50 transition-colors"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1.5 block">Not / Özel İstek</label>
-                      <textarea
-                        value={quoteForm.note} onChange={e => setQuoteForm(p => ({ ...p, note: e.target.value }))}
-                        placeholder="Teslimat tarihi, miktar detayı vb."
-                        rows={3}
-                        className="w-full px-4 py-3 bg-white/[0.03] border border-white/10 rounded-xl text-white text-sm placeholder-gray-600 focus:outline-none focus:border-blue-500/50 transition-colors resize-none"
-                      />
-                    </div>
-                  </div>
-
-                  {/* Submit */}
-                  <div className="px-5 py-4 sm:px-6 sm:py-5 border-t border-white/10 bg-black/30">
-                    <button
-                      onClick={handleQuoteSubmit}
-                      className="w-full py-3.5 bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-500 hover:to-cyan-500 active:from-blue-700 active:to-cyan-700 text-white font-bold rounded-xl text-sm flex items-center justify-center gap-2 transition-all shadow-lg shadow-blue-600/20"
-                    >
-                      <Send className="w-4 h-4" />
-                      Teklif Talebini Gönder
-                    </button>
-                    <p className="text-[10px] text-gray-600 text-center mt-2">Bilgileriniz gizlilik politikamız kapsamında korunmaktadır.</p>
-                  </div>
-                </>
-              )}
-            </motion.div>
-          </>
-        )}
-      </AnimatePresence>
-
-      {/* ═══════════════════════════════════════════════════════════
-           SÜRÜM GEÇMİŞİ (CHANGELOG) MODALI
-         ═══════════════════════════════════════════════════════════ */}
+      {/* ═════════════ CHANGELOG MODALİ ═════════════ */}
       <AnimatePresence>
         {showChangelog && (
           <ChangelogModal onClose={() => setShowChangelog(false)} />
