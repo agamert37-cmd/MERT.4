@@ -60,16 +60,10 @@ function saveDeletedId(storageKey: string, id: string): void {
 }
 
 // ─── Bağlantı hata yönetimi ─────────────────────────────────────────────────
-// GÜÇLENDİRME [AJAN-2]: 15s → 8s — daha hızlı kurtarma, mobil için kritik
-let _lastConnectionFailure = 0;
+// BUG FIX [AJAN-2]: Modül seviyesi → instance başına ref
+// Eski modül-seviyesi değişken tüm useTableSync instance'larını blokluyordu.
+// Artık her hook kendi cooldown ref'ini tutuyor.
 const CONNECTION_COOLDOWN_MS = 8_000;
-
-function isConnectionCoolingDown(): boolean {
-  return Date.now() - _lastConnectionFailure < CONNECTION_COOLDOWN_MS;
-}
-
-function markConnectionFailure() { _lastConnectionFailure = Date.now(); }
-function clearConnectionCooldown() { _lastConnectionFailure = 0; }
 
 // ─── İstek zaman aşımı sarmalayıcı ──────────────────────────────────────────
 // GÜÇLENDİRME [AJAN-2]: Supabase istekleri takılırsa UI'ı bloklar.
@@ -335,6 +329,12 @@ export function useTableSync<T extends { id: string }>(
   const [latencyMs, setLatencyMs] = useState(0);
 
   const configured = isSupabaseConfigured();
+
+  // BUG FIX [AJAN-2]: Her tablo kendi cooldown'ını tutuyor — biri başarısız olunca diğerleri bloklanmıyor
+  const lastConnectionFailure = useRef(0);
+  const isConnectionCoolingDown = () => Date.now() - lastConnectionFailure.current < CONNECTION_COOLDOWN_MS;
+  const markConnectionFailure = () => { lastConnectionFailure.current = Date.now(); };
+  const clearConnectionCooldown = () => { lastConnectionFailure.current = 0; };
 
   // Stabil ref'ler (useCallback bağımlılıklarını minimize eder)
   const toDbRef = useRef(toDb);

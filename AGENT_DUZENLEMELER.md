@@ -48,6 +48,8 @@ Her düzenlenen dosyanın **en üstüne** şu yorum satırı eklenir:
 | 17 | `app/pages/CeklerPage.tsx` | 2026-03-25 | KRİTİK FIX: `saveCek()` fonksiyonuna `supabase.from('cekler').upsert()` eklendi. `handleDelete`'e `deleteCekFromSupabase()` eklendi. Tüm çek kayıt/silme işlemleri artık Supabase cekler tablosunu güncelliyor. |
 | 18 | `app/pages/PersonelPage.tsx` | 2026-03-25 | FIX: Uzaktan oturum kapatmada `setInStorage` yanına `updateItem(personId, { status: 'offline' })` eklendi — Supabase personeller tablosu da güncelleniyor. |
 | 19 | `app/pages/CariDetailPage.tsx` | 2026-03-25 | FIX: `updateFisInStorage()` fatura durum güncellemesinde `supabase.from('fisler').update()` eklendi — fatura kesildi/iptal gibi değişiklikler Supabase'e de yansıyor. |
+| 20 | `app/pages/AracTakipPage.tsx` | 2026-03-25 | KRİTİK FIX: KM logları (`arac_km_logs`) hiç Supabase'e yazılmıyordu — `useTableSync` eklendi ve her 3 handler'da `addKmLogToSupabase` + `addShiftToSupabase` çağrısı eklendi. `supabase` import eklendi. |
+| 21 | `app/hooks/useTableSync.ts` | 2026-03-25 | KRİTİK FIX: Modül-seviyesi `_lastConnectionFailure` değişkeni `useRef` ile her instance'a taşındı — bir tablo başarısız olunca diğer 14 tablo 8s bloklanıyordu. Artık her tablo bağımsız cooldown kullanıyor. |
 
 ---
 
