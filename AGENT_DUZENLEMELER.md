@@ -40,7 +40,8 @@ Her düzenlenen dosyanın **en üstüne** şu yorum satırı eklenir:
 | 9 | `app/App.tsx` | 2026-03-24 | GÜÇLENDİRME: `startCloudDirectBackupScheduler(24)` entegre edildi — yapılandırma gerektirmeden her 24s otomatik yedek. |
 | 10 | `app/contexts/GlobalTableSyncContext.tsx` | 2026-03-24 | YENİ DOSYA: App geneli tablo senkronizasyon provider'ı oluşturuldu. Tüm kritik Supabase tablolarını (fisler, urunler, cari_hesaplar, kasa_islemleri, personeller, bankalar, cekler, araclar, arac_shifts, arac_km_logs, uretim_profilleri, uretim_kayitlari, faturalar, fatura_stok, tahsilatlar) localStorage'a yükler. Mobil'de DashboardPage verilerin görünmemesi sorunu çözüldü. |
 | 11 | `app/App.tsx` | 2026-03-24 | ENTEGRASYON: `GlobalTableSyncProvider` import edildi ve `RouterProvider` sarıldı — hangi sayfada olunursa olsun tüm tablolar senkronize edilir. |
-| 12 | `app/pages/FisHistoryPage.tsx` | 2026-03-24 | BUG FIX: `handleDelete` artık `setInStorage(StorageKey.FISLER, updated)` yerine `deleteFisFromSupabase(id)` çağırıyor — silinen fişler Supabase tablosundan da kaldırılıyor, mobil tekrar silinmiş kayıtları görmüyor. |
+| 12 | `app/pages/FisHistoryPage.tsx` | 2026-03-24 | BUG FIX: Delete, edit ve restore işlemlerinde Supabase tablosu da güncelleniyor. `deleteFisFromSupabase`, `updateFisInSupabase`, `addFisToSupabase` kullanılıyor. Stok/cari değişikliklerinde `supabase.from('urunler').upsert()` ve `supabase.from('cari_hesaplar').upsert()` eklendi. |
+| 13 | `app/pages/UretimPage.tsx` | 2026-03-24 | BUG FIX: Üretim kaydedilince stok değişiklikleri KV'nin yanında doğrudan `urunler` Supabase tablosuna da yazılıyor (`syncStokItemsToSupabase` eklendi). Mobil üretim sonrası doğru stok görüyor. |
 
 ---
 

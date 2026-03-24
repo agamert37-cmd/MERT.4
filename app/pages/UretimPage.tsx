@@ -31,8 +31,33 @@ import { getPagePermissions } from '../utils/permissions';
 import { usePageSecurity } from '../hooks/usePageSecurity';
 import { productToDb, Product } from './StokPage';
 import { SERVER_BASE_URL, SUPABASE_ANON_KEY as publicAnonKey, projectId } from '../lib/supabase-config';
+import { supabase } from '../lib/supabase';
 
 const KV_SERVER_URL = SERVER_BASE_URL;
+
+// [AJAN-2 | claude/serene-gagarin | 2026-03-24] Son düzenleyen: Claude Sonnet 4.6
+
+/** Değişen stok kalemlerini doğrudan Supabase urunler tablosuna yazar */
+async function syncStokItemsToSupabase(items: any[]) {
+  try {
+    if (items.length === 0) return;
+    const rows = items.map(item => productToDb({
+      id: item.id,
+      name: item.name || '',
+      category: item.category || 'Genel',
+      unit: item.unit || 'KG',
+      sellPrice: item.sellPrice ?? item.sell_price ?? 0,
+      currentStock: item.currentStock ?? item.current_stock ?? item.stock ?? 0,
+      minStock: item.minStock ?? item.min_stock ?? 5,
+      movements: Array.isArray(item.movements) ? item.movements : [],
+    } as any));
+    const { error } = await supabase.from('urunler').upsert(rows, { onConflict: 'id' });
+    if (error) console.warn('[UretimPage] urunler upsert hatası:', error.message);
+    else console.log('[UretimPage] urunler Supabase sync OK:', rows.length, 'kalem');
+  } catch (e: any) {
+    console.warn('[UretimPage] Supabase urunler sync exception:', e.message);
+  }
+}
 
 /** Değişen stok kalemlerini Supabase KV'ye senkronize et */
 async function syncStokItemsToKV(items: any[]) {
@@ -1342,10 +1367,13 @@ export function UretimPage() {
     if (updatedCikti && updatedCikti.id !== updatedHammadde?.id) changedItems.push(updatedCikti);
     if (changedItems.length > 0) {
       try {
-        await syncStokItemsToKV(changedItems);
-        console.log('[UretimPage] KV sync completed for', changedItems.length, 'items');
+        await Promise.all([
+          syncStokItemsToKV(changedItems),
+          syncStokItemsToSupabase(changedItems),
+        ]);
+        console.log('[UretimPage] KV+Supabase sync completed for', changedItems.length, 'items');
       } catch (e) {
-        console.error('[UretimPage] KV sync failed (data saved locally):', e);
+        console.error('[UretimPage] sync failed (data saved locally):', e);
       }
     }
 
@@ -1579,7 +1607,9 @@ export function UretimPage() {
       const updatedCikti = updatedStok.find((s: any) => s.id === newKayit.ciktiStokId);
       if (updatedCikti && updatedCikti.id !== updatedHammadde?.id) changedItems.push(updatedCikti);
       if (changedItems.length > 0) {
-        try { await syncStokItemsToKV(changedItems); } catch (e) { console.error('[UretimPage] KV sync failed:', e); }
+        try {
+          await Promise.all([syncStokItemsToKV(changedItems), syncStokItemsToSupabase(changedItems)]);
+        } catch (e) { console.error('[UretimPage] sync failed:', e); }
       }
 
       toast.success(

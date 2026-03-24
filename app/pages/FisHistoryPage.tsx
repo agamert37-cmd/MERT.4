@@ -1,10 +1,11 @@
 // [AJAN-2 | claude/serene-gagarin | 2026-03-24] Son düzenleyen: Claude Sonnet 4.6
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { FileText, Edit2, Trash2, Search, Calendar, User, DollarSign, X, Download, FileDown, Camera, Eye, Image as ImageIcon, Plus, Package, ArrowUpDown, Save, ZoomIn, Sparkles, RotateCcw, Archive, CalendarDays, ChevronDown, ChevronRight, Layers } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import * as Dialog from '@radix-ui/react-dialog';
 import { toast } from 'sonner';
 import { getFromStorage, setInStorage, StorageKey } from '../utils/storage';
+import { supabase } from '../lib/supabase';
 import { useEmployee } from '../contexts/EmployeeContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useLanguage } from '../contexts/LanguageContext';
@@ -103,15 +104,32 @@ export function FisHistoryPage() {
   // Güvenlik kontrolleri (RBAC) - merkezi utility
   const { canEdit, canDelete } = getPagePermissions(user, currentEmployee, 'fisler');
 
-  // useTableSync ile KV store senkronizasyonu
-  // BUG FIX [AJAN-2]: deleteItem artık Supabase tablosundan da siliyor (önceden sadece localStorage'dan siliyordu)
-  const { data: syncedFisler, deleteItem: deleteFisFromSupabase } = useTableSync<Fis>({
+  // useTableSync ile Supabase tablo senkronizasyonu
+  // BUG FIX [AJAN-2]: deleteItem/updateItem/addItem artık Supabase tablosunu da güncelliyor
+  const { data: syncedFisler, deleteItem: deleteFisFromSupabase, updateItem: updateFisInSupabase, addItem: addFisToSupabase } = useTableSync<Fis>({
     tableName: 'fisler',
     storageKey: StorageKey.FISLER,
     initialData: [],
     orderBy: 'date',
     orderAsc: false,
   });
+
+  // Stok ve cari güncelleme yardımcıları (Supabase direkt upsert)
+  const upsertStokToSupabase = useCallback(async (updatedStokList: any[]) => {
+    try {
+      await supabase.from('urunler').upsert(updatedStokList, { onConflict: 'id' });
+    } catch (e: any) {
+      console.warn('[FisHistory] Stok Supabase upsert hatası:', e.message);
+    }
+  }, []);
+
+  const upsertCariToSupabase = useCallback(async (updatedCariList: any[]) => {
+    try {
+      await supabase.from('cari_hesaplar').upsert(updatedCariList, { onConflict: 'id' });
+    } catch (e: any) {
+      console.warn('[FisHistory] Cari Supabase upsert hatası:', e.message);
+    }
+  }, []);
 
   const [fisler, setFisler] = useState<Fis[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
@@ -268,6 +286,7 @@ export function FisHistoryPage() {
             return { ...stock, currentStock: stock.currentStock + netReversal, movements: filteredMovements };
           });
           setInStorage(StorageKey.STOK_DATA, updatedStokList);
+          upsertStokToSupabase(updatedStokList);
         }
 
         // ─── Cari bakiyesi geri al ───────────────────────────────
@@ -293,6 +312,7 @@ export function FisHistoryPage() {
             };
           });
           setInStorage(StorageKey.CARI_DATA, updatedCariList);
+          upsertCariToSupabase(updatedCariList);
         }
 
         // ─── Silinen fişi geçmişe ekle ─────────────────────────
@@ -327,6 +347,8 @@ export function FisHistoryPage() {
     const updatedFisler = [cleanFis, ...fisler];
     setFisler(updatedFisler);
     setInStorage(StorageKey.FISLER, updatedFisler);
+    // BUG FIX [AJAN-2]: Supabase tablosuna da geri ekle
+    addFisToSupabase(cleanFis as Fis).catch(e => console.warn('[FisHistory] Supabase restore hatası:', e));
 
     const updatedDeleted = deletedFisler.filter(f => f.id !== id);
     setDeletedFisler(updatedDeleted);
@@ -495,6 +517,7 @@ export function FisHistoryPage() {
         return { ...stock, currentStock: stock.currentStock + delta };
       });
       setInStorage(StorageKey.STOK_DATA, updatedStokList);
+      upsertStokToSupabase(updatedStokList);
     }
 
     // ─── Cari bakiyesi delta güncelle ─────────────────────────
@@ -514,6 +537,7 @@ export function FisHistoryPage() {
           return { ...cari, balance: cari.balance + balanceDelta };
         });
         setInStorage(StorageKey.CARI_DATA, updatedCariList);
+        upsertCariToSupabase(updatedCariList);
       }
     }
 
@@ -538,6 +562,8 @@ export function FisHistoryPage() {
     const updated = fisler.map(f => f.id === selectedFis.id ? updatedFis : f);
     setFisler(updated);
     setInStorage(StorageKey.FISLER, updated);
+    // BUG FIX [AJAN-2]: Supabase tablosunu da güncelle
+    updateFisInSupabase(updatedFis.id, updatedFis).catch(e => console.warn('[FisHistory] Supabase update hatası:', e));
     logActivity('custom', 'Fiş güncellendi', { employeeName: user?.name, page: 'FisHistory' });
     toast.success('Fis basariyla guncellendi');
     setIsEditModalOpen(false);
