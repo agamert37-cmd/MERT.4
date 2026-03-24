@@ -1,3 +1,4 @@
+// [AJAN-2 | claude/serene-gagarin | 2026-03-25] Son düzenleyen: Claude Sonnet 4.6
 import React, { useState, useMemo, useEffect } from 'react';
 import { getFromStorage, setInStorage, StorageKey } from '../utils/storage';
 import { useAuth } from '../contexts/AuthContext';
@@ -28,6 +29,7 @@ import { toast } from 'sonner';
 import * as Dialog from '@radix-ui/react-dialog';
 import * as AlertDialog from '@radix-ui/react-alert-dialog';
 import { generateGunSonuPDF, type GunSonuPDFData } from '../utils/reportGenerator';
+import { kvGet, kvSet } from '../lib/supabase-kv';
 
 interface Transaction {
   id: string;
@@ -70,6 +72,21 @@ export function GunSonuPage() {
   });
   const [isCloseDialogOpen, setIsCloseDialogOpen] = useState(false);
   const [isReopenDialogOpen, setIsReopenDialogOpen] = useState(false);
+
+  // BUG FIX [AJAN-2]: Mount'ta KV'den gün sonu durumunu yükle — başka cihazdaki kapanış görünsün
+  useEffect(() => {
+    const local = localStorage.getItem(GUN_SONU_KEY);
+    if (!local) {
+      kvGet<{ closed: boolean }>(`gun_sonu_${todayISO}`).then(remote => {
+        if (remote && remote.closed === true) {
+          setIsDayClosed(true);
+          localStorage.setItem(GUN_SONU_KEY, JSON.stringify(remote));
+          window.dispatchEvent(new Event('storage_update'));
+        }
+      }).catch(() => {});
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Storage'dan veri yenileme counter'ı
   const [refreshCounter, setRefreshCounter] = useState(0);
@@ -308,11 +325,14 @@ export function GunSonuPage() {
     }
     setIsDayClosed(true);
     // localStorage'a kaydet (tarih bazlı)
-    localStorage.setItem(GUN_SONU_KEY, JSON.stringify({
+    const gunSonuRecord = {
       closed: true,
       closedAt: new Date().toISOString(),
       closedBy: currentEmployee?.name || 'Bilinmeyen',
-    }));
+    };
+    localStorage.setItem(GUN_SONU_KEY, JSON.stringify(gunSonuRecord));
+    // BUG FIX [AJAN-2]: Gün sonu durumu KV store'a da yaz — çapraz cihaz senkronu
+    kvSet(`gun_sonu_${todayISO}`, gunSonuRecord).catch(e => console.error('[GunSonu] kv sync:', e));
     // Diğer sayfaları bilgilendir (SalesPage, KasaPage)
     window.dispatchEvent(new Event('storage_update'));
     setIsCloseDialogOpen(false);
@@ -330,6 +350,9 @@ export function GunSonuPage() {
     setIsDayClosed(false);
     // localStorage'dan kaldır
     localStorage.removeItem(GUN_SONU_KEY);
+    // BUG FIX [AJAN-2]: Gün sonu açıldı — KV store'a da yaz
+    kvSet(`gun_sonu_${todayISO}`, { closed: false, reopenedAt: new Date().toISOString(), reopenedBy: currentEmployee?.name || 'Bilinmeyen' })
+      .catch(e => console.error('[GunSonu] kv sync:', e));
     // Diğer sayfaları bilgilendir (SalesPage, KasaPage)
     window.dispatchEvent(new Event('storage_update'));
     setIsReopenDialogOpen(false);

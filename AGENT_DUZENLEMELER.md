@@ -53,6 +53,8 @@ Her düzenlenen dosyanın **en üstüne** şu yorum satırı eklenir:
 | 22 | `app/pages/PersonelPage.tsx` | 2026-03-25 | FIX: `handleApproveRequest`'te `updateItem` eklendi — personel izin değişikliği Supabase'e yazılıyordu. `kvSet('role_requests')` eklendi — rol talepleri çapraz cihaz senkronize ediliyor. `handleRejectRequest`'te de aynı KV sync. |
 | 23 | `app/pages/StokPage.tsx` | 2026-03-25 | FIX: `handleAddCategory`, `handleEditCategory`, `handleDeleteCategory`'de `kvSet('stok_categories')` eklendi. Mount'ta KV'den kategori yükleme `useEffect` eklendi — mobil'de kategoriler görünmüyordu. |
 | 24 | `app/pages/KasaPage.tsx` | 2026-03-25 | FIX: POS cihazı ekle/sil işlemlerinde `kvSet('pos_devices')` eklendi. Mount'ta KV'den POS cihazları yükleme `useEffect` eklendi — mobil'de POS listesi görünmüyordu. |
+| 25 | `app/pages/GunSonuPage.tsx` | 2026-03-25 | KRİTİK FIX: Gün sonu kapanış/açılış durumu `kvSet('gun_sonu_{tarih}')` ile KV store'a yazılıyor. Mount'ta KV'den durum yükleniyor — başka cihazda kapatılan gün sonu artık tüm cihazlarda görünüyor. |
+| 26 | `app/pages/CariPage.tsx` | 2026-03-25 | FIX: `saveRegions` ve `saveCategories` fonksiyonlarına `kvSet` eklendi. Mount'ta KV'den bölge/kategori yükleme `useEffect` eklendi — çapraz cihaz metadata sync. |
 
 ---
 
