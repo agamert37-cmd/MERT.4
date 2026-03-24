@@ -1,3 +1,4 @@
+// [AJAN-2 | claude/serene-gagarin | 2026-03-25] Son düzenleyen: Claude Sonnet 4.6
 import React, { useState, useRef, useEffect } from 'react';
 import OpenAI from 'openai';
 import { Settings, Database, Sparkles, Save, Trash2, Eye, EyeOff, CheckCircle, XCircle, Shield, ExternalLink, Building2, Phone, MapPin, FileText, Hash, Monitor, Upload, Loader2, RefreshCw, X, Plus, History, ShieldCheck, Zap, Wrench, Star } from 'lucide-react';
@@ -16,6 +17,7 @@ import { logActivity } from '../utils/activityLogger';
 import { useModuleBus } from '../hooks/useModuleBus';
 import { getPagePermissions } from '../utils/permissions';
 import { LocalRepoPanel } from '../components/LocalRepoPanel';
+import { kvSet } from '../lib/supabase-kv';
 import { CHANGELOG, type ChangeType } from '../data/changelog';
 
 export interface CompanyInfo {
@@ -116,7 +118,10 @@ export function SettingsPage() {
   const handleSaveCompanyInfo = () => {
     if (!canEdit) { toast.error('Ayarları değiştirme yetkiniz yok.'); logActivity('security_alert', 'Yetkisiz Şirket Bilgisi Değişikliği', { level: 'high', employeeName: user?.name }); return; }
     const existingSettings = getFromStorage<any>(StorageKey.SYSTEM_SETTINGS) || {};
-    setInStorage(StorageKey.SYSTEM_SETTINGS, { ...existingSettings, companyInfo });
+    const updatedSettings = { ...existingSettings, companyInfo };
+    setInStorage(StorageKey.SYSTEM_SETTINGS, updatedSettings);
+    // BUG FIX [AJAN-2]: Şirket bilgileri KV store'a da yaz — çapraz cihaz sync
+    kvSet('system_settings', updatedSettings).catch(e => console.error('[Settings] kv sync:', e));
     logActivity('settings_change', 'Şirket bilgileri güncellendi', { employeeName: user?.name, page: 'Ayarlar', description: `Şirket bilgileri güncellendi: ${companyInfo.companyName}` });
     toast.success('Şirket bilgileri kaydedildi!');
   };
@@ -143,7 +148,9 @@ export function SettingsPage() {
       const newImg: BrandingImage = { url: data.url, fileName: data.fileName, title: newImageTitle, subtitle: newImageSubtitle };
       const updated = [...brandingImages, newImg]; setBrandingImages(updated);
       const existingSettings = getFromStorage<any>(StorageKey.SYSTEM_SETTINGS) || {};
-      setInStorage(StorageKey.SYSTEM_SETTINGS, { ...existingSettings, loginBranding: { images: updated } });
+      const updatedBranding = { ...existingSettings, loginBranding: { images: updated } };
+      setInStorage(StorageKey.SYSTEM_SETTINGS, updatedBranding);
+      kvSet('system_settings', updatedBranding).catch(() => {});
       setNewImageTitle(''); setNewImageSubtitle(''); setSelectedFile(null); setUploadPreview(null);
       if (fileInputRef.current) fileInputRef.current.value = '';
       toast.success('Görsel yüklendi!');
@@ -157,7 +164,9 @@ export function SettingsPage() {
     }
     const updated = brandingImages.filter((_, i) => i !== index); setBrandingImages(updated);
     const existingSettings = getFromStorage<any>(StorageKey.SYSTEM_SETTINGS) || {};
-    setInStorage(StorageKey.SYSTEM_SETTINGS, { ...existingSettings, loginBranding: { images: updated } });
+    const updatedBranding = { ...existingSettings, loginBranding: { images: updated } };
+    setInStorage(StorageKey.SYSTEM_SETTINGS, updatedBranding);
+    kvSet('system_settings', updatedBranding).catch(() => {});
     toast.success('Görsel kaldırıldı!');
   };
 
@@ -172,7 +181,9 @@ export function SettingsPage() {
       const updatedImages = brandingImages.map(img => (img.fileName && data.urls[img.fileName] ? { ...img, url: data.urls[img.fileName] } : img));
       setBrandingImages(updatedImages);
       const existingSettings = getFromStorage<any>(StorageKey.SYSTEM_SETTINGS) || {};
-      setInStorage(StorageKey.SYSTEM_SETTINGS, { ...existingSettings, loginBranding: { images: updatedImages } });
+      const updatedBranding = { ...existingSettings, loginBranding: { images: updatedImages } };
+      setInStorage(StorageKey.SYSTEM_SETTINGS, updatedBranding);
+      kvSet('system_settings', updatedBranding).catch(() => {});
       toast.success(`URL'ler yenilendi!`);
     } catch (err: any) { toast.error(`URL yenileme hatası: ${err.message}`); } finally { setRefreshingUrls(false); }
   };

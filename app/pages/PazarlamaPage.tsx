@@ -1,3 +1,4 @@
+// [AJAN-2 | claude/serene-gagarin | 2026-03-25] Son düzenleyen: Claude Sonnet 4.6
 /**
  * Pazarlama Yonetim Paneli - ISLEYEN ET
  * Login sayfasindaki tum icerik kutucuklarini buradan yonetin.
@@ -21,6 +22,7 @@ import {
 import { motion, AnimatePresence } from 'motion/react';
 import { toast } from 'sonner';
 import { getFromStorage, setInStorage, StorageKey } from '../utils/storage';
+import { kvSet } from '../lib/supabase-kv';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useEmployee } from '../contexts/EmployeeContext';
@@ -864,13 +866,17 @@ export function PazarlamaPage() {
       return;
     }
     setInStorage(StorageKey.PAZARLAMA_CONTENT, content);
-    setInStorage(StorageKey.LOGIN_CONTENT, {
+    const loginContent = {
       announcements: content.announcements,
       companyHistory: content.companyAbout,
       stats: content.stats.map(s => ({ label: s.label, value: s.value })),
       products: content.products,
       campaigns: content.campaigns,
-    });
+    };
+    setInStorage(StorageKey.LOGIN_CONTENT, loginContent);
+    // BUG FIX [AJAN-2]: Pazarlama içeriğini KV store'a da yaz — çapraz cihaz sync
+    kvSet('pazarlama_content', content).catch(e => console.error('[Pazarlama] kv sync:', e));
+    kvSet('login_content', loginContent).catch(e => console.error('[Pazarlama] login_content kv sync:', e));
     setHasChanges(false);
     setLastSaved(new Date().toLocaleTimeString('tr-TR'));
     sec.auditLog('pazarlama_save', 'content', 'Pazarlama içeriği kaydedildi');

@@ -55,6 +55,8 @@ Her düzenlenen dosyanın **en üstüne** şu yorum satırı eklenir:
 | 24 | `app/pages/KasaPage.tsx` | 2026-03-25 | FIX: POS cihazı ekle/sil işlemlerinde `kvSet('pos_devices')` eklendi. Mount'ta KV'den POS cihazları yükleme `useEffect` eklendi — mobil'de POS listesi görünmüyordu. |
 | 25 | `app/pages/GunSonuPage.tsx` | 2026-03-25 | KRİTİK FIX: Gün sonu kapanış/açılış durumu `kvSet('gun_sonu_{tarih}')` ile KV store'a yazılıyor. Mount'ta KV'den durum yükleniyor — başka cihazda kapatılan gün sonu artık tüm cihazlarda görünüyor. |
 | 26 | `app/pages/CariPage.tsx` | 2026-03-25 | FIX: `saveRegions` ve `saveCategories` fonksiyonlarına `kvSet` eklendi. Mount'ta KV'den bölge/kategori yükleme `useEffect` eklendi — çapraz cihaz metadata sync. |
+| 27 | `app/pages/PazarlamaPage.tsx` | 2026-03-25 | FIX: `handleSave`'e `kvSet('pazarlama_content')` ve `kvSet('login_content')` eklendi — login sayfası içeriği artık tüm cihazlarda senkronize. |
+| 28 | `app/pages/SettingsPage.tsx` | 2026-03-25 | FIX: `handleSaveCompanyInfo`, `handleUploadAndAdd`, `handleRemoveBrandingImage`, `handleRefreshBrandingUrls`'e `kvSet('system_settings')` eklendi — şirket bilgisi ve marka görselleri çapraz cihaz senkronize. |
 
 ---
 
