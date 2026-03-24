@@ -57,6 +57,8 @@ Her düzenlenen dosyanın **en üstüne** şu yorum satırı eklenir:
 | 26 | `app/pages/CariPage.tsx` | 2026-03-25 | FIX: `saveRegions` ve `saveCategories` fonksiyonlarına `kvSet` eklendi. Mount'ta KV'den bölge/kategori yükleme `useEffect` eklendi — çapraz cihaz metadata sync. |
 | 27 | `app/pages/PazarlamaPage.tsx` | 2026-03-25 | FIX: `handleSave`'e `kvSet('pazarlama_content')` ve `kvSet('login_content')` eklendi — login sayfası içeriği artık tüm cihazlarda senkronize. |
 | 28 | `app/pages/SettingsPage.tsx` | 2026-03-25 | FIX: `handleSaveCompanyInfo`, `handleUploadAndAdd`, `handleRemoveBrandingImage`, `handleRefreshBrandingUrls`'e `kvSet('system_settings')` eklendi — şirket bilgisi ve marka görselleri çapraz cihaz senkronize. |
+| 29 | `app/pages/PazarlamaPage.tsx` | 2026-03-25 | FIX: Mount `useEffect`'e KV fallback eklendi — localStorage boşsa `kvGet('pazarlama_content')` ile yükleniyor. |
+| 30 | `app/pages/SettingsPage.tsx` | 2026-03-25 | FIX: Mount `useEffect`'e KV fallback eklendi — localStorage boşsa `kvGet('system_settings')` ile şirket bilgisi ve görseller yükleniyor. |
 
 ---
 
