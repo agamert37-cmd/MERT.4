@@ -1,3 +1,4 @@
+// [AJAN-2 | claude/serene-gagarin | 2026-03-25] Son düzenleyen: Claude Sonnet 4.6
 import React, { useState, useMemo } from 'react';
 import { UserCog, Shield, Clock, MapPin, Phone, Mail, Plus, Trash2, Activity, MousePointerClick, History, Eye, EyeOff, Edit3, Lock, Key, Save, X, Search, CheckCircle2, LogOut, WifiOff } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
@@ -391,12 +392,13 @@ export function PersonelPage() {
                 at: new Date().toISOString(),
               },
             });
-            // Personel durumunu offline olarak işaretle
+            // Personel durumunu offline olarak işaretle — [AJAN-2]: updateItem Supabase'i de günceller
             const personnel = getFromStorage<any[]>(StorageKey.PERSONEL_DATA) || [];
             const updated = personnel.map(p =>
               p.id === personId ? { ...p, status: 'offline' } : p
             );
             setInStorage(StorageKey.PERSONEL_DATA, updated);
+            updateItem(personId, { status: 'offline' }).catch(e => console.warn('[PersonelPage] status update hatası:', e));
             logActivity('security_alert', 'Uzaktan oturum kapatma tetiklendi', {
               employeeName: user?.name,
               level: 'high',

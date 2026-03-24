@@ -45,6 +45,9 @@ Her düzenlenen dosyanın **en üstüne** şu yorum satırı eklenir:
 | 14 | `app/lib/dual-supabase.ts` | 2026-03-25 | KRİTİK FIX: `createFullTableBackup()` ve `restoreFromTableBackup()` eklendi — 15 gerçek Supabase tablosundan (fisler, urunler, cari vb.) yedek alır. Zamanlayıcı artık KV değil gerçek tabloları yedekliyor. |
 | 15 | `app/pages/YedeklerPage.tsx` | 2026-03-25 | GÜNCELLEŞTİRME: Yedek butonu önce Edge Function dener, başarısız olursa `createFullTableBackup()` çalıştırır. "Yerel Yedek İndir" artık localStorage + Supabase tablolarını birlikte indirir. Tablo yedeklerine Geri Yükle butonu eklendi. |
 | 16 | `app/pages/UretimPage.tsx` | 2026-03-25 | UI FIX: `StokSearchSelect` ve `CiktiUrunSelect` dropdown'ları `createPortal` + `position:fixed` ile yeniden yazıldı. `.card-shine { overflow:hidden }` CSS'i dropdown'ı kesiyordu. Tüm `overflow:hidden` üst container'lardan bağımsız, viewport'a göre konumlanıyor. |
+| 17 | `app/pages/CeklerPage.tsx` | 2026-03-25 | KRİTİK FIX: `saveCek()` fonksiyonuna `supabase.from('cekler').upsert()` eklendi. `handleDelete`'e `deleteCekFromSupabase()` eklendi. Tüm çek kayıt/silme işlemleri artık Supabase cekler tablosunu güncelliyor. |
+| 18 | `app/pages/PersonelPage.tsx` | 2026-03-25 | FIX: Uzaktan oturum kapatmada `setInStorage` yanına `updateItem(personId, { status: 'offline' })` eklendi — Supabase personeller tablosu da güncelleniyor. |
+| 19 | `app/pages/CariDetailPage.tsx` | 2026-03-25 | FIX: `updateFisInStorage()` fatura durum güncellemesinde `supabase.from('fisler').update()` eklendi — fatura kesildi/iptal gibi değişiklikler Supabase'e de yansıyor. |
 
 ---
 
