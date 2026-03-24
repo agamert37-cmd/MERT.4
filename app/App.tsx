@@ -1,5 +1,6 @@
 // [AJAN-2 | claude/serene-gagarin | 2026-03-24] Son düzenleyen: Claude Sonnet 4.6
 import { RouterProvider } from 'react-router';
+import { GlobalTableSyncProvider } from './contexts/GlobalTableSyncContext';
 import { router } from './routes';
 import { Toaster } from 'sonner';
 import { useEffect, useRef } from 'react';
@@ -159,7 +160,10 @@ export default function App() {
     <div className="dark min-h-screen bg-background">
       {/* Veritabanı otomatik kurulum banner'ı — tablolar eksikse otomatik oluşturur */}
       <DbSetupBanner />
-      <RouterProvider router={router} />
+      {/* Tüm Supabase tablolarını app seviyesinde senkronize et (mobil-PC senkronu) */}
+      <GlobalTableSyncProvider>
+        <RouterProvider router={router} />
+      </GlobalTableSyncProvider>
       <Toaster
         position="top-right"
         toastOptions={{

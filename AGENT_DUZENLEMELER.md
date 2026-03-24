@@ -38,6 +38,9 @@ Her düzenlenen dosyanın **en üstüne** şu yorum satırı eklenir:
 | 7 | `app/utils/supabase-storage.ts` | 2026-03-24 | GÜÇLENDİRME: Başlangıçta kalan kuyruğu 3s sonra auto-flush. `online` event'e `flushWrites()` eklendi. `MIN_RESYNC_INTERVAL_MS` 30s→15s. Heartbeat 5dk→2dk. |
 | 8 | `app/lib/dual-supabase.ts` | 2026-03-24 | GÜÇLENDİRME: `createCloudDirectBackup` + `startCloudDirectBackupScheduler` eklendi — Edge Function olmadan doğrudan Supabase client ile buluta yedek alır. |
 | 9 | `app/App.tsx` | 2026-03-24 | GÜÇLENDİRME: `startCloudDirectBackupScheduler(24)` entegre edildi — yapılandırma gerektirmeden her 24s otomatik yedek. |
+| 10 | `app/contexts/GlobalTableSyncContext.tsx` | 2026-03-24 | YENİ DOSYA: App geneli tablo senkronizasyon provider'ı oluşturuldu. Tüm kritik Supabase tablolarını (fisler, urunler, cari_hesaplar, kasa_islemleri, personeller, bankalar, cekler, araclar, arac_shifts, arac_km_logs, uretim_profilleri, uretim_kayitlari, faturalar, fatura_stok, tahsilatlar) localStorage'a yükler. Mobil'de DashboardPage verilerin görünmemesi sorunu çözüldü. |
+| 11 | `app/App.tsx` | 2026-03-24 | ENTEGRASYON: `GlobalTableSyncProvider` import edildi ve `RouterProvider` sarıldı — hangi sayfada olunursa olsun tüm tablolar senkronize edilir. |
+| 12 | `app/pages/FisHistoryPage.tsx` | 2026-03-24 | BUG FIX: `handleDelete` artık `setInStorage(StorageKey.FISLER, updated)` yerine `deleteFisFromSupabase(id)` çağırıyor — silinen fişler Supabase tablosundan da kaldırılıyor, mobil tekrar silinmiş kayıtları görmüyor. |
 
 ---
 

@@ -1,3 +1,4 @@
+// [AJAN-2 | claude/serene-gagarin | 2026-03-24] Son düzenleyen: Claude Sonnet 4.6
 import React, { useState, useEffect, useMemo } from 'react';
 import { FileText, Edit2, Trash2, Search, Calendar, User, DollarSign, X, Download, FileDown, Camera, Eye, Image as ImageIcon, Plus, Package, ArrowUpDown, Save, ZoomIn, Sparkles, RotateCcw, Archive, CalendarDays, ChevronDown, ChevronRight, Layers } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
@@ -103,7 +104,8 @@ export function FisHistoryPage() {
   const { canEdit, canDelete } = getPagePermissions(user, currentEmployee, 'fisler');
 
   // useTableSync ile KV store senkronizasyonu
-  const { data: syncedFisler } = useTableSync<Fis>({
+  // BUG FIX [AJAN-2]: deleteItem artık Supabase tablosundan da siliyor (önceden sadece localStorage'dan siliyordu)
+  const { data: syncedFisler, deleteItem: deleteFisFromSupabase } = useTableSync<Fis>({
     tableName: 'fisler',
     storageKey: StorageKey.FISLER,
     initialData: [],
@@ -306,7 +308,8 @@ export function FisHistoryPage() {
 
       const updated = fisler.filter(f => f.id !== id);
       setFisler(updated);
-      setInStorage(StorageKey.FISLER, updated);
+      // BUG FIX [AJAN-2]: setInStorage yerine deleteItem kullan — Supabase tablosundan da siliyor
+      deleteFisFromSupabase(id).catch(e => console.warn('[FisHistory] Supabase delete hatası:', e));
 
       emit('fis:deleted', { fisId: id, mode: fisToDelete?.mode });
       logActivity('custom', 'Fiş silindi (çöp kutusuna)', { employeeName: user?.name, page: 'FisHistory' });
