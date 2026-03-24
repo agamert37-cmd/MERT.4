@@ -1,4 +1,4 @@
-// [AJAN-2 | claude/serene-gagarin | 2026-03-24] Son düzenleyen: Claude Sonnet 4.6
+// [AJAN-2 | claude/serene-gagarin | 2026-03-25] Son düzenleyen: Claude Sonnet 4.6
 /**
  * useTableSync — Doğrudan Supabase Tablo Senkronizasyonu
  *
@@ -20,6 +20,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 import { SUPABASE_ANON_KEY, SERVER_BASE_URL } from '../lib/supabase-config';
+import { dualWrite, replayWAL } from '../lib/active-client';
 
 const SERVER_URL = SERVER_BASE_URL;
 const STORAGE_PREFIX = 'isleyen_et_';
@@ -356,24 +357,32 @@ export function useTableSync<T extends { id: string }>(
     // ── Upsert işlemleri ─────────────────────────────────────────────────────
     if (upsertOps.length > 0) {
       const rows = upsertOps.map(o => o.row);
+      let cloudOk = true;
       try {
         await tableUpsert(tableName, rows);
       } catch (directErr: any) {
         // Doğrudan yazma başarısız → server KV fallback
+        cloudOk = false;
         console.warn(`[WriteQueue:${tableName}] Doğrudan upsert başarısız, server fallback:`, directErr.message);
         await serverUpsertFallback(tableName, rows);
       }
+      // Dual-write: yerel node'a da yaz (cloud başarısızsa WAL'a ekle)
+      dualWrite(tableName, rows, 'upsert', cloudOk).catch(() => {});
       upsertOps.forEach(op => pendingWriteIds.current.delete(op.id));
     }
 
     // ── Delete işlemleri ─────────────────────────────────────────────────────
     for (const op of deleteOps) {
+      let cloudOk = true;
       try {
         await tableDelete(tableName, op.id);
       } catch (directErr: any) {
+        cloudOk = false;
         console.warn(`[WriteQueue:${tableName}] Doğrudan delete başarısız, server fallback:`, directErr.message);
         await serverDeleteFallback(tableName, op.id);
       }
+      // Dual-write: yerel node'a da sil (cloud başarısızsa WAL'a ekle)
+      dualWrite(tableName, [{ id: op.id }], 'delete', cloudOk).catch(() => {});
       pendingWriteIds.current.delete(op.id);
     }
   };
@@ -590,6 +599,8 @@ export function useTableSync<T extends { id: string }>(
     const onOnline = () => {
       clearConnectionCooldown();
       writeQueueRef.current?.flush().catch(() => {});
+      // WAL'daki başarısız cloud yazmalarını cloud'a tekrarla
+      replayWAL(supabase).catch(() => {});
       fetchData().catch(() => {});
     };
     window.addEventListener('online', onOnline);

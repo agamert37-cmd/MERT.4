@@ -6,14 +6,19 @@
  * Hangisinin online olduğunu gösterir.
  * Aktif failover durumunu bildirir.
  * İki PC de açıksa her ikisine de yedek alır.
+ * Bootstrap: Yeni node'a cloud verisi yükler.
+ * WAL: Bekleyen offline yazma sayısını gösterir.
+ * Auto-sync: Periyodik cloud→node yedekleme.
+ * Node→Cloud: Failover sonrası yerel veriden cloud'u güncelle.
  */
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   Monitor, Laptop, Cloud, Wifi, WifiOff, RefreshCcw,
-  CheckCircle2, AlertTriangle, ArrowRightLeft, HardDrive,
-  Activity, Zap, X, ChevronDown, ChevronUp, Shield
+  AlertTriangle, ArrowRightLeft, HardDrive,
+  Activity, Zap, X, ChevronDown, ChevronUp, Shield,
+  Download, Upload, Clock, ToggleLeft, ToggleRight, Database
 } from 'lucide-react';
 import { toast } from 'sonner';
 import {
@@ -21,6 +26,13 @@ import {
   getFailoverState, setFailoverState, backupToAllNodes,
   getLocalNodeId, type NodeInfo, type FailoverState
 } from '../lib/node-registry';
+import {
+  bootstrapNode, syncNodeToCloud,
+  setActiveLocalNode,
+  getWALCount, walClear,
+  getAutoSyncConfig, saveAutoSyncConfig, startAutoNodeSync,
+} from '../lib/active-client';
+import { supabase } from '../lib/supabase';
 
 const REAL_TABLES = [
   'fisler', 'urunler', 'cari_hesaplar', 'kasa_islemleri', 'personeller',
@@ -63,6 +75,7 @@ export function NodeStatusBadge() {
   const [nodes, setNodes] = useState<NodeInfo[]>([]);
   const [cloudOnline, setCloudOnline] = useState(true);
   const [failover, setFailover] = useState<FailoverState | null>(getFailoverState());
+  const [walCount, setWalCount] = useState(0);
 
   useEffect(() => {
     const refresh = async () => {
@@ -73,6 +86,7 @@ export function NodeStatusBadge() {
       setNodes(discovered);
       setCloudOnline(cloudOk);
       setFailover(getFailoverState());
+      setWalCount(getWALCount());
     };
     refresh();
     const interval = setInterval(refresh, 30_000);
@@ -89,6 +103,9 @@ export function NodeStatusBadge() {
       <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-orange-500/10 border border-orange-500/30 text-xs text-orange-400">
         <ArrowRightLeft className="w-3 h-3" />
         <span>Yerel Sunucu</span>
+        {walCount > 0 && (
+          <span className="ml-1 px-1 rounded bg-orange-500/20 text-orange-300">{walCount} WAL</span>
+        )}
       </div>
     );
   }
@@ -98,6 +115,18 @@ export function NodeStatusBadge() {
       <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-red-500/10 border border-red-500/30 text-xs text-red-400">
         <WifiOff className="w-3 h-3" />
         <span>Cloud Offline</span>
+        {walCount > 0 && (
+          <span className="ml-1 px-1 rounded bg-red-500/20 text-red-300">{walCount} WAL</span>
+        )}
+      </div>
+    );
+  }
+
+  if (walCount > 0) {
+    return (
+      <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-yellow-500/10 border border-yellow-500/30 text-xs text-yellow-400">
+        <Database className="w-3 h-3" />
+        <span>{walCount} WAL</span>
       </div>
     );
   }
@@ -122,7 +151,34 @@ export function NodeStatusPanel() {
   const [backingUp, setBackingUp] = useState(false);
   const [expanded, setExpanded] = useState(true);
   const [backupResults, setBackupResults] = useState<{ nodeId: string; ok: number; fail: number }[] | null>(null);
+  const [walCount, setWalCount] = useState(getWALCount());
+  const [autoSyncEnabled, setAutoSyncEnabled] = useState(() => getAutoSyncConfig().enabled);
+  const [bootstrappingNodeId, setBootstrappingNodeId] = useState<string | null>(null);
+  const [bootstrapProgress, setBootstrapProgress] = useState(0);
+  const [syncingNodeId, setSyncingNodeId] = useState<string | null>(null);
   const localNodeId = getLocalNodeId();
+
+  // WAL sayısını periyodik güncelle
+  useEffect(() => {
+    const tick = () => setWalCount(getWALCount());
+    tick();
+    const interval = setInterval(tick, 5_000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Auto-sync toggle
+  const handleAutoSyncToggle = useCallback(() => {
+    const cfg = getAutoSyncConfig();
+    const newEnabled = !cfg.enabled;
+    saveAutoSyncConfig({ ...cfg, enabled: newEnabled });
+    setAutoSyncEnabled(newEnabled);
+    if (newEnabled) {
+      startAutoNodeSync(supabase);
+      toast.success(`Otomatik senkron aktif — her ${cfg.intervalHours}s`);
+    } else {
+      toast.info('Otomatik senkron devre dışı');
+    }
+  }, []);
 
   const refresh = useCallback(async (deepCheck = false) => {
     setChecking(true);
@@ -151,12 +207,15 @@ export function NodeStatusPanel() {
           };
           setFailoverState(fs);
           setFailoverLocal(fs);
+          // Dual-write aktif node'u güncelle
+          setActiveLocalNode(bestNode);
           toast.warning(`⚡ Failover: ${bestNode.name} (${bestNode.platform}) aktif`, { duration: 5000 });
         }
       } else if (cloudOk && currentFailover) {
-        // Cloud geri geldi
+        // Cloud geri geldi — failover'ı kapat
         setFailoverState(null);
         setFailoverLocal(null);
+        setActiveLocalNode(null);
         toast.success('☁️ Cloud bağlantısı geri geldi', { duration: 3000 });
       }
     } finally {
@@ -196,15 +255,68 @@ export function NodeStatusPanel() {
     }
   };
 
+  const handleBootstrapNode = async (node: NodeInfo) => {
+    if (!node.localUrl || !node.anonKey) {
+      toast.error('Node URL veya anonKey eksik');
+      return;
+    }
+    setBootstrappingNodeId(node.id);
+    setBootstrapProgress(0);
+    toast.info(`${node.name} bootstrap başlıyor — ${REAL_TABLES.length} tablo yükleniyor...`);
+    try {
+      const result = await bootstrapNode(node, supabase, (pct, tableName) => {
+        setBootstrapProgress(pct);
+        if (pct % 20 === 0 && pct > 0) {
+          console.log(`[Bootstrap] %${pct} — ${tableName}`);
+        }
+      });
+      toast.success(
+        `Bootstrap tamamlandı: ${result.ok}/${REAL_TABLES.length} tablo, ${result.totalRows} kayıt (${(result.durationMs / 1000).toFixed(1)}s)`
+      );
+    } catch (e: any) {
+      toast.error(`Bootstrap hatası: ${e.message}`);
+    } finally {
+      setBootstrappingNodeId(null);
+      setBootstrapProgress(0);
+    }
+  };
+
+  const handleSyncNodeToCloud = async (node: NodeInfo) => {
+    if (!node.localUrl || !node.anonKey) {
+      toast.error('Node URL veya anonKey eksik');
+      return;
+    }
+    setSyncingNodeId(node.id);
+    toast.info(`${node.name} → Cloud senkronizasyon başlıyor...`);
+    try {
+      const result = await syncNodeToCloud(node, supabase, (pct) => {
+        if (pct % 25 === 0) console.log(`[NodeToCloud] %${pct}`);
+      });
+      toast.success(`Node→Cloud tamamlandı: ${result.ok} tablo, ${result.totalRows} kayıt`);
+    } catch (e: any) {
+      toast.error(`Node→Cloud hatası: ${e.message}`);
+    } finally {
+      setSyncingNodeId(null);
+    }
+  };
+
   const handleClearFailover = () => {
     setFailoverState(null);
     setFailoverLocal(null);
+    setActiveLocalNode(null);
     toast.info('Failover temizlendi — cloud bağlantısı deneniyor');
     refresh(true);
   };
 
+  const handleClearWAL = () => {
+    walClear();
+    setWalCount(0);
+    toast.info('WAL temizlendi');
+  };
+
   const onlineCount = nodes.filter(n => n.online).length;
   const totalActive = (cloud.online ? 1 : 0) + onlineCount;
+  const autoSyncCfg = getAutoSyncConfig();
 
   return (
     <div className="rounded-2xl border border-border bg-card overflow-hidden">
@@ -222,6 +334,7 @@ export function NodeStatusPanel() {
             <div className="text-xs text-muted-foreground">
               {totalActive} aktif sunucu
               {failover ? ' — Yerel sunucu aktif' : ''}
+              {walCount > 0 ? ` · ${walCount} WAL bekliyor` : ''}
             </div>
           </div>
         </div>
@@ -229,6 +342,11 @@ export function NodeStatusPanel() {
           {failover && (
             <span className="text-xs px-2 py-0.5 rounded-full bg-orange-500/20 text-orange-400 border border-orange-500/30">
               FAILOVER
+            </span>
+          )}
+          {walCount > 0 && (
+            <span className="text-xs px-2 py-0.5 rounded-full bg-yellow-500/20 text-yellow-400 border border-yellow-500/30">
+              {walCount} WAL
             </span>
           )}
           {expanded ? <ChevronUp className="w-4 h-4 text-muted-foreground" /> : <ChevronDown className="w-4 h-4 text-muted-foreground" />}
@@ -263,6 +381,28 @@ export function NodeStatusPanel() {
                 </div>
               )}
 
+              {/* WAL uyarısı */}
+              {walCount > 0 && (
+                <div className="flex items-center gap-3 p-3 rounded-xl bg-yellow-500/10 border border-yellow-500/20">
+                  <Database className="w-4 h-4 text-yellow-400 flex-shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-medium text-yellow-300">
+                      {walCount} bekleyen yazma (WAL)
+                    </div>
+                    <div className="text-xs text-yellow-400/70 mt-0.5">
+                      Cloud bağlandığında otomatik gönderilecek
+                    </div>
+                  </div>
+                  <button
+                    onClick={handleClearWAL}
+                    className="p-1 rounded-lg hover:bg-yellow-500/20 text-yellow-400 transition-colors"
+                    title="WAL'ı temizle (yazmaları iptal et)"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              )}
+
               {/* Cloud durumu */}
               <NodeRow
                 icon={<Cloud className="w-4 h-4" />}
@@ -283,18 +423,60 @@ export function NodeStatusPanel() {
               )}
 
               {nodes.map((node) => (
-                <NodeRow
-                  key={node.id}
-                  icon={platformIcon(node.platform)}
-                  name={node.name}
-                  subtitle={`${platformLabel(node.platform)} — ${node.localUrl || 'URL yapılandırılmamış'}`}
-                  online={!!node.online}
-                  latencyMs={node.latencyMs}
-                  isActive={failover?.activeNodeId === node.id}
-                  isCurrent={node.id === localNodeId}
-                  lastSeen={node.lastSeen}
-                  badge={node.id === localNodeId ? 'BU CİHAZ' : undefined}
-                />
+                <div key={node.id} className="space-y-1.5">
+                  <NodeRow
+                    icon={platformIcon(node.platform)}
+                    name={node.name}
+                    subtitle={`${platformLabel(node.platform)} — ${node.localUrl || 'URL yapılandırılmamış'}`}
+                    online={!!node.online}
+                    latencyMs={node.latencyMs}
+                    isActive={failover?.activeNodeId === node.id}
+                    isCurrent={node.id === localNodeId}
+                    lastSeen={node.lastSeen}
+                    badge={node.id === localNodeId ? 'BU CİHAZ' : undefined}
+                  />
+
+                  {/* Bootstrap ilerleme */}
+                  {bootstrappingNodeId === node.id && (
+                    <div className="px-3 py-2 rounded-lg bg-blue-500/10 border border-blue-500/20">
+                      <div className="flex items-center justify-between text-xs text-blue-400 mb-1.5">
+                        <span>Bootstrap: %{bootstrapProgress}</span>
+                        <span className="text-blue-400/60">lütfen bekleyin...</span>
+                      </div>
+                      <div className="w-full bg-blue-500/20 rounded-full h-1.5">
+                        <div
+                          className="bg-blue-400 h-1.5 rounded-full transition-all duration-300"
+                          style={{ width: `${bootstrapProgress}%` }}
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Node aksiyonları */}
+                  {node.localUrl && node.anonKey && (
+                    <div className="flex gap-1.5 pl-1">
+                      <button
+                        onClick={() => handleBootstrapNode(node)}
+                        disabled={bootstrappingNodeId === node.id || syncingNodeId === node.id}
+                        className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-indigo-500/10 hover:bg-indigo-500/20 border border-indigo-500/20 text-xs text-indigo-400 transition-all disabled:opacity-50"
+                        title="Cloud → Node: Tüm veriyi bu node'a yükle"
+                      >
+                        <Download className="w-3 h-3" />
+                        {bootstrappingNodeId === node.id ? 'Yükleniyor...' : 'Cloud → Buraya'}
+                      </button>
+
+                      <button
+                        onClick={() => handleSyncNodeToCloud(node)}
+                        disabled={syncingNodeId === node.id || bootstrappingNodeId === node.id}
+                        className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/20 text-xs text-purple-400 transition-all disabled:opacity-50"
+                        title="Node → Cloud: Yerel veriyi cloud'a geri yükle"
+                      >
+                        <Upload className="w-3 h-3" />
+                        {syncingNodeId === node.id ? 'Senkronize ediliyor...' : 'Buradan → Cloud'}
+                      </button>
+                    </div>
+                  )}
+                </div>
               ))}
 
               {/* Yedekleme sonuçları */}
@@ -311,6 +493,31 @@ export function NodeStatusPanel() {
                   })}
                 </div>
               )}
+
+              {/* Otomatik senkron ayarı */}
+              <div className="flex items-center justify-between px-3 py-2.5 rounded-xl bg-white/5 border border-border">
+                <div className="flex items-center gap-2">
+                  <Clock className="w-3.5 h-3.5 text-muted-foreground" />
+                  <div>
+                    <div className="text-xs font-medium">Otomatik Senkron</div>
+                    <div className="text-[10px] text-muted-foreground">
+                      {autoSyncEnabled
+                        ? `Her ${autoSyncCfg.intervalHours}s cloud → node yedekler`
+                        : 'Devre dışı'}
+                      {autoSyncCfg.lastSync ? ` · Son: ${timeAgo(autoSyncCfg.lastSync)}` : ''}
+                    </div>
+                  </div>
+                </div>
+                <button
+                  onClick={handleAutoSyncToggle}
+                  className="text-muted-foreground hover:text-white transition-colors"
+                  title={autoSyncEnabled ? 'Devre dışı bırak' : 'Aktif et'}
+                >
+                  {autoSyncEnabled
+                    ? <ToggleRight className="w-6 h-6 text-green-400" />
+                    : <ToggleLeft className="w-6 h-6" />}
+                </button>
+              </div>
 
               {/* Eylemler */}
               <div className="flex gap-2 pt-1">

@@ -1,4 +1,4 @@
-// [AJAN-2 | claude/serene-gagarin | 2026-03-24] Son düzenleyen: Claude Sonnet 4.6
+// [AJAN-2 | claude/serene-gagarin | 2026-03-25] Son düzenleyen: Claude Sonnet 4.6
 import { RouterProvider } from 'react-router';
 import { GlobalTableSyncProvider } from './contexts/GlobalTableSyncContext';
 import { router } from './routes';
@@ -20,6 +20,8 @@ import {
 import { DbSetupBanner } from './components/DbSetupBanner';
 import { SERVER_BASE_URL, SUPABASE_ANON_KEY } from './lib/supabase-config';
 import { startNodeHeartbeat } from './lib/node-registry';
+import { startAutoNodeSync, replayWAL } from './lib/active-client';
+import { supabase as cloudSupabase } from './lib/supabase';
 
 // ─── Bulut Otomatik Yedekleme ─────────────────────────────────────────────────
 // YedeklerPage'deki ayarları okur ve periyodik olarak bulut yedeği alır.
@@ -130,6 +132,12 @@ export default function App() {
     // Sadece URL yapılandırılmışsa heartbeat yazar (getLocalNodeConfig().localUrl boşsa sessiz)
     const stopHeartbeatFn = startNodeHeartbeat();
 
+    // 4d. Otomatik node senkronu (ayarlanmışsa)
+    const stopAutoNodeSync = startAutoNodeSync(cloudSupabase);
+
+    // 4e. Başlangıçta WAL'ı replay et (önceki oturumdan kalan yazmalar)
+    replayWAL(cloudSupabase).catch(() => {});
+
     // 5. Uygulama arka plandan döndüğünde zorla yeniden sync
     //    BUG FIX [AJAN-2]: startRealtimeSync, _realtimeUnsubscribe set ise erken çıkıyordu.
     //    Önce stopRealtimeSync ile ölü kanalı temizliyoruz, sonra yeniden başlatıyoruz.
@@ -156,6 +164,7 @@ export default function App() {
       stopHealthHeartbeat();
       stopCloudDirectBackupScheduler();
       stopHeartbeatFn();
+      stopAutoNodeSync();
       cloudBackupCleanupRef.current();
       window.removeEventListener('focus', handleFocus);
       document.removeEventListener('visibilitychange', handleVisibility);

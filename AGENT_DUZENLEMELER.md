@@ -64,6 +64,10 @@ Her düzenlenen dosyanın **en üstüne** şu yorum satırı eklenir:
 | 33 | `app/pages/SettingsPage.tsx` | 2026-03-25 | ÖZELLİK: HA node yapılandırma UI eklendi — cihaz adı, tipi, yerel Docker URL, anon key. Heartbeat otomatik başlar. NodeStatusPanel entegre. |
 | 34 | `app/App.tsx` | 2026-03-25 | ÖZELLİK: `startNodeHeartbeat()` eklendi — app başlayınca bu cihaz cloud KV'ye kayıt olur. Cleanup'ta `stopHeartbeatFn()` çağrılır. |
 | 35 | `app/components/MainLayout.tsx` | 2026-03-25 | ÖZELLİK: `NodeStatusBadge` header'a eklendi — failover aktifse "Yerel Sunucu", cloud offline ise uyarı, normal ise "N/M Aktif" gösterir. |
+| 36 | `app/lib/active-client.ts` | 2026-03-25 | YENİ: HA dual-write motoru — WAL (Write-Ahead Log, localStorage kalıcı kuyruk), aktif yerel node Supabase client yönetimi, `dualWrite()` (cloud + yerel node'a eş zamanlı yaz), `replayWAL()` (cloud gelince WAL'ı toplu gönder), `runAutoSync()` / `startAutoNodeSync()` (periyodik cloud→node yedekleme), `bootstrapNode()` (yeni node'a cloud verisi yükle, 100'lük batch), `syncNodeToCloud()` (yerel→cloud ters senkron). |
+| 37 | `app/hooks/useTableSync.ts` | 2026-03-25 | ENTEGRASYON: `dualWrite()` import edildi — WriteQueue flush'ta upsert/delete sonrası yerel node'a da yaz; cloud başarısızsa WAL'a ekle. `onOnline` handler'a `replayWAL(supabase)` eklendi — ağ gelince WAL otomatik gönderilir. |
+| 38 | `app/components/NodeStatusPanel.tsx` | 2026-03-25 | GELİŞTİRME: Bootstrap butonu (Cloud→Node, ilerleme çubuğu), Node→Cloud sync butonu, WAL sayısı göstergesi + temizle butonu, otomatik senkron toggle, failover tetiklenince `setActiveLocalNode()` ile dual-write aktive edilir, WAL badge NodeStatusBadge'e eklendi. |
+| 39 | `app/App.tsx` | 2026-03-25 | ENTEGRASYON: `startAutoNodeSync(cloudSupabase)` eklendi — ayar aktifse başlangıçta periyodik node sync başlar. `replayWAL(cloudSupabase)` eklendi — başlangıçta önceki oturumdan kalan WAL yazmaları gönderilir. |
 
 ---
 
