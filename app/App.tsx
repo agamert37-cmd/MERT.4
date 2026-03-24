@@ -19,6 +19,7 @@ import {
 } from './lib/dual-supabase';
 import { DbSetupBanner } from './components/DbSetupBanner';
 import { SERVER_BASE_URL, SUPABASE_ANON_KEY } from './lib/supabase-config';
+import { startNodeHeartbeat } from './lib/node-registry';
 
 // ─── Bulut Otomatik Yedekleme ─────────────────────────────────────────────────
 // YedeklerPage'deki ayarları okur ve periyodik olarak bulut yedeği alır.
@@ -125,6 +126,10 @@ export default function App() {
     // Kullanıcı YedeklerPage'de yapılandırma yapmasa bile 24s aralıklı yedek alır
     startCloudDirectBackupScheduler(24);
 
+    // 4c. Çok sunuculu HA: Bu cihazı cloud KV'ye kaydet (heartbeat)
+    // Sadece URL yapılandırılmışsa heartbeat yazar (getLocalNodeConfig().localUrl boşsa sessiz)
+    const stopHeartbeatFn = startNodeHeartbeat();
+
     // 5. Uygulama arka plandan döndüğünde zorla yeniden sync
     //    BUG FIX [AJAN-2]: startRealtimeSync, _realtimeUnsubscribe set ise erken çıkıyordu.
     //    Önce stopRealtimeSync ile ölü kanalı temizliyoruz, sonra yeniden başlatıyoruz.
@@ -150,6 +155,7 @@ export default function App() {
       stopAutoBackup();
       stopHealthHeartbeat();
       stopCloudDirectBackupScheduler();
+      stopHeartbeatFn();
       cloudBackupCleanupRef.current();
       window.removeEventListener('focus', handleFocus);
       document.removeEventListener('visibilitychange', handleVisibility);

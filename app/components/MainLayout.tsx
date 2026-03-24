@@ -4,6 +4,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useEmployee } from '../contexts/EmployeeContext';
 import { NotificationPanel } from './NotificationPanel';
 import { SupabaseStatusBadge } from './SupabaseStatus';
+import { NodeStatusBadge } from './NodeStatusPanel';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import * as Tooltip from '@radix-ui/react-tooltip';
 import { createSystemBackup, getFromStorage, StorageKey } from '../utils/storage';
@@ -842,6 +843,9 @@ export function MainLayout() {
 
               <div className="hidden sm:block flex-shrink-0">
                 <SupabaseStatusBadge />
+              </div>
+              <div className="hidden sm:block flex-shrink-0">
+                <NodeStatusBadge />
               </div>
 
               {/* Breadcrumb (desktop) */}

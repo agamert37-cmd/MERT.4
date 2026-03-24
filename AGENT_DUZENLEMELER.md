@@ -59,6 +59,11 @@ Her düzenlenen dosyanın **en üstüne** şu yorum satırı eklenir:
 | 28 | `app/pages/SettingsPage.tsx` | 2026-03-25 | FIX: `handleSaveCompanyInfo`, `handleUploadAndAdd`, `handleRemoveBrandingImage`, `handleRefreshBrandingUrls`'e `kvSet('system_settings')` eklendi — şirket bilgisi ve marka görselleri çapraz cihaz senkronize. |
 | 29 | `app/pages/PazarlamaPage.tsx` | 2026-03-25 | FIX: Mount `useEffect`'e KV fallback eklendi — localStorage boşsa `kvGet('pazarlama_content')` ile yükleniyor. |
 | 30 | `app/pages/SettingsPage.tsx` | 2026-03-25 | FIX: Mount `useEffect`'e KV fallback eklendi — localStorage boşsa `kvGet('system_settings')` ile şirket bilgisi ve görseller yükleniyor. |
+| 31 | `app/lib/node-registry.ts` | 2026-03-25 | YENİ: Çok sunuculu HA sistemi — heartbeat, node keşfi, cloud sağlık kontrolü, otomatik failover, tüm node'lara paralel yedekleme. |
+| 32 | `app/components/NodeStatusPanel.tsx` | 2026-03-25 | YENİ: Sunucu durumu paneli — cloud + tüm yerel node'lar canlı durum, gecikme, failover göstergesi, "Tüm Sunuculara Yedekle" butonu. `NodeStatusBadge` header'da gösterilir. |
+| 33 | `app/pages/SettingsPage.tsx` | 2026-03-25 | ÖZELLİK: HA node yapılandırma UI eklendi — cihaz adı, tipi, yerel Docker URL, anon key. Heartbeat otomatik başlar. NodeStatusPanel entegre. |
+| 34 | `app/App.tsx` | 2026-03-25 | ÖZELLİK: `startNodeHeartbeat()` eklendi — app başlayınca bu cihaz cloud KV'ye kayıt olur. Cleanup'ta `stopHeartbeatFn()` çağrılır. |
+| 35 | `app/components/MainLayout.tsx` | 2026-03-25 | ÖZELLİK: `NodeStatusBadge` header'a eklendi — failover aktifse "Yerel Sunucu", cloud offline ise uyarı, normal ise "N/M Aktif" gösterir. |
 
 ---
 
