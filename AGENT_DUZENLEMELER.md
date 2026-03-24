@@ -42,6 +42,8 @@ Her düzenlenen dosyanın **en üstüne** şu yorum satırı eklenir:
 | 11 | `app/App.tsx` | 2026-03-24 | ENTEGRASYON: `GlobalTableSyncProvider` import edildi ve `RouterProvider` sarıldı — hangi sayfada olunursa olsun tüm tablolar senkronize edilir. |
 | 12 | `app/pages/FisHistoryPage.tsx` | 2026-03-24 | BUG FIX: Delete, edit ve restore işlemlerinde Supabase tablosu da güncelleniyor. `deleteFisFromSupabase`, `updateFisInSupabase`, `addFisToSupabase` kullanılıyor. Stok/cari değişikliklerinde `supabase.from('urunler').upsert()` ve `supabase.from('cari_hesaplar').upsert()` eklendi. |
 | 13 | `app/pages/UretimPage.tsx` | 2026-03-24 | BUG FIX: Üretim kaydedilince stok değişiklikleri KV'nin yanında doğrudan `urunler` Supabase tablosuna da yazılıyor (`syncStokItemsToSupabase` eklendi). Mobil üretim sonrası doğru stok görüyor. |
+| 14 | `app/lib/dual-supabase.ts` | 2026-03-25 | KRİTİK FIX: `createFullTableBackup()` ve `restoreFromTableBackup()` eklendi — 15 gerçek Supabase tablosundan (fisler, urunler, cari vb.) yedek alır. Zamanlayıcı artık KV değil gerçek tabloları yedekliyor. |
+| 15 | `app/pages/YedeklerPage.tsx` | 2026-03-25 | GÜNCELLEŞTİRME: Yedek butonu önce Edge Function dener, başarısız olursa `createFullTableBackup()` çalıştırır. "Yerel Yedek İndir" artık localStorage + Supabase tablolarını birlikte indirir. Tablo yedeklerine Geri Yükle butonu eklendi. |
 
 ---
 
