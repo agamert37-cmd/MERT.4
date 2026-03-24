@@ -1,3 +1,4 @@
+// [AJAN-2 | claude/serene-gagarin | 2026-03-24] Son düzenleyen: Claude Sonnet 4.6
 /**
  * Auto Setup Service
  * Her Supabase tablosunu doğrudan SELECT COUNT ile kontrol eder.
@@ -40,6 +41,9 @@ export const SYSTEM_TABLES: Omit<TableStatus, 'exists' | 'rowCount' | 'lastSync'
   { table: 'uretim_kayitlari',  displayName: 'Üretim Kayıtları',    icon: '🏭' },
   { table: 'faturalar',         displayName: 'Faturalar',           icon: '📋' },
   { table: 'fatura_stok',       displayName: 'Fatura Stok Kal.',    icon: '📄' },
+  // BUG FIX [AJAN-2]: Migration dosyasında olan ama kontrol listesinde eksik tablolar
+  { table: 'tahsilatlar',       displayName: 'Tahsilatlar',         icon: '💳' },
+  { table: 'arac_km_logs',      displayName: 'Araç KM Logları',     icon: '📍' },
 ];
 
 /**

@@ -29,7 +29,11 @@ Her düzenlenen dosyanın **en üstüne** şu yorum satırı eklenir:
 
 | # | Dosya | Tarih | Açıklama |
 |---|-------|-------|----------|
-| — | *(henüz düzenleme yok — GitHub repo URL bekleniyor)* | — | — |
+| 1 | `app/App.tsx` | 2026-03-24 | BUG FIX: `handleFocus` artık önce `stopRealtimeSync()` çağırıyor — stale `_realtimeUnsubscribe` yüzünden mobil'de realtime asla yeniden bağlanamıyordu. `visibilitychange` handler eklendi. |
+| 2 | `app/hooks/useTableSync.ts` | 2026-03-24 | BUG FIX: Mobil arka plandan dönünce `clearConnectionCooldown()` eklendi (module-level cooldown tüm tabloları blokluyordu). `visibilitychange → hidden`'da write queue flush eklendi. |
+| 3 | `app/utils/supabase-storage.ts` | 2026-03-24 | BUG FIX: `visibilitychange → visible`'da `stopRealtimeSync()` + `startRealtimeSync()` çağrısı eklendi — ölü WebSocket kanalı temizlenip yeniden başlatılıyor. |
+| 4 | `app/contexts/SyncContext.tsx` | 2026-03-24 | BUG FIX: `window.addEventListener('online', ...)` eklendi — ağ gelince backoff beklenmeden anında tablo kontrolü yapılıyor. |
+| 5 | `app/lib/auto-setup.ts` | 2026-03-24 | BUG FIX: `tahsilatlar` ve `arac_km_logs` tabloları `SYSTEM_TABLES` listesine eklendi — migration'da var ama kontrol listesinde yoktu. |
 
 ---
 

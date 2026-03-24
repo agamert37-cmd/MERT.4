@@ -1,3 +1,4 @@
+// [AJAN-2 | claude/serene-gagarin | 2026-03-24] Son düzenleyen: Claude Sonnet 4.6
 import { RouterProvider } from 'react-router';
 import { router } from './routes';
 import { Toaster } from 'sonner';
@@ -117,11 +118,23 @@ export default function App() {
     cloudBackupCleanupRef.current = scheduleCloudAutoBackup();
 
     // 5. Uygulama arka plandan döndüğünde zorla yeniden sync
-    //    (supabase-storage'daki syncIfStale ile beraber çalışır, ikinci savunma katmanı)
+    //    BUG FIX [AJAN-2]: startRealtimeSync, _realtimeUnsubscribe set ise erken çıkıyordu.
+    //    Önce stopRealtimeSync ile ölü kanalı temizliyoruz, sonra yeniden başlatıyoruz.
     const handleFocus = () => {
-      startRealtimeSync(); // Realtime kopmuşsa yeniden bağlan
+      stopRealtimeSync();   // Ölü WebSocket kanalını temizle
+      startRealtimeSync();  // Temiz başlat
     };
+
+    // Mobil için: tab gizlenip geri gelince de yeniden bağlan (focus tetiklenmeyebilir)
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        stopRealtimeSync();
+        startRealtimeSync();
+      }
+    };
+
     window.addEventListener('focus', handleFocus);
+    document.addEventListener('visibilitychange', handleVisibility);
 
     return () => {
       stopRealtimeSync();
@@ -130,6 +143,7 @@ export default function App() {
       stopHealthHeartbeat();
       cloudBackupCleanupRef.current();
       window.removeEventListener('focus', handleFocus);
+      document.removeEventListener('visibilitychange', handleVisibility);
     };
   }, []);
 

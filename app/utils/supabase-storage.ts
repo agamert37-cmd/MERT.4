@@ -1,3 +1,4 @@
+// [AJAN-2 | claude/serene-gagarin | 2026-03-24] Son düzenleyen: Claude Sonnet 4.6
 /**
  * Supabase Storage Integration - DUAL WRITE
  * 
@@ -303,11 +304,19 @@ async function flushWrites() {
 // Tab gizlendiginde veya sayfa kapanirken bekleyen yazmalari hemen gonder
 if (typeof window !== 'undefined') {
   // Tab gizlendiginde flush; ön plana gelince yeniden sync (mobil kritik)
+  // BUG FIX [AJAN-2]: Visible olunca realtime kanalını da yeniden başlat.
+  // Mobil arka plan → WebSocket düşer → geri gelince sadece syncIfStale çağrılıyordu
+  // ama _realtimeUnsubscribe hala set olduğu için startRealtimeSync erken çıkıyordu.
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'hidden' && _pendingWrites.size > 0) {
       flushWrites();
     }
     if (document.visibilityState === 'visible') {
+      // Realtime bağlantısını zorla yenile (ölü WebSocket kanalını temizle)
+      if (isConfigured()) {
+        stopRealtimeSync();   // Eski/ölü kanalı temizle
+        startRealtimeSync();  // Temiz yeniden bağlan
+      }
       // Arka plandan döndüğünde veriyi tazele (30s sınırı ile)
       syncIfStale();
     }

@@ -1,3 +1,4 @@
+// [AJAN-2 | claude/serene-gagarin | 2026-03-24] Son düzenleyen: Claude Sonnet 4.6
 /**
  * useTableSync — Doğrudan Supabase Tablo Senkronizasyonu
  *
@@ -503,13 +504,26 @@ export function useTableSync<T extends { id: string }>(
         fetchData().catch(() => {});
       }
     }, 2 * 60 * 1000);
-    const onVisible = () => {
-      if (document.visibilityState === 'visible') fetchData().catch(() => {});
+
+    // BUG FIX [AJAN-2]: Mobil arka plandan dönerken:
+    //   1. Module-level bağlantı cooldown'ı temizle (diğer tablonun hatası bizi engelliyor olabilir)
+    //   2. Yeni veri çek
+    //   3. Bekleyen yazmaları gönder
+    // Gizlenince bekleyen yazmaları hemen flush et (sayfa kapanmadan önce gönder)
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        clearConnectionCooldown(); // Eski cooldown'ı temizle — mobil için kritik
+        fetchData().catch(() => {});
+        writeQueueRef.current?.flush().catch(() => {});
+      } else if (document.visibilityState === 'hidden') {
+        // Arka plana geçerken bekleyen yazmaları zorla gönder
+        writeQueueRef.current?.flush().catch(() => {});
+      }
     };
-    document.addEventListener('visibilitychange', onVisible);
+    document.addEventListener('visibilitychange', onVisibilityChange);
     return () => {
       clearInterval(interval);
-      document.removeEventListener('visibilitychange', onVisible);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
     };
   }, [configured, fetchData]);
 

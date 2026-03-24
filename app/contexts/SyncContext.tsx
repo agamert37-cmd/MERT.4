@@ -1,3 +1,4 @@
+// [AJAN-2 | claude/serene-gagarin | 2026-03-24] Son düzenleyen: Claude Sonnet 4.6
 /**
  * SyncContext - Global senkronizasyon durumu yonetimi
  * KV store bazli tablo durumlarini takip eder
@@ -105,6 +106,18 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
     const interval = setInterval(() => recheckTables(), intervalMs);
     return () => clearInterval(interval);
   }, [recheckTables, isSupabaseConfigured, consecutiveFailures]);
+
+  // BUG FIX [AJAN-2]: Ağ bağlantısı geri gelince hemen kontrol et.
+  // Önceden sadece backoff interval'ı vardı — ağ geldikten sonra 5 dakikaya kadar beklenebiliyordu.
+  useEffect(() => {
+    if (!isSupabaseConfigured) return;
+    const onOnline = () => {
+      setConsecutiveFailures(0); // Hata sayacını sıfırla
+      recheckTables();
+    };
+    window.addEventListener('online', onOnline);
+    return () => window.removeEventListener('online', onOnline);
+  }, [recheckTables, isSupabaseConfigured]);
 
   return (
     <SyncContext.Provider value={{
