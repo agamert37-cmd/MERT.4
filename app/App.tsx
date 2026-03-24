@@ -12,6 +12,9 @@ import {
   stopAutoBackup,
   startHealthHeartbeat,
   stopHealthHeartbeat,
+  // GÜÇLENDİRME [AJAN-2]: Edge Function olmadan doğrudan buluta yedek
+  startCloudDirectBackupScheduler,
+  stopCloudDirectBackupScheduler,
 } from './lib/dual-supabase';
 import { DbSetupBanner } from './components/DbSetupBanner';
 import { SERVER_BASE_URL, SUPABASE_ANON_KEY } from './lib/supabase-config';
@@ -117,6 +120,10 @@ export default function App() {
     // 4. Bulut otomatik yedekleme zamanlayıcısı (YedeklerPage ayarlarına göre)
     cloudBackupCleanupRef.current = scheduleCloudAutoBackup();
 
+    // 4b. Edge Function gerektirmeyen doğrudan bulut yedekleme (her zaman aktif)
+    // Kullanıcı YedeklerPage'de yapılandırma yapmasa bile 24s aralıklı yedek alır
+    startCloudDirectBackupScheduler(24);
+
     // 5. Uygulama arka plandan döndüğünde zorla yeniden sync
     //    BUG FIX [AJAN-2]: startRealtimeSync, _realtimeUnsubscribe set ise erken çıkıyordu.
     //    Önce stopRealtimeSync ile ölü kanalı temizliyoruz, sonra yeniden başlatıyoruz.
@@ -141,6 +148,7 @@ export default function App() {
       stopAutoSync();
       stopAutoBackup();
       stopHealthHeartbeat();
+      stopCloudDirectBackupScheduler();
       cloudBackupCleanupRef.current();
       window.removeEventListener('focus', handleFocus);
       document.removeEventListener('visibilitychange', handleVisibility);

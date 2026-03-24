@@ -60,8 +60,9 @@ function saveDeletedId(storageKey: string, id: string): void {
 }
 
 // ─── Bağlantı hata yönetimi ─────────────────────────────────────────────────
+// GÜÇLENDİRME [AJAN-2]: 15s → 8s — daha hızlı kurtarma, mobil için kritik
 let _lastConnectionFailure = 0;
-const CONNECTION_COOLDOWN_MS = 15_000; // 15 saniye bekleme sonrası tekrar dene
+const CONNECTION_COOLDOWN_MS = 8_000;
 
 function isConnectionCoolingDown(): boolean {
   return Date.now() - _lastConnectionFailure < CONNECTION_COOLDOWN_MS;
@@ -69,6 +70,21 @@ function isConnectionCoolingDown(): boolean {
 
 function markConnectionFailure() { _lastConnectionFailure = Date.now(); }
 function clearConnectionCooldown() { _lastConnectionFailure = 0; }
+
+// ─── İstek zaman aşımı sarmalayıcı ──────────────────────────────────────────
+// GÜÇLENDİRME [AJAN-2]: Supabase istekleri takılırsa UI'ı bloklar.
+// 10s timeout ile askıda kalan istekler kesilir ve hata yönetimine geçilir.
+function withTimeout<T>(promise: Promise<T>, ms = 10_000, label = ''): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<never>((_, reject) =>
+      setTimeout(
+        () => reject(new Error(`${label || 'İstek'} ${ms / 1000}s içinde yanıt vermedi`)),
+        ms
+      )
+    ),
+  ]);
+}
 
 // ─── Supabase doğrudan tablo operasyonları ────────────────────────────────────
 
@@ -144,6 +160,8 @@ class WriteQueue {
   private readonly flushFnRef: React.MutableRefObject<(ops: WriteOp[]) => Promise<void>>;
   private readonly minDebounceMs: number;
   private readonly maxDebounceMs: number;
+  // GÜÇLENDİRME [AJAN-2]: Kalıcı kuyruk — sayfa kapanırsa/çökerse veri kaybını önler
+  private readonly persistKey: string;
   totalWrites = 0;
   failedWrites = 0;
   private retryCount = 0;
@@ -156,11 +174,40 @@ class WriteQueue {
     this.flushFnRef = flushFnRef;
     this.minDebounceMs = PRIORITY_TABLES.has(tableName) ? 60 : debounceMs;
     this.maxDebounceMs = debounceMs * 3;
+    this.persistKey = `${STORAGE_PREFIX}wq_${tableName}`;
+    // Önceki çalışmadan kalan bekleyen işlemleri yükle
+    this._loadPersisted();
+  }
+
+  // Bekleyen işlemleri localStorage'a kaydet (veri kaybı önleme)
+  private _savePersisted(): void {
+    try {
+      if (this.queue.size === 0) {
+        localStorage.removeItem(this.persistKey);
+      } else {
+        localStorage.setItem(this.persistKey, JSON.stringify(Array.from(this.queue.values())));
+      }
+    } catch { }
+  }
+
+  // Önceki çalışmadan kalan işlemleri yükle
+  private _loadPersisted(): void {
+    try {
+      const raw = localStorage.getItem(this.persistKey);
+      if (!raw) return;
+      const ops: WriteOp[] = JSON.parse(raw);
+      if (ops.length > 0) {
+        ops.forEach(op => this.queue.set(op.id, op));
+        console.log(`%c[WriteQueue:${this.persistKey}] ${ops.length} kurtarılan işlem yüklendi`, 'color: #f59e0b');
+        this.scheduleFlush();
+      }
+    } catch { }
   }
 
   push(op: WriteOp) {
     // Aynı id için önceki işlemi ezeriz (son işlem kazanır)
     this.queue.set(op.id, op);
+    this._savePersisted(); // Kalıcı depoya kaydet
     this.scheduleFlush();
   }
 
@@ -187,16 +234,19 @@ class WriteQueue {
 
     const ops = Array.from(this.queue.values());
     this.queue.clear();
+    this._savePersisted(); // Temizlendi — kalıcı depoyu güncelle
     this.totalWrites += ops.length;
 
     try {
       await this.flushFnRef.current(ops);
       this.retryCount = 0;
+      // Başarılı → kalıcı depo zaten temizlendi (queue.clear sonrası _savePersisted çağrıldı)
     } catch (e) {
       console.error(`[WriteQueue] flush error (${ops.length} ops):`, e);
       this.failedWrites += ops.length;
-      // Başarısız işlemleri kuyruğa geri al
+      // Başarısız işlemleri kuyruğa geri al ve kalıcı depoya kaydet
       ops.forEach(op => this.queue.set(op.id, op));
+      this._savePersisted();
       // Üstel geri çekilme (max 30 saniye)
       this.retryCount = Math.min(this.retryCount + 1, 5);
       const backoff = Math.min(1000 * Math.pow(2, this.retryCount), 30_000);
@@ -387,7 +437,12 @@ export function useTableSync<T extends { id: string }>(
 
     const start = performance.now();
     try {
-      const rows = await tableSelect<any>(tableName, orderBy, orderAsc);
+      // GÜÇLENDİRME [AJAN-2]: 10s timeout — askıda kalan istek UI'ı bloklamasın
+      const rows = await withTimeout(
+        tableSelect<any>(tableName, orderBy, orderAsc),
+        10_000,
+        tableName
+      );
       const elapsed = Math.round(performance.now() - start);
       setLatencyMs(elapsed);
 
@@ -525,6 +580,20 @@ export function useTableSync<T extends { id: string }>(
       clearInterval(interval);
       document.removeEventListener('visibilitychange', onVisibilityChange);
     };
+  }, [configured, fetchData]);
+
+  // ─── Ağ bağlantısı geri gelince hemen kurtarma ──────────────────────────
+  // GÜÇLENDİRME [AJAN-2]: online event → write queue flush + fetchData
+  // Çevrimdışıyken biriken tüm bekleyen yazmaları anında gönder
+  useEffect(() => {
+    if (!configured) return;
+    const onOnline = () => {
+      clearConnectionCooldown();
+      writeQueueRef.current?.flush().catch(() => {});
+      fetchData().catch(() => {});
+    };
+    window.addEventListener('online', onOnline);
+    return () => window.removeEventListener('online', onOnline);
   }, [configured, fetchData]);
 
   // ─── CRUD — Optimistik güncelleme + hata durumunda rollback ──────────────

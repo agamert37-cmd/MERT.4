@@ -225,6 +225,17 @@ let _writeTimer: ReturnType<typeof setTimeout> | null = null;
 const WRITE_DEBOUNCE_MS = 500;
 let _isFlushing = false;
 
+// GÜÇLENDİRME [AJAN-2]: Uygulama açıldığında önceki çalışmadan kalan
+// kuyruğu 3 saniye sonra otomatik flush et (çökme/kapanma kurtarma).
+if (_pendingWrites.size > 0 && typeof window !== 'undefined') {
+  setTimeout(() => {
+    if (isConfigured() && !_isFlushing) {
+      console.log(`%c[CloudSync] Önceki oturumdan ${_pendingWrites.size} bekleyen yazma kurtarılıyor...`, 'color: #f59e0b; font-weight: bold');
+      flushWrites().catch(() => {});
+    }
+  }, 3000);
+}
+
 function scheduleFlush() {
   if (_writeTimer) clearTimeout(_writeTimer);
   _writeTimer = setTimeout(() => flushWrites(), WRITE_DEBOUNCE_MS);
@@ -331,19 +342,27 @@ if (typeof window !== 'undefined') {
   });
 
   // Ağ bağlantısı geri gelince zorla sync (offline → online geçişi)
+  // GÜÇLENDİRME [AJAN-2]: Önce bekleyen yazmaları flush et, sonra cloud'dan çek
   window.addEventListener('online', () => {
     _syncState.isOnline = true;
     if (_syncState.lastError === 'Ağ bağlantısı kesildi') _syncState.lastError = null;
     notifySyncStateChange();
     console.log('%c[CloudSync] Ağ bağlantısı geri geldi, yeniden senkronize ediliyor...', 'color: #22c55e');
-    _initialSyncDone = false;
-    _lastSyncTime = 0;
-    syncFromCloud().then(result => {
-      _lastSyncTime = Date.now();
-      if (result.synced > 0) {
-        toast.success('Veriler güncellendi', { id: 'sync-online', duration: 2500 });
-      }
-    }).catch(() => {});
+
+    // Adım 1: Çevrimdışıyken biriken yazmaları hemen gönder
+    flushWrites().catch(() => {}).finally(() => {
+      // Adım 2: Cloud'dan güncel veriyi çek
+      _initialSyncDone = false;
+      _lastSyncTime = 0;
+      syncFromCloud().then(result => {
+        _lastSyncTime = Date.now();
+        if (result.synced > 0) {
+          toast.success('Veriler güncellendi', { id: 'sync-online', duration: 2500 });
+        }
+      }).catch(() => {});
+    });
+
+    // Adım 3: Realtime bağlantısını yenile
     stopRealtimeSync();
     startRealtimeSync();
   });
@@ -478,7 +497,8 @@ export const removeFromStorage = (key: StorageKey | string): boolean => {
 let _initialSyncDone = false;
 let _initialSyncPromise: Promise<void> | null = null;
 let _lastSyncTime = 0;
-const MIN_RESYNC_INTERVAL_MS = 30_000; // 30s geçmediyse tekrar sync yapma
+// GÜÇLENDİRME [AJAN-2]: 30s → 15s — daha hızlı veri tazeliği, mobil için kritik
+const MIN_RESYNC_INTERVAL_MS = 15_000;
 
 /** Belirli bir süre geçmişse buluttan yeniden veri çek (mobil arka plandan dönüş için) */
 async function syncIfStale(): Promise<void> {
@@ -823,7 +843,8 @@ export function stopRealtimeSync() {
 // ── Periyodik heartbeat (realtime koptuğunda emniyet ağı) ─────
 
 let _heartbeatTimer: ReturnType<typeof setInterval> | null = null;
-const HEARTBEAT_INTERVAL_MS = 5 * 60_000; // 5 dakika
+// GÜÇLENDİRME [AJAN-2]: 5 dakika → 2 dakika — realtime kopuşları daha hızlı algıla
+const HEARTBEAT_INTERVAL_MS = 2 * 60_000;
 
 function startHeartbeat(): void {
   if (_heartbeatTimer) return;

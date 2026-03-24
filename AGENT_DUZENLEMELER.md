@@ -34,6 +34,10 @@ Her düzenlenen dosyanın **en üstüne** şu yorum satırı eklenir:
 | 3 | `app/utils/supabase-storage.ts` | 2026-03-24 | BUG FIX: `visibilitychange → visible`'da `stopRealtimeSync()` + `startRealtimeSync()` çağrısı eklendi — ölü WebSocket kanalı temizlenip yeniden başlatılıyor. |
 | 4 | `app/contexts/SyncContext.tsx` | 2026-03-24 | BUG FIX: `window.addEventListener('online', ...)` eklendi — ağ gelince backoff beklenmeden anında tablo kontrolü yapılıyor. |
 | 5 | `app/lib/auto-setup.ts` | 2026-03-24 | BUG FIX: `tahsilatlar` ve `arac_km_logs` tabloları `SYSTEM_TABLES` listesine eklendi — migration'da var ama kontrol listesinde yoktu. |
+| 6 | `app/hooks/useTableSync.ts` | 2026-03-24 | GÜÇLENDİRME: `withTimeout` (10s) eklendi. WriteQueue'ya localStorage persistence eklendi. `online` event → write flush + fetchData. `CONNECTION_COOLDOWN_MS` 15s→8s. |
+| 7 | `app/utils/supabase-storage.ts` | 2026-03-24 | GÜÇLENDİRME: Başlangıçta kalan kuyruğu 3s sonra auto-flush. `online` event'e `flushWrites()` eklendi. `MIN_RESYNC_INTERVAL_MS` 30s→15s. Heartbeat 5dk→2dk. |
+| 8 | `app/lib/dual-supabase.ts` | 2026-03-24 | GÜÇLENDİRME: `createCloudDirectBackup` + `startCloudDirectBackupScheduler` eklendi — Edge Function olmadan doğrudan Supabase client ile buluta yedek alır. |
+| 9 | `app/App.tsx` | 2026-03-24 | GÜÇLENDİRME: `startCloudDirectBackupScheduler(24)` entegre edildi — yapılandırma gerektirmeden her 24s otomatik yedek. |
 
 ---
 
