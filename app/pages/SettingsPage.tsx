@@ -188,6 +188,23 @@ export function SettingsPage() {
     } catch (err: any) { toast.error(`URL yenileme hatası: ${err.message}`); } finally { setRefreshingUrls(false); }
   };
 
+  // BUG FIX [AJAN-2]: localStorage boşsa KV'den ayarları yükle (mobil ilk açılış)
+  useEffect(() => {
+    const localSettings = getFromStorage<any>(StorageKey.SYSTEM_SETTINGS);
+    if (!localSettings?.companyInfo && !localSettings?.loginBranding) {
+      import('../lib/supabase-kv').then(({ kvGet }) =>
+        kvGet<any>('system_settings').then(remote => {
+          if (remote) {
+            setInStorage(StorageKey.SYSTEM_SETTINGS, remote);
+            if (remote.companyInfo) setCompanyInfo({ ...remote.companyInfo });
+            if (remote.loginBranding?.images) setBrandingImages(remote.loginBranding.images);
+          }
+        }).catch(() => {})
+      );
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   useEffect(() => {
     const checkAndRefreshUrls = async () => {
       const imagesWithFiles = brandingImages.filter(img => img.fileName);

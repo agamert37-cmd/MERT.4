@@ -840,7 +840,19 @@ export function PazarlamaPage() {
 
   useEffect(() => {
     const saved = getFromStorage<PazarlamaContent>(StorageKey.PAZARLAMA_CONTENT);
-    if (saved) setContent({ ...DEFAULT_CONTENT, ...saved });
+    if (saved) {
+      setContent({ ...DEFAULT_CONTENT, ...saved });
+    } else {
+      // BUG FIX [AJAN-2]: localStorage boşsa KV'den yükle (mobil ilk açılış)
+      import('../lib/supabase-kv').then(({ kvGet }) =>
+        kvGet<PazarlamaContent>('pazarlama_content').then(remote => {
+          if (remote) {
+            setContent({ ...DEFAULT_CONTENT, ...remote });
+            setInStorage(StorageKey.PAZARLAMA_CONTENT, remote);
+          }
+        }).catch(() => {})
+      );
+    }
   }, []);
 
   const companyInfo = useMemo(() => {
