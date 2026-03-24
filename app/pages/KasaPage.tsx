@@ -1,3 +1,4 @@
+// [AJAN-2 | claude/serene-gagarin | 2026-03-25] Son düzenleyen: Claude Sonnet 4.6
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
   ArrowUpCircle, 
@@ -29,6 +30,7 @@ import { useEmployee } from '../contexts/EmployeeContext';
 import { useModuleBus } from '../hooks/useModuleBus';
 import { getPagePermissions } from '../utils/permissions';
 import { usePageSecurity } from '../hooks/usePageSecurity';
+import { kvGet, kvSet } from '../lib/supabase-kv';
 
 const checkIsDayClosed = (): boolean => {
   try {
@@ -116,6 +118,20 @@ export function KasaPage() {
   const [posDevices, setPosDevices] = useState<POSDevice[]>(() => {
     return getFromStorage<POSDevice[]>(StorageKey.POS_DATA) || [];
   });
+
+  // BUG FIX [AJAN-2]: localStorage boşsa KV store'dan POS cihazlarını yükle (mobil ilk açılış)
+  useEffect(() => {
+    const saved = getFromStorage<POSDevice[]>(StorageKey.POS_DATA);
+    if (!saved || saved.length === 0) {
+      kvGet<POSDevice[]>('pos_devices').then(remote => {
+        if (remote && remote.length > 0) {
+          setPosDevices(remote);
+          setInStorage(StorageKey.POS_DATA, remote);
+        }
+      }).catch(() => {});
+    }
+  }, []);
+
   const [isPosModalOpen, setIsPosModalOpen] = useState(false);
   const [newPosForm, setNewPosForm] = useState({
     name: '',
@@ -249,6 +265,8 @@ export function KasaPage() {
     const updated = [newDevice, ...posDevices];
     setPosDevices(updated);
     setInStorage(StorageKey.POS_DATA, updated);
+    // BUG FIX [AJAN-2]: POS cihazını KV store'a da yaz
+    kvSet('pos_devices', updated).catch(e => console.error('[Kasa] POS kv sync:', e));
     toast.success('POS cihazı sisteme eklendi');
     setIsPosModalOpen(false);
     setNewPosForm({ name: '', bankName: '', serialNumber: '' });
@@ -570,6 +588,8 @@ export function KasaPage() {
                             const updated = posDevices.filter(d => d.id !== device.id);
                             setPosDevices(updated);
                             setInStorage(StorageKey.POS_DATA, updated);
+                            // BUG FIX [AJAN-2]: POS silme KV store'a da yaz
+                            kvSet('pos_devices', updated).catch(e => console.error('[Kasa] POS kv sync:', e));
                             toast.success('POS Cihazı silindi.');
                           }
                         }}

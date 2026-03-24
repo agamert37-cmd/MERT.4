@@ -50,6 +50,9 @@ Her düzenlenen dosyanın **en üstüne** şu yorum satırı eklenir:
 | 19 | `app/pages/CariDetailPage.tsx` | 2026-03-25 | FIX: `updateFisInStorage()` fatura durum güncellemesinde `supabase.from('fisler').update()` eklendi — fatura kesildi/iptal gibi değişiklikler Supabase'e de yansıyor. |
 | 20 | `app/pages/AracTakipPage.tsx` | 2026-03-25 | KRİTİK FIX: KM logları (`arac_km_logs`) hiç Supabase'e yazılmıyordu — `useTableSync` eklendi ve her 3 handler'da `addKmLogToSupabase` + `addShiftToSupabase` çağrısı eklendi. `supabase` import eklendi. |
 | 21 | `app/hooks/useTableSync.ts` | 2026-03-25 | KRİTİK FIX: Modül-seviyesi `_lastConnectionFailure` değişkeni `useRef` ile her instance'a taşındı — bir tablo başarısız olunca diğer 14 tablo 8s bloklanıyordu. Artık her tablo bağımsız cooldown kullanıyor. |
+| 22 | `app/pages/PersonelPage.tsx` | 2026-03-25 | FIX: `handleApproveRequest`'te `updateItem` eklendi — personel izin değişikliği Supabase'e yazılıyordu. `kvSet('role_requests')` eklendi — rol talepleri çapraz cihaz senkronize ediliyor. `handleRejectRequest`'te de aynı KV sync. |
+| 23 | `app/pages/StokPage.tsx` | 2026-03-25 | FIX: `handleAddCategory`, `handleEditCategory`, `handleDeleteCategory`'de `kvSet('stok_categories')` eklendi. Mount'ta KV'den kategori yükleme `useEffect` eklendi — mobil'de kategoriler görünmüyordu. |
+| 24 | `app/pages/KasaPage.tsx` | 2026-03-25 | FIX: POS cihazı ekle/sil işlemlerinde `kvSet('pos_devices')` eklendi. Mount'ta KV'den POS cihazları yükleme `useEffect` eklendi — mobil'de POS listesi görünmüyordu. |
 
 ---
 

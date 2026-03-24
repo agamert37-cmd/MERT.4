@@ -15,6 +15,7 @@ import { SyncStatusBar, SyncBadge } from '../components/SyncStatusBar';
 import { getFromStorage, setInStorage, StorageKey } from '../utils/storage';
 import { hashString } from '../utils/security';
 import { supabase } from '../lib/supabase';
+import { kvSet } from '../lib/supabase-kv';
 import { analyzePasswordStrength, getSecurityPolicy, checkRateLimit, generateCSRFToken, validateCSRFToken, addSecurityThreat, detectRapidActions, deepSanitize, detectSQLInjection, appendToLogChain } from '../utils/security';
 import { useSecurityMonitor } from '../hooks/useSecurityMonitor';
 import { PasswordStrengthBar } from '../components/PasswordStrengthBar';
@@ -441,6 +442,8 @@ export function PersonelPage() {
     const allReqs = getFromStorage<any[]>('role_requests') || [];
     const updatedReqs = allReqs.map(r => r.id === request.id ? { ...r, status: 'approved', approvedAt: new Date().toISOString(), expiresAt } : r);
     setInStorage('role_requests', updatedReqs); setRoleRequests(updatedReqs);
+    // BUG FIX [AJAN-2]: role_requests KV store'a da yaz — çapraz cihaz onay akışı
+    kvSet('role_requests', updatedReqs).catch(e => console.error('[Personel] role_requests kv sync:', e));
 
     const allPersonnel = getFromStorage<any[]>('personel_data') || [];
     const updatedPersonnel = allPersonnel.map(p => {
@@ -455,6 +458,12 @@ export function PersonelPage() {
       return p;
     });
     setInStorage('personel_data', updatedPersonnel);
+    // BUG FIX [AJAN-2]: Personel izin değişikliği Supabase'e de yaz
+    const updatedEmployee = updatedPersonnel.find((p: any) => p.id === request.employeeId);
+    if (updatedEmployee) {
+      updateItem(request.employeeId, { permissions: updatedEmployee.permissions, tempPermissions: updatedEmployee.tempPermissions } as any)
+        .catch(e => console.error('[Personel] perm update sync:', e));
+    }
     logActivity('employee_update', `Gecici yetki onaylandi: ${request.panelName}`, {
       employeeId: request.employeeId,
       employeeName: request.employeeName,
@@ -467,6 +476,8 @@ export function PersonelPage() {
     const allReqs = getFromStorage<any[]>('role_requests') || [];
     const updatedReqs = allReqs.map(r => r.id === request.id ? { ...r, status: 'rejected' } : r);
     setInStorage('role_requests', updatedReqs); setRoleRequests(updatedReqs);
+    // BUG FIX [AJAN-2]: role_requests KV store'a da yaz
+    kvSet('role_requests', updatedReqs).catch(e => console.error('[Personel] role_requests kv sync:', e));
     logActivity('employee_update', `Gecici yetki reddedildi: ${request.panelName}`, {
       employeeId: request.employeeId,
       employeeName: request.employeeName,
