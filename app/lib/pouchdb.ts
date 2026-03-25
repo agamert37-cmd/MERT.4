@@ -1,7 +1,7 @@
 // [AJAN-2 | claude/serene-gagarin | 2026-03-25]
 // PouchDB instance yöneticisi — tablo başına DB + CouchDB sync
 import PouchDB from 'pouchdb-browser';
-import { DB_PREFIX, KV_DB_NAME, TABLE_NAMES, getCouchDbAuthUrl, getPeerCouchDbUrl } from './db-config';
+import { DB_PREFIX, KV_DB_NAME, TABLE_NAMES, getCouchDbAuthUrl, getCouchDbConfig, getPeerCouchDbUrl } from './db-config';
 
 // ── Instance cache ─────────────────────────────────────────────
 const instances = new Map<string, PouchDB.Database>();
@@ -108,13 +108,17 @@ export function stopPeerSync(): void {
 
 // ── Bağlantı Testi ─────────────────────────────────────────────
 
-/** CouchDB bağlantı testi */
+/** CouchDB bağlantı testi — Authorization header kullanır (URL'de credential göndermez) */
 export async function testCouchDbConnection(): Promise<{ ok: boolean; version?: string; error?: string }> {
-  const couchUrl = getCouchDbAuthUrl();
-  if (!couchUrl) return { ok: false, error: 'CouchDB URL yapılandırılmamış' };
+  const config = getCouchDbConfig();
+  if (!config.url) return { ok: false, error: 'CouchDB URL yapılandırılmamış' };
 
   try {
-    const res = await fetch(couchUrl, { method: 'GET' });
+    const headers: Record<string, string> = {};
+    if (config.user) {
+      headers['Authorization'] = 'Basic ' + btoa(`${config.user}:${config.password}`);
+    }
+    const res = await fetch(config.url, { method: 'GET', headers });
     if (!res.ok) return { ok: false, error: `HTTP ${res.status}` };
     const data = await res.json();
     return { ok: true, version: data.version };
@@ -125,11 +129,15 @@ export async function testCouchDbConnection(): Promise<{ ok: boolean; version?: 
 
 /** Peer CouchDB bağlantı testi */
 export async function testPeerConnection(): Promise<{ ok: boolean; version?: string; error?: string }> {
-  const peerUrl = getPeerCouchDbUrl();
-  if (!peerUrl) return { ok: false, error: 'Peer URL yapılandırılmamış' };
+  const config = getCouchDbConfig();
+  if (!config.peerUrl) return { ok: false, error: 'Peer URL yapılandırılmamış' };
 
   try {
-    const res = await fetch(peerUrl.replace(/\/\/.*@/, '//'), { method: 'GET' });
+    const headers: Record<string, string> = {};
+    if (config.user) {
+      headers['Authorization'] = 'Basic ' + btoa(`${config.user}:${config.password}`);
+    }
+    const res = await fetch(config.peerUrl, { method: 'GET', headers });
     if (!res.ok) return { ok: false, error: `HTTP ${res.status}` };
     const data = await res.json();
     return { ok: true, version: data.version };

@@ -51,8 +51,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         p.id === currentUser.id ? { ...p, status: 'offline' } : p
       );
       setInStorage(StorageKey.PERSONEL_DATA, updatedPersonnel);
-      // [AJAN-2] KV sync — personel online/offline durumu tüm cihazlarda güncel olsun
-      kvSet('personel_status', updatedPersonnel).catch(() => {});
+      // KV sync — personel online/offline durumu tüm cihazlarda güncel olsun
+      kvSet(`personel:${currentUser.id}:status`, { id: currentUser.id, status: 'offline', lastSeen: new Date().toISOString() }).catch(() => {});
       logActivity('logout', 'Kullanıcı sistemden çıkış yaptı', {
         employeeId: currentUser.id,
         employeeName: currentUser.name,
@@ -189,11 +189,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // PouchDB otomatik senkronize eder — ek forceSync gerekmez
     if (storedPersonnel.length === 0) {
       try {
-        // PouchDB'den personel verisini kontrol et
-        const kvPersonnel = await kvGet<any[]>('personel_status');
-        if (kvPersonnel && kvPersonnel.length > 0) {
-          setInStorage(StorageKey.PERSONEL_DATA, kvPersonnel);
-          storedPersonnel = kvPersonnel;
+        // PouchDB'den personel verisini kontrol et (tablo sync üzerinden gelir)
+        const { getDb } = await import('../lib/pouchdb');
+        const db = getDb('personeller');
+        const result = await db.allDocs({ include_docs: true });
+        const docs = result.rows.filter((r: any) => r.doc && !r.doc._deleted).map((r: any) => {
+          const { _id, _rev, _deleted, ...rest } = r.doc;
+          if (!rest.id && _id) rest.id = _id;
+          return rest;
+        });
+        if (docs.length > 0) {
+          setInStorage(StorageKey.PERSONEL_DATA, docs);
+          storedPersonnel = docs;
         }
       } catch {
         // Ağ yoksa yine de devam et — acil bypass (admin/1234) çalışmaya devam eder

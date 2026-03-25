@@ -19,7 +19,8 @@
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { getDb, startSync } from '../lib/pouchdb';
+import { getDb } from '../lib/pouchdb';
+import { setInStorage } from '../utils/storage';
 
 // ─── Tipler ───────────────────────────────────────────────────────────────────
 
@@ -116,8 +117,15 @@ export function useTableSync<T extends { id: string }>(
   }, [orderBy, orderAsc]);
 
   const setData = useCallback((newData: T[]) => {
-    setDataState(newData);
-  }, []);
+    setDataState(sortData(newData));
+  }, [sortData]);
+
+  // ─── localStorage write-through (DashboardPage vb. için) ─────────────────
+  useEffect(() => {
+    if (storageKey && data.length > 0) {
+      setInStorage(storageKey, data);
+    }
+  }, [data, storageKey]);
 
   // ─── PouchDB'den tüm veriyi oku ───────────────────────────────────────────
   const fetchData = useCallback(async () => {
@@ -162,12 +170,10 @@ export function useTableSync<T extends { id: string }>(
     }
   }, [tableName, sortData]);
 
-  // ─── İlk yükleme + CouchDB sync başlat + PouchDB changes feed ────────────
+  // ─── İlk yükleme + PouchDB changes feed ──────────────────────────────────
+  // Not: CouchDB sync GlobalTableSyncProvider tarafından başlatılır (startAllSync)
   useEffect(() => {
     fetchData();
-
-    // CouchDB ile continuous sync başlat
-    startSync(tableName);
 
     // PouchDB changes feed — realtime güncellemeler (yerel + CouchDB'den gelen)
     const db = getDb(tableName);
@@ -219,27 +225,28 @@ export function useTableSync<T extends { id: string }>(
     // Optimistik ekleme
     setDataState(prev => sortData([item, ...prev]));
 
-    try {
-      const db = getDb(tableName);
-      const dbRow = toDbRef.current ? toDbRef.current(item) : item;
-      await db.put({ ...dbRow, _id: item.id });
-      return item;
-    } catch (e: any) {
-      // Conflict — doc zaten var, güncelle
-      if (e.status === 409) {
-        try {
-          const db = getDb(tableName);
+    const MAX_RETRIES = 3;
+    for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+      try {
+        const db = getDb(tableName);
+        const dbRow = toDbRef.current ? toDbRef.current(item) : item;
+        if (attempt === 0) {
+          await db.put({ ...dbRow, _id: item.id });
+        } else {
+          // Conflict retry — son _rev ile
           const existing = await db.get(item.id);
-          const dbRow = toDbRef.current ? toDbRef.current(item) : item;
           await db.put({ ...dbRow, _id: item.id, _rev: (existing as any)._rev });
-        } catch (e2: any) {
-          console.error(`[addItem] ${tableName} conflict retry:`, e2.message);
         }
-      } else {
+        return item; // başarılı
+      } catch (e: any) {
+        if (e.status === 409 && attempt < MAX_RETRIES - 1) continue;
         console.error(`[addItem] ${tableName}:`, e.message);
+        // Rollback — DB'ye yazılamadı
+        setDataState(prev => prev.filter(i => i.id !== item.id));
+        return item;
       }
-      return item;
     }
+    return item;
   }, [tableName, sortData]);
 
   const updateItem = useCallback(async (id: string, updates: Partial<T>): Promise<void> => {
@@ -336,7 +343,7 @@ export function useTableSync<T extends { id: string }>(
           _id: u.id,
           _rev: row?.doc ? (row.doc as any)._rev : undefined,
         };
-      }).filter(d => d._rev || !existing.rows.find((r: any) => r.id === d._id && !r.error));
+      });
 
       if (docs.length > 0) {
         await db.bulkDocs(docs);

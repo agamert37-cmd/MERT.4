@@ -331,15 +331,57 @@ export function startCloudDirectBackupScheduler(_intervalHours?: number): void {
 export function stopCloudDirectBackupScheduler(): void { /* no-op */ }
 
 // ═══════════════════════════════════════════════════════════════
-// FULL TABLE BACKUP (stubs)
+// FULL TABLE BACKUP — PouchDB tabanlı gerçek implementasyon
 // ═══════════════════════════════════════════════════════════════
 
-export async function createFullTableBackup(_type?: 'manual' | 'auto'): Promise<BackupSnapshot | null> {
-  return null;
+export async function createFullTableBackup(type: 'manual' | 'auto' = 'manual'): Promise<BackupSnapshot | null> {
+  const { createPouchBackup, saveBackupMeta, downloadBackup } = await import('./pouchdb-backup');
+  const result = await createPouchBackup();
+  if (!result.ok || !result.backup) return null;
+
+  const meta = {
+    id: `backup_${Date.now()}`,
+    timestamp: result.backup.createdAt,
+    type,
+    totalDocs: result.totalDocs,
+    sizeKB: result.sizeKB,
+    tableStats: result.backup.meta.tableStats,
+  };
+  saveBackupMeta(meta);
+
+  // Manuel yedekte dosyayı indir
+  if (type === 'manual') {
+    // Backup verisi localStorage'a da kaydet (geri yükleme için)
+    try {
+      localStorage.setItem(`pouchdb_backup_data_${meta.id}`, JSON.stringify(result.backup));
+    } catch { /* Büyük veri localStorage'a sığmayabilir — sadece download yap */ }
+    downloadBackup(result.backup);
+  }
+
+  const snapshot: BackupSnapshot = {
+    id: meta.id,
+    timestamp: meta.timestamp,
+    source: 'local',
+    keysCount: result.totalDocs,
+    sizeKB: result.sizeKB,
+    type,
+  };
+  return snapshot;
 }
 
-export async function restoreFromTableBackup(_backupId: string): Promise<{ ok: number; fail: number; tables: string[] }> {
-  return { ok: 0, fail: 0, tables: [] };
+export async function restoreFromTableBackup(backupId: string): Promise<{ ok: number; fail: number; tables: string[] }> {
+  const { restorePouchBackup } = await import('./pouchdb-backup');
+
+  // Önce localStorage'dan yedek verisini al
+  try {
+    const raw = localStorage.getItem(`pouchdb_backup_data_${backupId}`);
+    if (!raw) return { ok: 0, fail: 1, tables: [] };
+    const backup = JSON.parse(raw);
+    const result = await restorePouchBackup(backup);
+    return { ok: result.ok, fail: result.fail, tables: result.tables };
+  } catch (e: any) {
+    return { ok: 0, fail: 1, tables: [] };
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════

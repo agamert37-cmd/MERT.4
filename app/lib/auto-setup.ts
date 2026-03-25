@@ -1,12 +1,13 @@
-// [AJAN-2 | claude/serene-gagarin | 2026-03-24] Son düzenleyen: Claude Sonnet 4.6
+// [AJAN-2 | claude/serene-gagarin | 2026-03-26] Son düzenleyen: Claude Opus 4.6
 /**
- * Auto Setup Service
- * Her Supabase tablosunu doğrudan SELECT COUNT ile kontrol eder.
- * KV store prefix yerine gerçek tablo satır sayıları kullanılır.
+ * Auto Setup Service — PouchDB + CouchDB
+ * Her PouchDB tablosunun kayıt sayısını kontrol eder.
+ * CouchDB bağlantı durumunu test eder.
  */
 
-import { supabase } from './supabase';
-import { SUPABASE_ANON_KEY, SUPABASE_URL } from './supabase-config';
+import { getDb } from './pouchdb';
+import { testCouchDbConnection } from './pouchdb';
+import { TABLE_NAMES } from './db-config';
 
 export interface TableStatus {
   table: string;
@@ -26,7 +27,7 @@ export interface SetupStatus {
   latencyMs?: number;
 }
 
-// Sistemdeki tüm tablolar (gerçek Supabase tablo isimleri)
+// Sistemdeki tüm tablolar
 export const SYSTEM_TABLES: Omit<TableStatus, 'exists' | 'rowCount' | 'lastSync' | 'error'>[] = [
   { table: 'personeller',       displayName: 'Personeller',         icon: '👥' },
   { table: 'cari_hesaplar',     displayName: 'Cari Hesaplar',       icon: '🏢' },
@@ -41,105 +42,45 @@ export const SYSTEM_TABLES: Omit<TableStatus, 'exists' | 'rowCount' | 'lastSync'
   { table: 'uretim_kayitlari',  displayName: 'Üretim Kayıtları',    icon: '🏭' },
   { table: 'faturalar',         displayName: 'Faturalar',           icon: '📋' },
   { table: 'fatura_stok',       displayName: 'Fatura Stok Kal.',    icon: '📄' },
-  // BUG FIX [AJAN-2]: Migration dosyasında olan ama kontrol listesinde eksik tablolar
   { table: 'tahsilatlar',       displayName: 'Tahsilatlar',         icon: '💳' },
   { table: 'arac_km_logs',      displayName: 'Araç KM Logları',     icon: '📍' },
 ];
 
 /**
- * Tek bir Supabase tablosunun satır sayısını kontrol et
+ * Tek bir PouchDB tablosunun kayıt sayısını kontrol et
  */
 async function checkTableCount(tableName: string): Promise<{ exists: boolean; rowCount: number; error: string | null }> {
   try {
-    const { count, error } = await supabase
-      .from(tableName)
-      .select('id', { count: 'exact', head: true });
-
-    if (error) {
-      // "relation does not exist" gibi hatalar → tablo yok
-      const missing = error.message?.includes('does not exist') || error.code === '42P01';
-      return {
-        exists: !missing,
-        rowCount: 0,
-        error: missing ? 'Tablo bulunamadı' : error.message,
-      };
-    }
-
-    return { exists: true, rowCount: count ?? 0, error: null };
+    const db = getDb(tableName);
+    const info = await db.info();
+    return { exists: true, rowCount: info.doc_count, error: null };
   } catch (e: any) {
-    const isNetwork =
-      e instanceof TypeError ||
-      e?.message?.includes('Failed to fetch') ||
-      e?.message?.includes('NetworkError');
-    return {
-      exists: false,
-      rowCount: 0,
-      error: isNetwork ? 'Ağ bağlantısı yok' : e.message,
-    };
+    return { exists: false, rowCount: 0, error: e.message || 'Veritabanı hatası' };
   }
 }
 
 /**
- * Bağlantı testi: personeller tablosuna basit bir ping
+ * CouchDB bağlantı testi
  */
 async function testConnection(): Promise<{ connected: boolean; latencyMs: number; error?: string }> {
   const start = performance.now();
   try {
-    const { error } = await supabase
-      .from('personeller')
-      .select('id', { count: 'exact', head: true });
-
+    const result = await testCouchDbConnection();
     const latencyMs = Math.round(performance.now() - start);
-    if (error && (error.message?.includes('does not exist') || error.code === '42P01')) {
-      // Tablo yok ama bağlantı var
-      return { connected: true, latencyMs };
-    }
-    if (error) {
-      return { connected: false, latencyMs, error: error.message };
-    }
-    return { connected: true, latencyMs };
+    return { connected: result.ok, latencyMs, error: result.error };
   } catch (e: any) {
-    return {
-      connected: false,
-      latencyMs: Math.round(performance.now() - start),
-      error: e.message,
-    };
+    return { connected: false, latencyMs: Math.round(performance.now() - start), error: e.message };
   }
 }
 
 /**
- * Tüm tabloları kontrol et (doğrudan Supabase SELECT COUNT)
+ * Tüm tabloları kontrol et (PouchDB doc_count)
  */
 export async function checkAllTables(): Promise<SetupStatus> {
-  const isConfigured = !!SUPABASE_ANON_KEY && SUPABASE_ANON_KEY.length > 10;
-
-  if (!isConfigured) {
-    return {
-      isConnected: false,
-      tables: SYSTEM_TABLES.map(t => ({
-        ...t, exists: false, rowCount: 0, lastSync: null, error: 'Supabase bağlı değil',
-      })),
-      allTablesExist: false,
-      missingTables: SYSTEM_TABLES.map(t => t.table),
-    };
-  }
-
   // Bağlantı testi
   const conn = await testConnection();
-  if (!conn.connected) {
-    console.warn(`[AutoSetup] Bağlantı başarısız: ${conn.error}`);
-    return {
-      isConnected: false,
-      tables: SYSTEM_TABLES.map(t => ({
-        ...t, exists: false, rowCount: 0, lastSync: null, error: conn.error || 'Bağlantı hatası',
-      })),
-      allTablesExist: false,
-      missingTables: SYSTEM_TABLES.map(t => t.table),
-      latencyMs: conn.latencyMs,
-    };
-  }
 
-  // Tüm tablolar için paralel COUNT sorgusu
+  // PouchDB her zaman yerel — bağlantı kesik olsa bile tablolar mevcut
   const results = await Promise.all(
     SYSTEM_TABLES.map(async (t) => {
       const status = await checkTableCount(t.table);
@@ -156,36 +97,10 @@ export async function checkAllTables(): Promise<SetupStatus> {
   const missingTables = results.filter(t => !t.exists).map(t => t.table);
 
   return {
-    isConnected: true,
+    isConnected: conn.connected,
     tables: results,
     allTablesExist: missingTables.length === 0,
     missingTables,
     latencyMs: conn.latencyMs,
   };
-}
-
-/**
- * Supabase SQL Editor URL'i oluştur
- */
-export function getSupabaseSQLEditorUrl(): string {
-  try {
-    const url = new URL(SUPABASE_URL);
-    const projectRef = url.hostname.split('.')[0];
-    return `https://supabase.com/dashboard/project/${projectRef}/sql/new`;
-  } catch {
-    return 'https://supabase.com';
-  }
-}
-
-/**
- * Supabase Table Editor URL'i oluştur (personeller tablosu)
- */
-export function getSupabaseTableEditorUrl(): string {
-  try {
-    const url = new URL(SUPABASE_URL);
-    const projectRef = url.hostname.split('.')[0];
-    return `https://supabase.com/dashboard/project/${projectRef}/editor`;
-  } catch {
-    return 'https://supabase.com';
-  }
 }

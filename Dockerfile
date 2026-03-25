@@ -24,8 +24,13 @@ FROM nginx:1.27-alpine
 # Build çıktısını nginx'e kopyala
 COPY --from=builder /app/dist /usr/share/nginx/html
 
-# React Router için nginx yapılandırması
+# CouchDB setup script'ini kopyala
+COPY couchdb-setup.sh /docker-entrypoint.d/couchdb-setup.sh
+RUN chmod +x /docker-entrypoint.d/couchdb-setup.sh 2>/dev/null || true
+
+# React Router + CouchDB Proxy nginx yapılandırması
 # - Tüm route'lar index.html'e yönlendirilir (SPA)
+# - /couchdb/ istekleri CouchDB'ye proxy edilir (CORS sorunu önlenir)
 # - gzip sıkıştırma aktif
 # - Cache başlıkları ayarlanmış
 RUN cat > /etc/nginx/conf.d/default.conf << 'NGINX_CONF'
@@ -34,6 +39,18 @@ server {
     server_name _;
     root /usr/share/nginx/html;
     index index.html;
+
+    # CouchDB reverse proxy — CORS sorunlarını önler
+    location /couchdb/ {
+        proxy_pass http://couchdb:5984/;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Authorization $http_authorization;
+        proxy_buffering off;
+        proxy_read_timeout 300s;
+    }
 
     # SPA route yönlendirmesi
     location / {

@@ -94,28 +94,32 @@ export async function kvKeysByPrefix(prefix: string): Promise<string[]> {
 // YAZMA İŞLEMLERİ
 // ═══════════════════════════════════════════════════════════════
 
-/** Tek key-value yaz (upsert) */
+/** Tek key-value yaz (upsert) — conflict-safe retry loop */
 export async function kvSet(key: string, value: any): Promise<void> {
   const db = getKvDb();
-  try {
-    const existing = await db.get(key).catch(() => null);
-    if (existing) {
-      await db.put({ _id: key, _rev: (existing as any)._rev, value, updated_at: new Date().toISOString() });
-    } else {
-      await db.put({ _id: key, value, updated_at: new Date().toISOString() });
-    }
-  } catch (e: any) {
-    // Conflict durumunda tekrar dene
-    if (e.status === 409) {
-      const doc = await db.get(key);
-      await db.put({ _id: key, _rev: (doc as any)._rev, value, updated_at: new Date().toISOString() });
-    } else {
-      console.error(`[KV] set error for "${key}":`, e.message);
+  const MAX_RETRIES = 3;
+  for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+    try {
+      const existing = await db.get(key).catch(() => null);
+      const doc: any = { _id: key, value, updated_at: new Date().toISOString() };
+      if (existing) doc._rev = (existing as any)._rev;
+      await db.put(doc);
+      return; // başarılı
+    } catch (e: any) {
+      if (e.status === 409 && attempt < MAX_RETRIES - 1) {
+        // Conflict — tekrar dene (son _rev ile)
+        continue;
+      }
+      if (e.status !== 409) {
+        console.error(`[KV] set error for "${key}":`, e.message);
+        return;
+      }
     }
   }
+  console.warn(`[KV] set failed after ${MAX_RETRIES} retries for "${key}"`);
 }
 
-/** Birden fazla key-value yaz */
+/** Birden fazla key-value yaz — conflict retry dahil */
 export async function kvMSet(keys: string[], values: any[]): Promise<void> {
   const db = getKvDb();
   const existing = await db.allDocs({ keys, include_docs: true }).catch(() => ({ rows: [] as any[] }));
@@ -130,7 +134,25 @@ export async function kvMSet(keys: string[], values: any[]): Promise<void> {
     };
   });
 
-  await db.bulkDocs(docs);
+  const results = await db.bulkDocs(docs);
+
+  // Conflict olan doc'ları tekrar dene
+  const failed = results.filter((r: any) => r.error && r.status === 409);
+  if (failed.length > 0) {
+    const retryKeys = failed.map((r: any) => r.id);
+    const retryExisting = await db.allDocs({ keys: retryKeys, include_docs: true }).catch(() => ({ rows: [] as any[] }));
+    const retryDocs = failed.map((f: any) => {
+      const idx = keys.indexOf(f.id);
+      const row = retryExisting.rows.find((r: any) => r.id === f.id && !r.error);
+      return {
+        _id: f.id,
+        _rev: row?.doc?._rev,
+        value: values[idx],
+        updated_at: new Date().toISOString(),
+      };
+    });
+    await db.bulkDocs(retryDocs);
+  }
 }
 
 /** Tek key sil */
@@ -193,14 +215,23 @@ export function kvSubscribe(
     include_docs: true,
   });
 
+  // Mevcut key'leri takip et — INSERT/UPDATE ayrımı için
+  const knownKeys = new Set<string>();
+  // Başlangıçta mevcut key'leri yükle
+  getKvDb().allDocs({ startkey: prefix, endkey: prefix + '\ufff0' })
+    .then(result => result.rows.forEach((r: any) => knownKeys.add(r.id)))
+    .catch(() => {});
+
   changes.on('change', (change: any) => {
     // Prefix filtresi
     if (!change.id.startsWith(prefix)) return;
 
     if (change.deleted) {
+      knownKeys.delete(change.id);
       onEvent({ key: change.id, value: null, type: 'DELETE' });
     } else {
-      const isNew = change.changes?.length === 1 && change.changes[0].rev?.startsWith('1-');
+      const isNew = !knownKeys.has(change.id);
+      knownKeys.add(change.id);
       onEvent({
         key: change.id,
         value: change.doc?.value,

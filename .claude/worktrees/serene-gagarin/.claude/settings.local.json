@@ -1,0 +1,21 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(grep -r from.*supabase C:/MERT.4/app --include=*.ts --include=*.tsx)",
+      "Bash(grep -rh \"import.*from.*supabase\\\\|import.*from.*['''']../lib/supabase\" C:/MERT.4/app --include=*.ts --include=*.tsx)",
+      "Bash(ls -1 \"C:/MERT.4/app/pages/\"*.tsx)",
+      "Bash(npm install:*)",
+      "Bash(npm run:*)",
+      "Bash(while read:*)",
+      "Bash(do sed:*)",
+      "Bash(echo \"OK: $f\")",
+      "Bash(done)",
+      "Bash(npx tsc:*)",
+      "Bash(npx vite:*)",
+      "Bash(rm -f app/utils/supabase-storage.ts)",
+      "Bash(rm -f app/lib/supabase-kv.ts)",
+      "Bash(python -c \"import py_compile; py_compile.compile\\(''updater.py'', doraise=True\\)\")",
+      "Bash(ls -la C:/MERT.4/*.sh C:/MERT.4/*.yml C:/MERT.4/*.yaml)"
+    ]
+  }
+}

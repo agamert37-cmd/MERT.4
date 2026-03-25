@@ -30,6 +30,7 @@ export const StorageKey = {
   CURRENT_EMPLOYEE: 'current_employee',
   SETTINGS: 'settings',
   DELETED_FISLER: 'deleted_fisler',
+  BACKUPS: 'local_backups',
 } as const;
 
 // ─── Okuma/Yazma ─────────────────────────────────────────────────────────────
