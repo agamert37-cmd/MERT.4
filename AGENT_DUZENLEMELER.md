@@ -85,6 +85,8 @@ Her düzenlenen dosyanın **en üstüne** şu yorum satırı eklenir:
 | 54 | `app/utils/activityLogger.ts` | 2026-03-25 | FIX: `loadActivityLogsFromKV()` async helper eklendi — localStorage boşsa denetim logları KV'den yüklenir. App.tsx'de başlangıçta çağrılır. |
 | 55 | `app/utils/vitrinAnalytics.ts` | 2026-03-25 | FIX: `loadVitrinAnalyticsFromKV()` async helper eklendi — localStorage boşsa vitrin analitik KV'den yüklenir. App.tsx'de başlangıçta çağrılır. |
 | 56 | `app/App.tsx` | 2026-03-25 | FIX: Başlangıçta `loadActivityLogsFromKV()` ve `loadVitrinAnalyticsFromKV()` çağrısı eklendi — KV fallback aktif. |
+| 57 | `app/components/MainLayout.tsx` | 2026-03-25 | FIX: Mobil sidebar z-index z-50→z-[100] (MobileBottomNav'ın üstüne çıktı). Bottom padding eklendi — logout butonu artık alt çubuk altında kalmıyor. Kullanıcı bilgi kartı (avatar, ad, rol) + belirgin kırmızı logout butonu eklendi. |
+| 58 | `app/components/MobileBottomNav.tsx` | 2026-03-25 | FIX: More drawer'a "Oturum Kapat" butonu eklendi (kırmızı, en altta, border-top ile ayrılmış). `logout` fonksiyonu useAuth'dan destructure edildi. Kullanıcı yan menüyü açmadan da çıkış yapabiliyor. |
 
 ---
 

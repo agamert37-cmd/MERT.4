@@ -1,3 +1,4 @@
+// [AJAN-2 | claude/serene-gagarin | 2026-03-25] Son düzenleyen: Claude Opus 4.6
 import React, { useEffect, useCallback, useState, useMemo } from 'react';
 import { Outlet, useNavigate, useLocation, Link } from 'react-router';
 import { useAuth } from '../contexts/AuthContext';
@@ -415,7 +416,7 @@ export function MainLayout() {
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               onClick={() => setIsMobileSidebarOpen(false)}
-              className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40 lg:hidden"
+              className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[99] lg:hidden"
             />
           )}
         </AnimatePresence>
@@ -428,7 +429,7 @@ export function MainLayout() {
               animate={{ x: 0 }}
               exit={{ x: -280 }}
               transition={{ type: "spring", stiffness: 220, damping: 28 }}
-              className="fixed top-0 left-0 bottom-0 w-[270px] bg-sidebar/98 backdrop-blur-2xl border-r border-sidebar-border flex flex-col z-50 lg:hidden overflow-hidden"
+              className="fixed top-0 left-0 bottom-0 w-[270px] bg-sidebar/98 backdrop-blur-2xl border-r border-sidebar-border flex flex-col z-[100] lg:hidden overflow-hidden pb-[calc(4.5rem+env(safe-area-inset-bottom,0px))]"
             >
               {/* Mobile Sidebar inner gradient */}
               <div className="absolute inset-0 bg-gradient-to-b from-blue-600/[0.03] via-transparent to-indigo-600/[0.02] pointer-events-none" />
@@ -481,12 +482,25 @@ export function MainLayout() {
               </nav>
 
               {/* Mobile User Section */}
-              <div className="p-3 border-t border-border/60">
+              <div className="p-3 border-t border-border/60 space-y-2">
+                {/* Kullanıcı bilgi kartı */}
+                {user && (
+                  <div className="flex items-center gap-3 px-3 py-2.5 rounded-xl bg-white/[0.04] border border-white/[0.06]">
+                    <div className="w-9 h-9 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white text-sm font-bold flex-shrink-0">
+                      {user.name?.charAt(0)?.toUpperCase() || 'U'}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-white truncate">{user.name}</p>
+                      <p className="text-[11px] text-muted-foreground truncate">{user.role}</p>
+                    </div>
+                  </div>
+                )}
+                {/* Çıkış butonu */}
                 <button
                   onClick={() => { setIsMobileSidebarOpen(false); handleLogout(); }}
-                  className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-red-400 hover:bg-red-500/10 transition-colors"
+                  className="w-full flex items-center justify-center gap-2 px-3 py-3 rounded-xl text-sm font-semibold text-red-400 bg-red-500/10 border border-red-500/20 hover:bg-red-500/20 active:scale-[0.98] transition-all"
                 >
-                  <LogOut className="w-[18px] h-[18px]" />
+                  <LogOut className="w-4 h-4" />
                   <span>{t('userMenu.logout')}</span>
                 </button>
               </div>
