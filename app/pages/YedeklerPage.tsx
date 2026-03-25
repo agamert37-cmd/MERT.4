@@ -13,7 +13,7 @@ import { toast } from 'sonner';
 import * as Dialog from '@radix-ui/react-dialog';
 import { getFromStorage, setInStorage, StorageKey } from '../utils/storage';
 import { generateDetailedExcelBackup, generatePDFBackup } from '../utils/exportGenerator';
-import { kvGetByPrefixWithKeys, TABLE_PREFIXES } from '../lib/supabase-kv';
+import { kvGetByPrefixWithKeys, kvSet, TABLE_PREFIXES } from '../lib/supabase-kv';
 import { SERVER_BASE_URL, SUPABASE_ANON_KEY } from '../lib/supabase-config';
 import { useAuth } from '../contexts/AuthContext';
 import { useEmployee } from '../contexts/EmployeeContext';
@@ -350,6 +350,7 @@ export function YedeklerPage() {
       const metaOnly = { ...entry, data: {} as Record<string, string> };
       const updated = [metaOnly, ...existing].slice(0, 20);
       setInStorage(StorageKey.BACKUPS, updated);
+      kvSet('backups', updated).catch(() => {});
       setLocalBackups(updated);
 
       const dateStr = new Date().toLocaleDateString('tr-TR').replace(/\./g, '-');
@@ -751,7 +752,7 @@ export function YedeklerPage() {
                           Geri Yükle
                         </button>
                       )}
-                      <button onClick={() => { const updated = localBackups.filter(x => x.id !== b.id); setInStorage(StorageKey.BACKUPS, updated); setLocalBackups(updated); toast.success('Silindi'); }}
+                      <button onClick={() => { const updated = localBackups.filter(x => x.id !== b.id); setInStorage(StorageKey.BACKUPS, updated); kvSet('backups', updated).catch(() => {}); setLocalBackups(updated); toast.success('Silindi'); }}
                         className="p-2 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 transition-all active:scale-95">
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>

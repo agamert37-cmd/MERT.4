@@ -6,6 +6,7 @@ import { logActivity } from '../utils/activityLogger';
 import { toast } from 'sonner';
 import { forceSync } from '../utils/supabase-storage';
 import { supabase } from '../lib/supabase';
+import { kvSet } from '../lib/supabase-kv';
 
 interface User {
   id: string;
@@ -52,6 +53,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         p.id === currentUser.id ? { ...p, status: 'offline' } : p
       );
       setInStorage(StorageKey.PERSONEL_DATA, updatedPersonnel);
+      // [AJAN-2] KV sync — personel online/offline durumu tüm cihazlarda güncel olsun
+      kvSet('personel_status', updatedPersonnel).catch(() => {});
       logActivity('logout', 'Kullanıcı sistemden çıkış yaptı', {
         employeeId: currentUser.id,
         employeeName: currentUser.name,

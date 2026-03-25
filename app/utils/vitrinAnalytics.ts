@@ -3,6 +3,7 @@
  * Tüm veriler Pazarlama modülünden izlenebilir.
  */
 import { getFromStorage, setInStorage, StorageKey } from './storage';
+import { kvSet } from '../lib/supabase-kv';
 
 export interface VitrinEvent {
   id: string;
@@ -43,6 +44,8 @@ function saveAnalytics(analytics: VitrinAnalytics) {
     analytics.events = analytics.events.slice(-500);
   }
   setInStorage(StorageKey.VITRIN_ANALYTICS, analytics);
+  // [AJAN-2] KV sync — analitik verileri Pazarlama modülünden tüm cihazlarda izlensin
+  kvSet('vitrin_analytics', analytics).catch(() => {});
 }
 
 export function trackVitrinEvent(type: VitrinEvent['type'], data?: Record<string, any>) {
@@ -138,7 +141,7 @@ export function getDailyStats(days: number = 7): { date: string; views: number; 
 }
 
 export function clearVitrinAnalytics() {
-  setInStorage(StorageKey.VITRIN_ANALYTICS, {
+  const empty = {
     events: [],
     summary: {
       totalPageViews: 0,
@@ -148,5 +151,7 @@ export function clearVitrinAnalytics() {
       totalNewsViews: 0,
       lastVisit: '',
     },
-  });
+  };
+  setInStorage(StorageKey.VITRIN_ANALYTICS, empty);
+  kvSet('vitrin_analytics', empty).catch(() => {});
 }

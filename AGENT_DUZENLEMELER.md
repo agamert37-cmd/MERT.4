@@ -68,6 +68,14 @@ Her düzenlenen dosyanın **en üstüne** şu yorum satırı eklenir:
 | 37 | `app/hooks/useTableSync.ts` | 2026-03-25 | ENTEGRASYON: `dualWrite()` import edildi — WriteQueue flush'ta upsert/delete sonrası yerel node'a da yaz; cloud başarısızsa WAL'a ekle. `onOnline` handler'a `replayWAL(supabase)` eklendi — ağ gelince WAL otomatik gönderilir. |
 | 38 | `app/components/NodeStatusPanel.tsx` | 2026-03-25 | GELİŞTİRME: Bootstrap butonu (Cloud→Node, ilerleme çubuğu), Node→Cloud sync butonu, WAL sayısı göstergesi + temizle butonu, otomatik senkron toggle, failover tetiklenince `setActiveLocalNode()` ile dual-write aktive edilir, WAL badge NodeStatusBadge'e eklendi. |
 | 39 | `app/App.tsx` | 2026-03-25 | ENTEGRASYON: `startAutoNodeSync(cloudSupabase)` eklendi — ayar aktifse başlangıçta periyodik node sync başlar. `replayWAL(cloudSupabase)` eklendi — başlangıçta önceki oturumdan kalan WAL yazmaları gönderilir. |
+| 40 | `app/utils/activityLogger.ts` | 2026-03-25 | FIX: `logActivity()` ve `clearActivityLogs()` sonrası `kvSet('activity_logs')` eklendi — denetim logları tüm cihazlarda senkron. |
+| 41 | `app/utils/vitrinAnalytics.ts` | 2026-03-25 | FIX: `saveAnalytics()` ve `clearVitrinAnalytics()` sonrası `kvSet('vitrin_analytics')` eklendi — vitrin analitik verileri senkron. |
+| 42 | `app/contexts/AuthContext.tsx` | 2026-03-25 | FIX: Logout akışında `kvSet('personel_status')` eklendi — personel online/offline durumu senkron. |
+| 43 | `app/contexts/EmployeeContext.tsx` | 2026-03-25 | FIX: `setCurrentEmployee`, doğrulama fallback ve rol düzeltme sonrası `kvSet('current_employee')` eklendi — aktif çalışan bilgisi senkron. |
+| 44 | `app/pages/FisHistoryPage.tsx` | 2026-03-25 | FIX: Tüm `DELETED_FISLER` yazmaları sonrası `kvSet('deleted_fisler')` eklendi — silinen fiş geçmişi senkron. |
+| 45 | `app/pages/UretimPage.tsx` | 2026-03-25 | FIX: `URETIM_DEFAULTS` sonrası `kvSet('uretim_defaults')` eklendi — üretim varsayılan maliyetleri senkron. |
+| 46 | `app/pages/YedeklerPage.tsx` | 2026-03-25 | FIX: Yedek oluşturma ve silme sonrası `kvSet('backups')` eklendi — yedek listesi senkron. |
+| 47 | `app/components/ProfileEditModal.tsx` | 2026-03-25 | FIX: Profil güncellemesi sonrası `kvSet('personel_status')` eklendi — profil değişiklikleri senkron. |
 
 ---
 

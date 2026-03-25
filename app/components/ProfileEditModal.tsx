@@ -5,6 +5,7 @@ import { useEmployee } from '../contexts/EmployeeContext';
 import { toast } from 'sonner';
 import { getFromStorage, setInStorage, StorageKey } from '../utils/storage';
 import { hashString } from '../utils/security';
+import { kvSet } from '../lib/supabase-kv';
 
 interface ProfileEditModalProps {
   isOpen: boolean;
@@ -58,7 +59,9 @@ export function ProfileEditModal({ isOpen, onClose }: ProfileEditModalProps) {
 
     // Save back to storage
     setInStorage(StorageKey.PERSONEL_DATA, updatedPersonnel);
-    
+    // [AJAN-2] KV sync — profil değişiklikleri tüm cihazlarda görünsün
+    kvSet('personel_status', updatedPersonnel).catch(() => {});
+
     // Update context
     setCurrentEmployee({ ...currentEmployee, ...updateData } as any);
     

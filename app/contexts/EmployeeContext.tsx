@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, ReactNode, useEffect, useCallback } from 'react';
 import { StorageKey, getFromStorage, setInStorage } from '../utils/storage';
+import { kvSet } from '../lib/supabase-kv';
 
 export interface Employee {
   id: string;
@@ -124,7 +125,10 @@ export function EmployeeProvider({ children }: { children: ReactNode }) {
           || availableEmployees.find(e => e.role === 'Yönetici')
           || availableEmployees[0];
         setCurrentEmployeeState(defaultEmp ?? null);
-        if (defaultEmp) setInStorage(StorageKey.CURRENT_EMPLOYEE, defaultEmp);
+        if (defaultEmp) {
+          setInStorage(StorageKey.CURRENT_EMPLOYEE, defaultEmp);
+          kvSet('current_employee', defaultEmp).catch(() => {});
+        }
       } else if (
         validated.role !== currentEmployee?.role ||
         JSON.stringify(validated.permissions) !== JSON.stringify(currentEmployee?.permissions)
@@ -132,6 +136,7 @@ export function EmployeeProvider({ children }: { children: ReactNode }) {
         // Rol veya izinler localStorage'da değiştirilmiş → düzelt
         setCurrentEmployeeState(validated);
         setInStorage(StorageKey.CURRENT_EMPLOYEE, validated);
+        kvSet('current_employee', validated).catch(() => {});
       }
     }
   }, [availableEmployees, currentEmployee, validateEmployeeFromStorage]);
@@ -140,6 +145,7 @@ export function EmployeeProvider({ children }: { children: ReactNode }) {
     setCurrentEmployeeState(employee);
     if (employee) {
       setInStorage(StorageKey.CURRENT_EMPLOYEE, employee);
+      kvSet('current_employee', employee).catch(() => {});
     }
   }, []);
 

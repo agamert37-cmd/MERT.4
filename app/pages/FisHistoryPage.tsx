@@ -6,6 +6,7 @@ import * as Dialog from '@radix-ui/react-dialog';
 import { toast } from 'sonner';
 import { getFromStorage, setInStorage, StorageKey } from '../utils/storage';
 import { supabase } from '../lib/supabase';
+import { kvSet } from '../lib/supabase-kv';
 import { useEmployee } from '../contexts/EmployeeContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useLanguage } from '../contexts/LanguageContext';
@@ -324,6 +325,7 @@ export function FisHistoryPage() {
         const updatedDeleted = [deletedEntry, ...deletedFisler].slice(0, 100);
         setDeletedFisler(updatedDeleted);
         setInStorage(StorageKey.DELETED_FISLER, updatedDeleted);
+        kvSet('deleted_fisler', updatedDeleted).catch(() => {});
       }
 
       const updated = fisler.filter(f => f.id !== id);
@@ -353,6 +355,7 @@ export function FisHistoryPage() {
     const updatedDeleted = deletedFisler.filter(f => f.id !== id);
     setDeletedFisler(updatedDeleted);
     setInStorage(StorageKey.DELETED_FISLER, updatedDeleted);
+    kvSet('deleted_fisler', updatedDeleted).catch(() => {});
 
     logActivity('custom', 'Fiş geri yüklendi', { employeeName: user?.name, page: 'FisHistory' });
     toast.success('Fis basariyla geri yuklendi');
@@ -364,6 +367,7 @@ export function FisHistoryPage() {
       const updatedDeleted = deletedFisler.filter(f => f.id !== id);
       setDeletedFisler(updatedDeleted);
       setInStorage(StorageKey.DELETED_FISLER, updatedDeleted);
+      kvSet('deleted_fisler', updatedDeleted).catch(() => {});
       logActivity('custom', 'Fiş kalıcı olarak silindi', { employeeName: user?.name, page: 'FisHistory' });
       toast.success('Fis kalici olarak silindi');
     }
@@ -374,6 +378,7 @@ export function FisHistoryPage() {
     if (confirm('Tum silinen fisleri kalici olarak temizlemek istediginize emin misiniz?')) {
       setDeletedFisler([]);
       setInStorage(StorageKey.DELETED_FISLER, []);
+      kvSet('deleted_fisler', []).catch(() => {});
       toast.success('Silinenler gecmisi temizlendi');
     }
   };

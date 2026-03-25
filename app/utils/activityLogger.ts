@@ -4,6 +4,7 @@
  */
 
 import { getFromStorage, setInStorage, StorageKey } from './storage';
+import { kvSet } from '../lib/supabase-kv';
 
 export type ActivityType =
   | 'login' | 'logout'
@@ -115,6 +116,8 @@ export function logActivity(
     }
 
     setInStorage(StorageKey.USER_ACTIVITY_LOG, logs);
+    // [AJAN-2] KV sync — denetim logları tüm cihazlarda görünsün
+    kvSet('activity_logs', logs).catch(() => {});
   } catch (e) {
     console.warn('[ActivityLogger] Log kaydetme hatasi:', e);
   }
@@ -182,6 +185,7 @@ export function getActivityStats(): Record<ActivityCategory, number> {
  */
 export function clearActivityLogs(): void {
   setInStorage(StorageKey.USER_ACTIVITY_LOG, []);
+  kvSet('activity_logs', []).catch(() => {});
 }
 
 // ─── ANOMALİ TESPİT ALGORİTMASI ──────────────────────────────────────────────

@@ -22,6 +22,7 @@ import {
 import { motion, AnimatePresence } from 'motion/react';
 import { toast } from 'sonner';
 import { getFromStorage, setInStorage, StorageKey } from '../utils/storage';
+import { kvSet } from '../lib/supabase-kv';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useEmployee } from '../contexts/EmployeeContext';
@@ -1403,6 +1404,7 @@ export function UretimPage() {
     };
     setDefaults(newDefaults);
     setInStorage(StorageKey.URETIM_DEFAULTS, newDefaults);
+    kvSet('uretim_defaults', newDefaults).catch(() => {});
 
     // ─── KV SYNC: Değişen stok kalemlerini Supabase'e de yaz ───
     // useTableSync StokPage'de KV'den veri çektiğinde güncel data görsün
