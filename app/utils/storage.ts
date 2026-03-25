@@ -13,6 +13,7 @@ import {
   updateInSupabase,
   deleteFromSupabase,
   subscribeToTable,
+  forceSync,
   createSystemBackup,
   getSystemBackups,
   restoreSystemBackup,
@@ -42,6 +43,7 @@ export {
   startInitialSync,
   startRealtimeSync,
   stopRealtimeSync,
+  forceSync,
 };
 
 export const StorageKey = SK;

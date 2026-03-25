@@ -8,7 +8,8 @@
  * Fire: Kalan (temiz) → Pişirme → Çıktı; fark fire olarak hesaplanır
  */
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import {
   Factory, Plus, Save, Trash2, Settings, TrendingUp, TrendingDown,
   Package, Flame, Thermometer, Scale, DollarSign, Users, Box,
@@ -26,6 +27,7 @@ import {
 } from 'recharts';
 import { toast } from 'sonner';
 import { getFromStorage, setInStorage, StorageKey } from '../utils/storage';
+import { kvGet, kvSet } from '../lib/supabase-kv';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useEmployee } from '../contexts/EmployeeContext';
@@ -36,8 +38,33 @@ import { getPagePermissions } from '../utils/permissions';
 import { usePageSecurity } from '../hooks/usePageSecurity';
 import { productToDb, Product } from './StokPage';
 import { SERVER_BASE_URL, SUPABASE_ANON_KEY as publicAnonKey, projectId } from '../lib/supabase-config';
+import { supabase } from '../lib/supabase';
 
 const KV_SERVER_URL = SERVER_BASE_URL;
+
+// [AJAN-2 | claude/serene-gagarin | 2026-03-24] Son düzenleyen: Claude Sonnet 4.6
+
+/** Değişen stok kalemlerini doğrudan Supabase urunler tablosuna yazar */
+async function syncStokItemsToSupabase(items: any[]) {
+  try {
+    if (items.length === 0) return;
+    const rows = items.map(item => productToDb({
+      id: item.id,
+      name: item.name || '',
+      category: item.category || 'Genel',
+      unit: item.unit || 'KG',
+      sellPrice: item.sellPrice ?? item.sell_price ?? 0,
+      currentStock: item.currentStock ?? item.current_stock ?? item.stock ?? 0,
+      minStock: item.minStock ?? item.min_stock ?? 5,
+      movements: Array.isArray(item.movements) ? item.movements : [],
+    } as any));
+    const { error } = await supabase.from('urunler').upsert(rows, { onConflict: 'id' });
+    if (error) console.warn('[UretimPage] urunler upsert hatası:', error.message);
+    else console.log('[UretimPage] urunler Supabase sync OK:', rows.length, 'kalem');
+  } catch (e: any) {
+    console.warn('[UretimPage] Supabase urunler sync exception:', e.message);
+  }
+}
 
 /** Değişen stok kalemlerini Supabase KV'ye senkronize et */
 async function syncStokItemsToKV(items: any[]) {
@@ -121,6 +148,7 @@ interface UretimKayit {
   ciktiUrunAdi: string;
   ciktiStokId: string;
   stokIslemleriYapildi: boolean;
+  uretimTipi?: 'pisirme' | 'kiyma';
   createdAt: string;
 }
 
@@ -291,6 +319,67 @@ function StokSearchSelect({ value, onSelect, stokList }: {
   const { t } = useLanguage();
   const [search, setSearch] = useState('');
   const [isOpen, setIsOpen] = useState(false);
+  const [dropdownStyle, setDropdownStyle] = useState<React.CSSProperties>({});
+  const containerRef = React.useRef<HTMLDivElement>(null);
+
+  // Dışarı tıklayınca kapat
+  useEffect(() => {
+    if (!isOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [isOpen]);
+
+  // FIX: position:fixed kullan — overflow:hidden olan üst container'lardan etkilenmez
+  const updatePosition = useCallback(() => {
+    if (!containerRef.current) return;
+    const rect = containerRef.current.getBoundingClientRect();
+    const spaceBelow = window.innerHeight - rect.bottom;
+    const spaceAbove = rect.top;
+    const goUpward = spaceBelow < 300 && spaceAbove > spaceBelow;
+    const maxH = Math.min(340, Math.max(160, (goUpward ? spaceAbove : spaceBelow) - 12));
+
+    if (goUpward) {
+      setDropdownStyle({
+        position: 'fixed',
+        bottom: window.innerHeight - rect.top + 8,
+        left: rect.left,
+        width: rect.width,
+        maxHeight: maxH,
+        zIndex: 9999,
+      });
+    } else {
+      setDropdownStyle({
+        position: 'fixed',
+        top: rect.bottom + 8,
+        left: rect.left,
+        width: rect.width,
+        maxHeight: maxH,
+        zIndex: 9999,
+      });
+    }
+  }, []);
+
+  // Açıkken scroll/resize'da pozisyonu güncelle
+  useEffect(() => {
+    if (!isOpen) return;
+    updatePosition();
+    window.addEventListener('scroll', updatePosition, true);
+    window.addEventListener('resize', updatePosition);
+    return () => {
+      window.removeEventListener('scroll', updatePosition, true);
+      window.removeEventListener('resize', updatePosition);
+    };
+  }, [isOpen, updatePosition]);
+
+  const handleOpen = () => {
+    if (isOpen) { setIsOpen(false); return; }
+    setIsOpen(true);
+  };
 
   const filtered = useMemo(() => {
     const validStok = stokList.filter(s => (s.name || '').trim().length > 0 && (s.currentStock || s.stock || 0) > 0);
@@ -301,10 +390,64 @@ function StokSearchSelect({ value, onSelect, stokList }: {
 
   const selectedItem = stokList.find(s => s.id === value);
 
+  const dropdown = isOpen ? (
+    <motion.div
+      initial={{ opacity: 0, y: -4 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -4 }}
+      style={dropdownStyle}
+      className="glass-strong rounded-xl shadow-2xl flex flex-col overflow-hidden border border-border/30"
+    >
+      <div className="p-3 border-b border-border/40 flex-shrink-0">
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+          <input
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            className="w-full pl-9 pr-3 py-2 bg-card border border-border rounded-lg text-white text-sm placeholder-muted-foreground/50 focus:outline-none focus:ring-1 focus:ring-blue-500/40 transition-snappy"
+            placeholder={t('common.search') || 'Urun ara...'}
+            autoFocus
+          />
+        </div>
+      </div>
+      <div className="overflow-y-auto flex-1 min-h-0 custom-scrollbar">
+        {filtered.length === 0 ? (
+          <div className="p-6 text-center text-muted-foreground text-sm">
+            {stokList.length === 0 ? (t('uretim.messages.noStock') || 'Stokta urun bulunamadi') : (t('uretim.messages.noMatch') || 'Aramayla eslesen urun yok')}
+          </div>
+        ) : (
+          filtered.map(item => (
+            <button
+              key={item.id}
+              onClick={() => { onSelect(item); setIsOpen(false); setSearch(''); }}
+              className={`w-full text-left px-4 py-3.5 sm:py-3 hover:bg-blue-600/10 active:bg-blue-600/15 transition-snappy flex items-center justify-between border-b border-border/20 last:border-0 data-row ${
+                value === item.id ? 'bg-blue-600/10' : ''
+              }`}
+              style={{ '--row-accent': '#3b82f6' } as React.CSSProperties}
+            >
+              <div>
+                <p className="text-sm font-medium text-white">{item.name}</p>
+                <p className="text-[11px] text-muted-foreground">
+                  {item.category || 'Genel'} &bull; Satis: ₺{(item.sellPrice ?? item.price ?? 0).toFixed(2)}/{item.unit || 'kg'}
+                </p>
+              </div>
+              <div className="text-right flex-shrink-0 ml-3">
+                <p className="text-sm font-bold text-emerald-400">
+                  {(item.currentStock ?? item.stock ?? 0).toFixed(1)}
+                </p>
+                <p className="text-[10px] text-muted-foreground/60">{item.unit || 'kg'}</p>
+              </div>
+            </button>
+          ))
+        )}
+      </div>
+    </motion.div>
+  ) : null;
+
   return (
-    <div className="relative">
+    <div ref={containerRef}>
       <div
-        onClick={() => setIsOpen(!isOpen)}
+        onClick={handleOpen}
         className="w-full px-4 py-3.5 sm:py-3 bg-card border border-border rounded-xl text-white cursor-pointer flex items-center justify-between hover:border-blue-500/30 active:bg-card/80 transition-corporate"
       >
         {selectedItem ? (
@@ -320,62 +463,11 @@ function StokSearchSelect({ value, onSelect, stokList }: {
         ) : (
           <span className="text-muted-foreground/60 text-sm">{t('uretim.labels.select_placeholder') || 'Stoktan urun secin...'}</span>
         )}
-        <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+        <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform flex-shrink-0 ${isOpen ? 'rotate-180' : ''}`} />
       </div>
 
       <AnimatePresence>
-        {isOpen && (
-          <motion.div
-            initial={{ opacity: 0, y: -5 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -5 }}
-            className="absolute z-50 top-full left-0 right-0 mt-2 glass-strong rounded-xl shadow-2xl max-h-[60vh] sm:max-h-72 overflow-hidden"
-          >
-            <div className="p-3 border-b border-border/40">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                <input
-                  value={search}
-                  onChange={e => setSearch(e.target.value)}
-                  className="w-full pl-9 pr-3 py-2 bg-card border border-border rounded-lg text-white text-sm placeholder-muted-foreground/50 focus:outline-none focus:ring-1 focus:ring-blue-500/40 transition-snappy"
-                  placeholder={t('common.search') || 'Urun ara...'}
-                  autoFocus
-                />
-              </div>
-            </div>
-            <div className="overflow-y-auto max-h-[45vh] sm:max-h-52 custom-scrollbar">
-              {filtered.length === 0 ? (
-                <div className="p-6 text-center text-muted-foreground text-sm">
-                  {stokList.length === 0 ? (t('uretim.messages.noStock') || 'Stokta urun bulunamadi') : (t('uretim.messages.noMatch') || 'Aramayla eslesen urun yok')}
-                </div>
-              ) : (
-                filtered.map(item => (
-                  <button
-                    key={item.id}
-                    onClick={() => { onSelect(item); setIsOpen(false); setSearch(''); }}
-                    className={`w-full text-left px-4 py-3.5 sm:py-3 hover:bg-blue-600/10 active:bg-blue-600/15 transition-snappy flex items-center justify-between border-b border-border/20 last:border-0 data-row ${
-                      value === item.id ? 'bg-blue-600/10' : ''
-                    }`}
-                    style={{ '--row-accent': '#3b82f6' } as React.CSSProperties}
-                  >
-                    <div>
-                      <p className="text-sm font-medium text-white">{item.name}</p>
-                      <p className="text-[11px] text-muted-foreground">
-                        {item.category || 'Genel'} &bull; Satis: ₺{(item.sellPrice ?? item.price ?? 0).toFixed(2)}/{item.unit || 'kg'}
-                      </p>
-                    </div>
-                    <div className="text-right flex-shrink-0 ml-3">
-                      <p className="text-sm font-bold text-emerald-400">
-                        {(item.currentStock ?? item.stock ?? 0).toFixed(1)}
-                      </p>
-                      <p className="text-[10px] text-muted-foreground/60">{item.unit || 'kg'}</p>
-                    </div>
-                  </button>
-                ))
-              )}
-            </div>
-          </motion.div>
-        )}
+        {isOpen && createPortal(dropdown, document.body)}
       </AnimatePresence>
     </div>
   );
@@ -391,10 +483,10 @@ function CiktiUrunSelect({ value, onChange, stokList, hammaddeAdi }: {
   const { t } = useLanguage();
   const [search, setSearch] = useState('');
   const [isOpen, setIsOpen] = useState(false);
-  const [openUpward, setOpenUpward] = useState(false);
+  const [dropdownStyle, setDropdownStyle] = useState<React.CSSProperties>({});
   const containerRef = React.useRef<HTMLDivElement>(null);
 
-  // Dışarı tıklayınca kapat (onBlur yerine daha güvenilir)
+  // Dışarı tıklayınca kapat
   useEffect(() => {
     if (!isOpen) return;
     const handleClickOutside = (e: MouseEvent) => {
@@ -406,14 +498,35 @@ function CiktiUrunSelect({ value, onChange, stokList, hammaddeAdi }: {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [isOpen]);
 
-  // Açılış yönünü hesapla - altta yeterli alan yoksa yukarı aç
-  useEffect(() => {
-    if (!isOpen || !containerRef.current) return;
+  // FIX: position:fixed — overflow:hidden olan üst container'lardan etkilenmez
+  const updatePosition = useCallback(() => {
+    if (!containerRef.current) return;
     const rect = containerRef.current.getBoundingClientRect();
     const spaceBelow = window.innerHeight - rect.bottom;
     const spaceAbove = rect.top;
-    setOpenUpward(spaceBelow < 300 && spaceAbove > spaceBelow);
-  }, [isOpen]);
+    const goUpward = spaceBelow < 300 && spaceAbove > spaceBelow;
+    const maxH = Math.min(360, Math.max(160, (goUpward ? spaceAbove : spaceBelow) - 12));
+    if (goUpward) {
+      setDropdownStyle({ position: 'fixed', bottom: window.innerHeight - rect.top + 8, left: rect.left, width: rect.width, maxHeight: maxH, zIndex: 9999 });
+    } else {
+      setDropdownStyle({ position: 'fixed', top: rect.bottom + 8, left: rect.left, width: rect.width, maxHeight: maxH, zIndex: 9999 });
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    updatePosition();
+    window.addEventListener('scroll', updatePosition, true);
+    window.addEventListener('resize', updatePosition);
+    return () => {
+      window.removeEventListener('scroll', updatePosition, true);
+      window.removeEventListener('resize', updatePosition);
+    };
+  }, [isOpen, updatePosition]);
+
+  const openMenu = () => {
+    setIsOpen(true);
+  };
 
   // Mevcut stok ürünlerini filtrele (isimsizleri hariç tut)
   const suggestions = useMemo(() => {
@@ -442,14 +555,93 @@ function CiktiUrunSelect({ value, onChange, stokList, hammaddeAdi }: {
     setIsOpen(false);
   };
 
+  const ciktiDropdown = isOpen ? (
+    <motion.div
+      initial={{ opacity: 0, y: -4 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -4 }}
+      style={dropdownStyle}
+      className="glass-strong rounded-xl shadow-2xl flex flex-col overflow-hidden border border-border/30"
+    >
+      {/* Hızlı öneriler — sadece arama yokken göster */}
+      {quickSuggestions.length > 0 && !search.trim() && (
+        <div className="p-3 border-b border-border/40 flex-shrink-0">
+          <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-bold mb-2">{t('uretim.labels.quick_suggestions') || 'Hizli Oneriler'}</p>
+          <div className="flex flex-wrap gap-1.5">
+            {quickSuggestions.map(suggestion => (
+              <button
+                key={suggestion}
+                type="button"
+                onClick={() => handleSelect(suggestion)}
+                className={`px-2.5 py-1.5 rounded-lg text-[11px] font-medium btn-press transition-snappy ${
+                  value === suggestion
+                    ? 'bg-emerald-600/20 text-emerald-400 border border-emerald-500/30'
+                    : 'bg-secondary/60 text-muted-foreground hover:bg-accent/60 hover:text-foreground/80 border border-transparent'
+                }`}
+              >
+                {suggestion}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+      <div className="overflow-y-auto flex-1 min-h-0 custom-scrollbar">
+        {suggestions.length > 0 && (
+          <div className="px-4 py-2 border-b border-border/40 sticky top-0 bg-card/80 backdrop-blur-sm">
+            <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-bold">{t('uretim.labels.existing_stock') || 'Mevcut Stok Urunleri'}</p>
+          </div>
+        )}
+        {suggestions.map(item => (
+          <button
+            key={item.id}
+            type="button"
+            onClick={() => handleSelect(item.name)}
+            className={`w-full text-left px-4 py-2.5 hover:bg-emerald-600/10 transition-snappy flex items-center justify-between border-b border-border/20 last:border-0 data-row ${
+              value === item.name ? 'bg-emerald-600/10' : ''
+            }`}
+            style={{ '--row-accent': '#10b981' } as React.CSSProperties}
+          >
+            <div className="flex items-center gap-2">
+              <Package className="w-3.5 h-3.5 text-muted-foreground" />
+              <div>
+                <p className="text-sm font-medium text-white">{item.name}</p>
+                <p className="text-[10px] text-muted-foreground">
+                  {item.category || 'Genel'} &bull; Stok: {(item.currentStock ?? item.stock ?? 0).toFixed(1)} {item.unit || 'kg'}
+                </p>
+              </div>
+            </div>
+            {value === item.name && <CheckCircle className="w-4 h-4 text-emerald-400" />}
+          </button>
+        ))}
+        {search.trim() && !suggestions.find(s => s.name.toLowerCase() === search.trim().toLowerCase()) && (
+          <button
+            type="button"
+            onClick={() => handleSelect(search.trim())}
+            className="w-full text-left px-4 py-3 hover:bg-blue-600/10 transition-colors flex items-center gap-2 border-t border-border/30"
+          >
+            <Plus className="w-4 h-4 text-blue-400" />
+            <span className="text-sm text-blue-400">
+              "<span className="font-bold text-white">{search.trim()}</span>" {t('uretim.labels.create_new') || 'olarak yeni urun olustur'}
+            </span>
+          </button>
+        )}
+        {suggestions.length === 0 && !search.trim() && (
+          <div className="p-4 text-center text-muted-foreground/60 text-xs">
+            Stokta kayıtlı ürün yok — yukarıdan hızlı öneri seçin veya yeni isim yazın
+          </div>
+        )}
+      </div>
+    </motion.div>
+  ) : null;
+
   return (
-    <div className="relative" ref={containerRef}>
+    <div ref={containerRef}>
       <div className="relative">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
         <input
           value={isOpen ? search : value}
           onChange={e => { setSearch(e.target.value); onChange(e.target.value); }}
-          onFocus={() => { setIsOpen(true); setSearch(value || ''); }}
+          onFocus={() => { setSearch(value || ''); openMenu(); }}
           className="w-full pl-9 pr-4 py-3 bg-card border border-border rounded-xl text-white text-sm placeholder-muted-foreground/50 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-500/50 transition-corporate focus-corporate"
           placeholder={t('uretim.labels.output_placeholder') || 'Urun adi yazin veya stoktan secin...'}
         />
@@ -465,82 +657,7 @@ function CiktiUrunSelect({ value, onChange, stokList, hammaddeAdi }: {
       </div>
 
       <AnimatePresence>
-        {isOpen && (
-          <motion.div
-            initial={{ opacity: 0, y: openUpward ? 5 : -5 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: openUpward ? 5 : -5 }}
-            className={`absolute z-50 left-0 right-0 glass-strong rounded-xl shadow-2xl max-h-[60vh] sm:max-h-72 overflow-hidden ${
-              openUpward ? 'bottom-full mb-2' : 'top-full mt-2'
-            }`}
-          >
-            {/* Hızlı öneriler */}
-            {quickSuggestions.length > 0 && !search.trim() && (
-              <div className="p-3 border-b border-border/40">
-                <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-bold mb-2">{t('uretim.labels.quick_suggestions') || 'Hizli Oneriler'}</p>
-                <div className="flex flex-wrap gap-1.5 stagger-fast">
-                  {quickSuggestions.map(suggestion => (
-                    <button
-                      key={suggestion}
-                      type="button"
-                      onClick={() => handleSelect(suggestion)}
-                      className={`px-2.5 py-1.5 rounded-lg text-[11px] font-medium btn-press transition-snappy ${
-                        value === suggestion
-                          ? 'bg-emerald-600/20 text-emerald-400 border border-emerald-500/30'
-                          : 'bg-secondary/60 text-muted-foreground hover:bg-accent/60 hover:text-foreground/80 border border-transparent'
-                      }`}
-                    >
-                      {suggestion}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Mevcut stok ürünleri */}
-            <div className="overflow-y-auto max-h-48">
-              {suggestions.length > 0 && (
-                <div className="p-2 border-b border-border/40">
-                  <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-bold px-2 py-1">{t('uretim.labels.existing_stock') || 'Mevcut Stok Urunleri'}</p>
-                </div>
-              )}
-              {suggestions.map(item => (
-                <button
-                  key={item.id}
-                  type="button"
-                  onClick={() => handleSelect(item.name)}
-                  className={`w-full text-left px-4 py-2.5 hover:bg-emerald-600/10 transition-snappy flex items-center justify-between border-b border-border/20 last:border-0 data-row ${
-                    value === item.name ? 'bg-emerald-600/10' : ''
-                  }`}
-                  style={{ '--row-accent': '#10b981' } as React.CSSProperties}
-                >
-                  <div className="flex items-center gap-2">
-                    <Package className="w-3.5 h-3.5 text-muted-foreground" />
-                    <div>
-                      <p className="text-sm font-medium text-white">{item.name}</p>
-                      <p className="text-[10px] text-muted-foreground">
-                        {item.category || 'Genel'} &bull; Stok: {(item.currentStock ?? item.stock ?? 0).toFixed(1)} {item.unit || 'kg'}
-                      </p>
-                    </div>
-                  </div>
-                  {value === item.name && <CheckCircle className="w-4 h-4 text-emerald-400" />}
-                </button>
-              ))}
-              {search.trim() && !suggestions.find(s => s.name.toLowerCase() === search.trim().toLowerCase()) && (
-                <button
-                  type="button"
-                  onClick={() => handleSelect(search.trim())}
-                  className="w-full text-left px-4 py-3 hover:bg-blue-600/10 transition-colors flex items-center gap-2 border-t border-border/30"
-                >
-                  <Plus className="w-4 h-4 text-blue-400" />
-                  <span className="text-sm text-blue-400">
-                    "<span className="font-bold text-white">{search.trim()}</span>" {t('uretim.labels.create_new') || 'olarak yeni urun olustur'}
-                  </span>
-                </button>
-              )}
-            </div>
-          </motion.div>
-        )}
+        {isOpen && createPortal(ciktiDropdown, document.body)}
       </AnimatePresence>
     </div>
   );
@@ -551,6 +668,7 @@ function FlowVisualization({ cigKg, copKg, temizKg, ciktiKg, fireKg, copOrani, f
   cigKg: number; copKg: number; temizKg: number; ciktiKg: number; fireKg: number;
   copOrani: number; fireOrani: number; hammaddeAdi: string; ciktiAdi: string;
 }) {
+  const { t } = useLanguage();
   if (cigKg <= 0) return null;
   const verimlilik = cigKg > 0 ? ((ciktiKg / cigKg) * 100) : 0;
   return (
@@ -866,6 +984,8 @@ export function UretimPage() {
     calisanMaliyeti: DEFAULT_URETIM_DEFAULTS.calisanMaliyeti,
     // Çıktı
     ciktiUrunAdi: '',
+    // Üretim tipi
+    uretimTipi: 'pisirme' as 'pisirme' | 'kiyma',
   });
 
   const [profileForm, setProfileForm] = useState({
@@ -973,7 +1093,17 @@ export function UretimPage() {
   // Load defaults and initial stock
   useEffect(() => {
     const savedDefaults = getFromStorage<UretimDefaults>(StorageKey.URETIM_DEFAULTS);
-    if (savedDefaults) setDefaults(savedDefaults);
+    if (savedDefaults) {
+      setDefaults(savedDefaults);
+    } else {
+      // [AJAN-2] KV fallback — localStorage boşsa varsayılanları KV'den yükle
+      kvGet<UretimDefaults>('uretim_defaults').then(kv => {
+        if (kv) {
+          setDefaults(kv);
+          setInStorage(StorageKey.URETIM_DEFAULTS, kv);
+        }
+      }).catch(() => {});
+    }
     refreshStok();
   }, []);
 
@@ -987,12 +1117,14 @@ export function UretimPage() {
     const copOrani = cigKg > 0 ? ((copKg / cigKg) * 100) : 0;
     const fireKg = Math.max(0, temizKg - ciktiKg);
     const fireOrani = temizKg > 0 ? ((fireKg / temizKg) * 100) : 0;
-    const tupKullanilanKg = kazanSayisi * tupPerKazan;
-    const toplamPisSuresi = kazanSayisi * form.pisSuresiSaat;
+    // Kıyma işlemede kazan/tüp kullanılmaz
+    const isKiyma = form.uretimTipi === 'kiyma';
+    const tupKullanilanKg = isKiyma ? 0 : kazanSayisi * tupPerKazan;
+    const toplamPisSuresi = isKiyma ? 0 : kazanSayisi * form.pisSuresiSaat;
 
     // Maliyet hesaplama
     const hammaddeMaliyet = cigKg * birimFiyat;
-    const tupMaliyet = tupKullanilanKg * tupFiyatKg;
+    const tupMaliyet = isKiyma ? 0 : tupKullanilanKg * tupFiyatKg;
     const paketMaliyet = ciktiKg * paketlemeMaliyeti;
     const isyeriMaliyet = ciktiKg * isyeriMaliyeti;
     const calisanMaliyet = ciktiKg * calisanMaliyeti;
@@ -1211,6 +1343,7 @@ export function UretimPage() {
       ciktiUrunAdi: form.ciktiUrunAdi,
       ciktiStokId: '',
       stokIslemleriYapildi: true,
+      uretimTipi: form.uretimTipi,
       createdAt: new Date().toISOString(),
     };
 
@@ -1393,6 +1526,7 @@ export function UretimPage() {
     };
     setDefaults(newDefaults);
     setInStorage(StorageKey.URETIM_DEFAULTS, newDefaults);
+    kvSet('uretim_defaults', newDefaults).catch(() => {});
 
     // ─── KV SYNC: Değişen stok kalemlerini Supabase'e de yaz ───
     // useTableSync StokPage'de KV'den veri çektiğinde güncel data görsün
@@ -1405,10 +1539,13 @@ export function UretimPage() {
     if (updatedCikti && updatedCikti.id !== updatedHammadde?.id) changedItems.push(updatedCikti);
     if (changedItems.length > 0) {
       try {
-        await syncStokItemsToKV(changedItems);
-        console.log('[UretimPage] KV sync completed for', changedItems.length, 'items');
+        await Promise.all([
+          syncStokItemsToKV(changedItems),
+          syncStokItemsToSupabase(changedItems),
+        ]);
+        console.log('[UretimPage] KV+Supabase sync completed for', changedItems.length, 'items');
       } catch (e) {
-        console.error('[UretimPage] KV sync failed (data saved locally):', e);
+        console.error('[UretimPage] sync failed (data saved locally):', e);
       }
     }
 
@@ -1451,6 +1588,7 @@ export function UretimPage() {
       isyeriMaliyeti: defaults.isyeriMaliyeti,
       calisanMaliyeti: defaults.calisanMaliyeti,
       ciktiUrunAdi: '',
+      uretimTipi: 'pisirme' as 'pisirme' | 'kiyma',
     });
     setSelectedProfile(null);
     setSelectedStokItem(null);
@@ -1641,7 +1779,9 @@ export function UretimPage() {
       const updatedCikti = updatedStok.find((s: any) => s.id === newKayit.ciktiStokId);
       if (updatedCikti && updatedCikti.id !== updatedHammadde?.id) changedItems.push(updatedCikti);
       if (changedItems.length > 0) {
-        try { await syncStokItemsToKV(changedItems); } catch (e) { console.error('[UretimPage] KV sync failed:', e); }
+        try {
+          await Promise.all([syncStokItemsToKV(changedItems), syncStokItemsToSupabase(changedItems)]);
+        } catch (e) { console.error('[UretimPage] sync failed:', e); }
       }
 
       toast.success(
@@ -1913,6 +2053,39 @@ export function UretimPage() {
                   )}
                 </div>
 
+                {/* Üretim Tipi Seçimi */}
+                <div>
+                  <label className="block text-sm font-medium text-foreground/80 mb-2 flex items-center gap-2">
+                    <Zap className="w-4 h-4 text-amber-400" />
+                    İşlem Tipi
+                  </label>
+                  <div className="flex rounded-xl overflow-hidden border border-border/50 bg-secondary/30">
+                    {([
+                      { key: 'pisirme', label: 'Pişirme / Kavurma', icon: Flame, desc: 'Kazan, tüp ve ateş gerektirir' },
+                      { key: 'kiyma', label: 'Kıyma İşleme', icon: Scissors, desc: 'Sadece temizleme & öğütme' },
+                    ] as const).map(item => (
+                      <button
+                        key={item.key}
+                        type="button"
+                        onClick={() => setForm(prev => ({ ...prev, uretimTipi: item.key, kazanSayisi: 1 }))}
+                        className={`flex-1 flex items-center gap-2 px-3 py-3 text-sm font-medium transition-all ${
+                          form.uretimTipi === item.key
+                            ? item.key === 'pisirme'
+                              ? 'bg-orange-600/20 text-orange-300 border-r border-orange-500/20'
+                              : 'bg-emerald-600/20 text-emerald-300'
+                            : 'text-muted-foreground/70 hover:bg-secondary/60'
+                        }`}
+                      >
+                        <item.icon className="w-4 h-4 flex-shrink-0" />
+                        <div className="text-left min-w-0">
+                          <p className="font-semibold leading-none">{item.label}</p>
+                          <p className="text-[10px] opacity-60 mt-0.5 hidden sm:block">{item.desc}</p>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
                 {/* Stoktan Hammadde Seçimi */}
                 <div>
                   <label className="block text-sm font-medium text-foreground/80 mb-2">
@@ -2161,8 +2334,14 @@ export function UretimPage() {
                     <div className="absolute -inset-0.5 rounded-lg md:rounded-xl bg-orange-500/15 blur-md -z-10" />
                   </div>
                   <div>
-                    <h2 className="text-base md:text-lg font-bold text-white">{t('uretim.step2.title') || 'Temizlik & Pisirme'}</h2>
-                    <p className="text-[11px] md:text-xs text-muted-foreground/70 hidden sm:block">{t('uretim.step2.desc') || 'Cop cikarildiktan sonra kalan miktar otomatik hesaplanir'}</p>
+                    <h2 className="text-base md:text-lg font-bold text-white">
+                      {form.uretimTipi === 'kiyma' ? 'Temizlik & Kıyma İşleme' : (t('uretim.step2.title') || 'Temizlik & Pisirme')}
+                    </h2>
+                    <p className="text-[11px] md:text-xs text-muted-foreground/70 hidden sm:block">
+                      {form.uretimTipi === 'kiyma'
+                        ? 'Cop/Sinir cikarildiktan sonra kalan et kıymaya islenir'
+                        : (t('uretim.step2.desc') || 'Cop cikarildiktan sonra kalan miktar otomatik hesaplanir')}
+                    </p>
                   </div>
                 </div>
 
@@ -2210,11 +2389,15 @@ export function UretimPage() {
                   )}
                 </div>
 
-                {/* Pişirme Bölümü */}
+                {/* Pişirme / Kıyma Bölümü */}
                 <div className="p-3 md:p-5 rounded-xl glass-light space-y-3 md:space-y-4">
                   <div className="flex items-center gap-1.5 md:gap-2">
-                    <Flame className="w-3 h-3 md:w-4 md:h-4 text-red-400" />
-                    <h3 className="text-xs md:text-sm font-semibold text-foreground/90">Pisirme</h3>
+                    {form.uretimTipi === 'kiyma'
+                      ? <Scissors className="w-3 h-3 md:w-4 md:h-4 text-emerald-400" />
+                      : <Flame className="w-3 h-3 md:w-4 md:h-4 text-red-400" />}
+                    <h3 className="text-xs md:text-sm font-semibold text-foreground/90">
+                      {form.uretimTipi === 'kiyma' ? 'Kıyma İşleme' : 'Pisirme'}
+                    </h3>
                   </div>
 
                   <div className="grid grid-cols-3 gap-2 md:gap-4">
@@ -2225,11 +2408,14 @@ export function UretimPage() {
                       </div>
                     </div>
                     <div>
-                      <label className="block text-[9px] md:text-xs font-medium text-muted-foreground mb-1">Cikti (kg)</label>
+                      <label className="block text-[9px] md:text-xs font-medium text-muted-foreground mb-1">
+                        {form.uretimTipi === 'kiyma' ? 'Kıyma Çıktı (kg)' : 'Cikti (kg)'}
+                      </label>
                       <input type="number" value={form.ciktiKg || ''}
                         onChange={e => { const val = Math.min(Number(e.target.value), calc.temizKg); setForm({ ...form, ciktiKg: Math.max(0, val) }); }}
                         className="w-full px-2 md:px-4 py-2 md:py-3 bg-card border border-border rounded-lg md:rounded-xl text-white placeholder-muted-foreground/50 focus:outline-none focus:ring-2 focus:ring-blue-500/40 text-xs md:text-sm"
-                        placeholder={`${(calc.temizKg * 0.7).toFixed(0)}`} min={0} max={calc.temizKg} step={0.1} />
+                        placeholder={form.uretimTipi === 'kiyma' ? `${(calc.temizKg * 0.95).toFixed(0)}` : `${(calc.temizKg * 0.7).toFixed(0)}`}
+                        min={0} max={calc.temizKg} step={0.1} />
                     </div>
                     <div>
                       <label className="block text-[9px] md:text-xs font-medium text-red-400 mb-1">Fire</label>
@@ -2289,8 +2475,8 @@ export function UretimPage() {
                   ciktiAdi={form.ciktiUrunAdi}
                 />
 
-                {/* Kazan & Tüp/Gaz Sistemi */}
-                <div className="p-3 md:p-5 rounded-xl bg-gradient-to-br from-muted/80 to-secondary/50 border border-orange-500/[0.08] space-y-3 md:space-y-5 relative overflow-hidden">
+                {/* Kazan & Tüp/Gaz Sistemi — sadece pişirme modunda */}
+                {form.uretimTipi !== 'kiyma' && (<div className="p-3 md:p-5 rounded-xl bg-gradient-to-br from-muted/80 to-secondary/50 border border-orange-500/[0.08] space-y-3 md:space-y-5 relative overflow-hidden">
                   <div className="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-orange-500/25 to-transparent" />
                   <div className="flex items-center justify-between gap-2">
                     <div className="flex items-center gap-2.5">
@@ -2448,7 +2634,7 @@ export function UretimPage() {
                       )}
                     </div>
                   </div>
-                </div>
+                </div>)}
 
                 <div className="flex flex-col-reverse md:flex-row justify-between gap-3 mt-6">
                   <button onClick={() => setCurrentStep(0)} className="w-full md:w-auto px-6 py-3.5 sm:py-3 bg-secondary/50 hover:bg-accent/50 active:bg-accent/70 text-muted-foreground hover:text-foreground/90 font-medium rounded-xl border border-border/30 transition-all duration-300">
@@ -2490,8 +2676,8 @@ export function UretimPage() {
                   </div>
                 </div>
 
-                {/* Tüp/Gaz Özet Kartı */}
-                <div className="p-2.5 md:p-4 rounded-xl bg-gradient-to-r from-orange-500/5 to-red-500/5 border border-orange-500/15">
+                {/* Tüp/Gaz Özet Kartı — sadece pişirme modunda */}
+                {form.uretimTipi !== 'kiyma' && (<div className="p-2.5 md:p-4 rounded-xl bg-gradient-to-r from-orange-500/5 to-red-500/5 border border-orange-500/15">
                   <div className="flex items-center gap-1.5 mb-2 md:mb-3">
                     <Flame className="w-3 h-3 md:w-4 md:h-4 text-orange-400" />
                     <span className="text-xs md:text-sm font-semibold text-white">Kazan & Tup</span>
@@ -2514,7 +2700,7 @@ export function UretimPage() {
                       <p className="text-[8px] md:text-[10px] text-muted-foreground">Maliyet</p>
                     </div>
                   </div>
-                </div>
+                </div>)}
 
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 md:gap-4">
                   <div>
@@ -2800,7 +2986,7 @@ export function UretimPage() {
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-5">
             {/* ── Sol: Giriş & Fire ─────────────────────────── */}
-            <div className="space-y-4">
+            <div className="space-y-4 relative">
               {/* Stoktan Ürün Seç */}
               <div className="card-premium rounded-xl md:rounded-2xl p-4 md:p-5 space-y-3 md:space-y-4">
                 <div className="flex items-center gap-2">
@@ -2907,10 +3093,9 @@ export function UretimPage() {
                   <AnimatePresence>
                     {hizliForm.showFire && (
                       <motion.div
-                        initial={{ opacity: 0, height: 0 }}
-                        animate={{ opacity: 1, height: 'auto' }}
-                        exit={{ opacity: 0, height: 0 }}
-                        className="overflow-hidden"
+                        initial={{ opacity: 0, y: -6 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -6 }}
                       >
                         <div className="grid grid-cols-2 gap-3 pt-2">
                           <div>
@@ -2959,7 +3144,7 @@ export function UretimPage() {
             </div>
 
             {/* ── Sağ: Çıktı & Maliyet ─────────────────────── */}
-            <div className="space-y-4">
+            <div className="space-y-4 relative">
               {/* Çıktı Ürün */}
               {hizliForm.hammaddeStokId && hizliForm.girisMiktar > 0 && (
                 <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}
@@ -3053,10 +3238,9 @@ export function UretimPage() {
                   <AnimatePresence>
                     {hizliForm.showMaliyet && (
                       <motion.div
-                        initial={{ opacity: 0, height: 0 }}
-                        animate={{ opacity: 1, height: 'auto' }}
-                        exit={{ opacity: 0, height: 0 }}
-                        className="overflow-hidden"
+                        initial={{ opacity: 0, y: -6 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -6 }}
                       >
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
                           <div>
@@ -3423,6 +3607,11 @@ export function UretimPage() {
                               {kayit.stokIslemleriYapildi && (
                                 <span className="px-1.5 py-0.5 bg-emerald-500/8 text-emerald-400 text-[9px] font-bold rounded-md border border-emerald-500/15 flex items-center gap-0.5">
                                   <CheckCircle className="w-2.5 h-2.5" /> STOK
+                                </span>
+                              )}
+                              {kayit.uretimTipi === 'kiyma' && (
+                                <span className="px-1.5 py-0.5 bg-cyan-500/10 text-cyan-400 text-[9px] font-bold rounded-md border border-cyan-500/15 flex items-center gap-0.5">
+                                  <Scissors className="w-2.5 h-2.5" /> KIYMA
                                 </span>
                               )}
                             </div>

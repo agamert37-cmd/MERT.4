@@ -1,3 +1,4 @@
+// [AJAN-2 | claude/serene-gagarin | 2026-03-24] Son düzenleyen: Claude Sonnet 4.6
 /**
  * SyncContext - Global senkronizasyon durumu yonetimi
  * KV store bazli tablo durumlarini takip eder
@@ -6,6 +7,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { checkAllTables, type SetupStatus } from '../lib/auto-setup';
 import { SUPABASE_ANON_KEY } from '../lib/supabase-config';
+import { getSyncState } from '../utils/supabase-storage';
 
 interface SyncContextValue {
   setupStatus: SetupStatus | null;
@@ -13,6 +15,12 @@ interface SyncContextValue {
   lastChecked: Date | null;
   recheckTables: () => Promise<void>;
   isSupabaseConfigured: boolean;
+  // Reaktif sync durumu
+  pendingCount: number;
+  isSyncing: boolean;
+  lastSyncAt: number;
+  isOnline: boolean;
+  syncError: string | null;
 }
 
 const SyncContext = createContext<SyncContextValue>({
@@ -21,6 +29,11 @@ const SyncContext = createContext<SyncContextValue>({
   lastChecked: null,
   recheckTables: async () => {},
   isSupabaseConfigured: false,
+  pendingCount: 0,
+  isSyncing: false,
+  lastSyncAt: 0,
+  isOnline: true,
+  syncError: null,
 });
 
 export function SyncProvider({ children }: { children: React.ReactNode }) {
@@ -28,7 +41,17 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
   const [isChecking, setIsChecking] = useState(false);
   const [lastChecked, setLastChecked] = useState<Date | null>(null);
   const [consecutiveFailures, setConsecutiveFailures] = useState(0);
-  const isCheckingRef = useRef(false); // Eş zamanlı çağrıları engelle
+  const [liveSyncState, setLiveSyncState] = useState(getSyncState());
+  const isCheckingRef = useRef(false);
+
+  // sync_state_change event'ini dinle
+  useEffect(() => {
+    const handler = (e: Event) => {
+      setLiveSyncState((e as CustomEvent).detail);
+    };
+    window.addEventListener('sync_state_change', handler);
+    return () => window.removeEventListener('sync_state_change', handler);
+  }, []);
 
   const isSupabaseConfigured = useMemo(() => {
     return !!SUPABASE_ANON_KEY && SUPABASE_ANON_KEY.length > 10;
@@ -84,8 +107,31 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
     return () => clearInterval(interval);
   }, [recheckTables, isSupabaseConfigured, consecutiveFailures]);
 
+  // BUG FIX [AJAN-2]: Ağ bağlantısı geri gelince hemen kontrol et.
+  // Önceden sadece backoff interval'ı vardı — ağ geldikten sonra 5 dakikaya kadar beklenebiliyordu.
+  useEffect(() => {
+    if (!isSupabaseConfigured) return;
+    const onOnline = () => {
+      setConsecutiveFailures(0); // Hata sayacını sıfırla
+      recheckTables();
+    };
+    window.addEventListener('online', onOnline);
+    return () => window.removeEventListener('online', onOnline);
+  }, [recheckTables, isSupabaseConfigured]);
+
   return (
-    <SyncContext.Provider value={{ setupStatus, isChecking, lastChecked, recheckTables, isSupabaseConfigured }}>
+    <SyncContext.Provider value={{
+      setupStatus,
+      isChecking,
+      lastChecked,
+      recheckTables,
+      isSupabaseConfigured,
+      pendingCount: liveSyncState.pendingCount,
+      isSyncing: liveSyncState.isSyncing,
+      lastSyncAt: liveSyncState.lastSyncAt,
+      isOnline: liveSyncState.isOnline,
+      syncError: liveSyncState.lastError,
+    }}>
       {children}
     </SyncContext.Provider>
   );

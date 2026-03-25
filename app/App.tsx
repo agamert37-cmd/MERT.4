@@ -1,8 +1,10 @@
+// [AJAN-2 | claude/serene-gagarin | 2026-03-25] Son düzenleyen: Claude Sonnet 4.6
 import { RouterProvider } from 'react-router';
+import { GlobalTableSyncProvider } from './contexts/GlobalTableSyncContext';
 import { router } from './routes';
 import { Toaster } from 'sonner';
 import { useEffect, useRef } from 'react';
-import { startInitialSync, startRealtimeSync, stopRealtimeSync } from './utils/storage';
+import { startInitialSync, startRealtimeSync, stopRealtimeSync, forceSync } from './utils/storage';
 import {
   getLocalRepoConfig,
   startAutoSync,
@@ -11,9 +13,17 @@ import {
   stopAutoBackup,
   startHealthHeartbeat,
   stopHealthHeartbeat,
+  // GÜÇLENDİRME [AJAN-2]: Edge Function olmadan doğrudan buluta yedek
+  startCloudDirectBackupScheduler,
+  stopCloudDirectBackupScheduler,
 } from './lib/dual-supabase';
 import { DbSetupBanner } from './components/DbSetupBanner';
 import { SERVER_BASE_URL, SUPABASE_ANON_KEY } from './lib/supabase-config';
+import { startNodeHeartbeat } from './lib/node-registry';
+import { startAutoNodeSync, replayWAL } from './lib/active-client';
+import { supabase as cloudSupabase } from './lib/supabase';
+import { loadActivityLogsFromKV } from './utils/activityLogger';
+import { loadVitrinAnalyticsFromKV } from './utils/vitrinAnalytics';
 
 // ─── Bulut Otomatik Yedekleme ─────────────────────────────────────────────────
 // YedeklerPage'deki ayarları okur ve periyodik olarak bulut yedeği alır.
@@ -116,12 +126,54 @@ export default function App() {
     // 4. Bulut otomatik yedekleme zamanlayıcısı (YedeklerPage ayarlarına göre)
     cloudBackupCleanupRef.current = scheduleCloudAutoBackup();
 
+    // 4b. Edge Function gerektirmeyen doğrudan bulut yedekleme (her zaman aktif)
+    // Kullanıcı YedeklerPage'de yapılandırma yapmasa bile 24s aralıklı yedek alır
+    startCloudDirectBackupScheduler(24);
+
+    // 4c. Çok sunuculu HA: Bu cihazı cloud KV'ye kaydet (heartbeat)
+    // Sadece URL yapılandırılmışsa heartbeat yazar (getLocalNodeConfig().localUrl boşsa sessiz)
+    const stopHeartbeatFn = startNodeHeartbeat();
+
+    // 4d. Otomatik node senkronu (ayarlanmışsa)
+    const stopAutoNodeSync = startAutoNodeSync(cloudSupabase);
+
+    // 4e. Başlangıçta WAL'ı replay et (önceki oturumdan kalan yazmalar)
+    replayWAL(cloudSupabase).catch(() => {});
+
+    // 4f. KV fallback — localStorage boşsa denetim logları ve vitrin analitiklerini KV'den yükle
+    loadActivityLogsFromKV();
+    loadVitrinAnalyticsFromKV();
+
+    // 5. Uygulama arka plandan döndüğünde zorla yeniden sync
+    //    BUG FIX [AJAN-2]: startRealtimeSync, _realtimeUnsubscribe set ise erken çıkıyordu.
+    //    Önce stopRealtimeSync ile ölü kanalı temizliyoruz, sonra yeniden başlatıyoruz.
+    const handleFocus = () => {
+      stopRealtimeSync();   // Ölü WebSocket kanalını temizle
+      startRealtimeSync();  // Temiz başlat
+    };
+
+    // Mobil için: tab gizlenip geri gelince de yeniden bağlan (focus tetiklenmeyebilir)
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        stopRealtimeSync();
+        startRealtimeSync();
+      }
+    };
+
+    window.addEventListener('focus', handleFocus);
+    document.addEventListener('visibilitychange', handleVisibility);
+
     return () => {
       stopRealtimeSync();
       stopAutoSync();
       stopAutoBackup();
       stopHealthHeartbeat();
+      stopCloudDirectBackupScheduler();
+      stopHeartbeatFn();
+      stopAutoNodeSync();
       cloudBackupCleanupRef.current();
+      window.removeEventListener('focus', handleFocus);
+      document.removeEventListener('visibilitychange', handleVisibility);
     };
   }, []);
 
@@ -129,7 +181,10 @@ export default function App() {
     <div className="dark min-h-screen bg-background">
       {/* Veritabanı otomatik kurulum banner'ı — tablolar eksikse otomatik oluşturur */}
       <DbSetupBanner />
-      <RouterProvider router={router} />
+      {/* Tüm Supabase tablolarını app seviyesinde senkronize et (mobil-PC senkronu) */}
+      <GlobalTableSyncProvider>
+        <RouterProvider router={router} />
+      </GlobalTableSyncProvider>
       <Toaster
         position="top-right"
         toastOptions={{

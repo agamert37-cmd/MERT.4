@@ -1,3 +1,4 @@
+// [AJAN-2 | claude/serene-gagarin | 2026-03-25] Son düzenleyen: Claude Sonnet 4.6
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
@@ -12,7 +13,7 @@ import { toast } from 'sonner';
 import * as Dialog from '@radix-ui/react-dialog';
 import { getFromStorage, setInStorage, StorageKey } from '../utils/storage';
 import { generateDetailedExcelBackup, generatePDFBackup } from '../utils/exportGenerator';
-import { kvGetByPrefixWithKeys, TABLE_PREFIXES } from '../lib/supabase-kv';
+import { kvGet, kvGetByPrefixWithKeys, kvSet, TABLE_PREFIXES } from '../lib/supabase-kv';
 import { SERVER_BASE_URL, SUPABASE_ANON_KEY } from '../lib/supabase-config';
 import { useAuth } from '../contexts/AuthContext';
 import { useEmployee } from '../contexts/EmployeeContext';
@@ -23,6 +24,7 @@ import { getPagePermissions } from '../utils/permissions';
 import {
   getLocalRepoConfig, getLocalBackupList, createLocalBackup,
   deleteLocalBackup, restoreFromLocalBackup, isLocalHealthy,
+  createFullTableBackup, restoreFromTableBackup,
   type BackupSnapshot,
 } from '../lib/dual-supabase';
 
@@ -154,8 +156,24 @@ export function YedeklerPage() {
   }, []);
 
   const fetchLocalBackups = useCallback(() => {
+    // [AJAN-2]: localStorage BACKUPS + dual-supabase backup list (createFullTableBackup kayıtları)
     const saved = getFromStorage<BackupEntry[]>(StorageKey.BACKUPS) || [];
-    setLocalBackups(saved);
+    const tableSnaps = getLocalBackupList().map(snap => ({
+      id: snap.id,
+      timestamp: snap.timestamp,
+      type: snap.type,
+      dataSize: (snap.sizeKB || 0) * 1024,
+      keysCount: snap.keysCount,
+      source: snap.source as 'local' | 'supabase' | 'merged',
+      data: {},
+    }));
+    // Merge + deduplicate by id, en yeniden eskiye sırala
+    const allMap = new Map<string, BackupEntry>();
+    [...saved, ...tableSnaps].forEach(b => allMap.set(b.id, b));
+    const merged = Array.from(allMap.values()).sort((a, b) =>
+      new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+    );
+    setLocalBackups(merged);
   }, []);
 
   const fetchSyncHealth = useCallback(async () => {
@@ -178,25 +196,61 @@ export function YedeklerPage() {
     fetchLocalBackups();
     fetchBackupStats();
     fetchSyncHealth();
+    // [AJAN-2] KV fallback — localStorage boşsa yedek listesini KV'den yükle
+    const local = getFromStorage<BackupEntry[]>(StorageKey.BACKUPS);
+    if (!local || local.length === 0) {
+      kvGet<BackupEntry[]>('backups').then(kv => {
+        if (kv && kv.length > 0) {
+          setInStorage(StorageKey.BACKUPS, kv);
+          fetchLocalBackups(); // Yeniden yükle
+        }
+      }).catch(() => {});
+    }
   }, [fetchCloudBackups, fetchLocalBackups, fetchBackupStats, fetchSyncHealth]);
 
   // ─── Create cloud backup ─────────────────────────────────────────────────
+  // [AJAN-2]: Edge Function varsa kullan, yoksa doğrudan tablo yedeği al (fallback)
   const handleCreateCloudBackup = async () => {
     if (!canBackup) { toast.error('Yedekleme yetkiniz bulunmamaktadır.'); return; }
     setCreating(true);
-    setCreateProgress('Sunucu tarafında tam yedek oluşturuluyor...');
+    setCreateProgress('Yedek oluşturuluyor...');
     try {
-      const res = await apiPost('/backup/create-full', { type: 'manual' });
-      if (res.success) {
-        toast.success(`Bulut yedeği oluşturuldu! ${res.backup.totalKeys} kayıt, SHA-256 doğrulamalı`, { duration: 5000 });
-        logActivity('backup_create', 'Bulut yedeği oluşturuldu', { employeeName: user?.name, page: 'Yedekler', description: `${res.backup.totalKeys} kayıt, ${(res.backup.dataSizeBytes / 1024).toFixed(0)} KB, ${res.backup.durationMs}ms` });
-        fetchCloudBackups();
-        fetchBackupStats();
-      } else {
-        toast.error(`Yedek oluşturulamadı: ${res.error}`);
+      // 1. Önce Edge Function dene (SHA-256 doğrulamalı sunucu yedeği)
+      let edgeFunctionOk = false;
+      try {
+        setCreateProgress('Sunucu tarafında yedek oluşturuluyor (SHA-256)...');
+        const res = await Promise.race([
+          apiPost('/backup/create-full', { type: 'manual' }),
+          new Promise<any>((_, rej) => setTimeout(() => rej(new Error('timeout')), 8000)),
+        ]);
+        if (res?.success) {
+          toast.success(`Bulut yedeği oluşturuldu! ${res.backup.totalKeys} kayıt, SHA-256 doğrulamalı`, { duration: 5000 });
+          logActivity('backup_create', 'Bulut yedeği oluşturuldu (Edge Function)', { employeeName: user?.name, page: 'Yedekler', description: `${res.backup.totalKeys} kayıt` });
+          fetchCloudBackups();
+          fetchBackupStats();
+          edgeFunctionOk = true;
+        }
+      } catch {
+        // Edge Function yok veya zaman aşımı — doğrudan tablo yedeğine geç
+      }
+
+      // 2. Edge Function yoksa: Supabase tablolarından doğrudan yedek al
+      if (!edgeFunctionOk) {
+        setCreateProgress('Supabase tablolarından doğrudan yedek alınıyor...');
+        const snapshot = await createFullTableBackup('manual');
+        if (snapshot) {
+          toast.success(
+            `Tam tablo yedeği oluşturuldu! ${snapshot.keysCount} satır, ${snapshot.sizeKB} KB`,
+            { duration: 5000 }
+          );
+          logActivity('backup_create', 'Tam tablo yedeği oluşturuldu (direkt)', { employeeName: user?.name, page: 'Yedekler', description: `${snapshot.keysCount} satır, ${snapshot.sizeKB} KB` });
+          fetchLocalBackups();
+        } else {
+          toast.error('Yedek oluşturulamadı — Supabase bağlantısını kontrol edin');
+        }
       }
     } catch (e: any) {
-      toast.error('Sunucu bağlantı hatası');
+      toast.error('Yedekleme hatası: ' + (e.message || 'Bilinmeyen hata'));
     } finally {
       setCreating(false);
       setCreateProgress('');
@@ -270,29 +324,51 @@ export function YedeklerPage() {
   };
 
   // ─── Legacy: local backup + download ─────────────────────────────────────
+  // [AJAN-2]: Artık localStorage + Supabase tablolarını birlikte indiriyor
   const handleLegacyBackup = async () => {
     if (!canBackup) { toast.error('Yedekleme yetkiniz yok.'); return; }
     setCreating(true);
-    setCreateProgress('localStorage + Supabase verisi toplanıyor...');
+    setCreateProgress('localStorage + Supabase tabloları toplanıyor...');
     try {
       const localResult = collectLocalStorageData();
-      setCreateProgress('JSON hazırlanıyor...');
 
+      // Supabase tablolarını da çek
+      setCreateProgress('Supabase tablolarından veriler okunuyor...');
+      const { supabase } = await import('../lib/supabase');
+      const REAL_TABLES_LIST = [
+        'fisler', 'urunler', 'cari_hesaplar', 'kasa_islemleri', 'personeller',
+        'bankalar', 'cekler', 'araclar', 'arac_shifts', 'arac_km_logs',
+        'uretim_profilleri', 'uretim_kayitlari', 'faturalar', 'fatura_stok', 'tahsilatlar',
+      ];
+      const tables: Record<string, any[]> = {};
+      let totalTableRows = 0;
+      for (const table of REAL_TABLES_LIST) {
+        try {
+          const { data } = await supabase.from(table).select('*');
+          if (data && data.length > 0) { tables[table] = data; totalTableRows += data.length; }
+        } catch {}
+      }
+
+      setCreateProgress('JSON hazırlanıyor...');
       const entry: BackupEntry = {
         id: `backup-${Date.now()}`, timestamp: new Date().toISOString(), type: 'manual',
-        dataSize: localResult.totalSize, keysCount: localResult.keysCount,
-        source: 'local', localKeysCount: localResult.keysCount, data: localResult.data,
+        dataSize: localResult.totalSize, keysCount: localResult.keysCount + totalTableRows,
+        source: 'merged', localKeysCount: localResult.keysCount, data: localResult.data,
       };
 
       const existing = getFromStorage<BackupEntry[]>(StorageKey.BACKUPS) || [];
       const metaOnly = { ...entry, data: {} as Record<string, string> };
       const updated = [metaOnly, ...existing].slice(0, 20);
       setInStorage(StorageKey.BACKUPS, updated);
+      kvSet('backups', updated).catch(() => {});
       setLocalBackups(updated);
 
       const dateStr = new Date().toLocaleDateString('tr-TR').replace(/\./g, '-');
-      downloadJSON({ appName: 'ISLEYEN ET ERP', version: '5.0', ...entry }, `IsleyenET_LocalBackup_${dateStr}.json`);
-      toast.success(`Yerel yedek indirildi: ${localResult.keysCount} kayıt`);
+      downloadJSON(
+        { appName: 'ISLEYEN ET ERP', version: '5.0', format: 'supabase_tables', ...entry, tables },
+        `IsleyenET_TamYedek_${dateStr}.json`
+      );
+      toast.success(`Tam yedek indirildi: ${localResult.keysCount} localStorage + ${totalTableRows} Supabase satırı`);
     } catch { toast.error('Yedekleme hatası'); }
     finally { setCreating(false); setCreateProgress(''); }
   };
@@ -330,8 +406,29 @@ export function YedeklerPage() {
         if (key === 'backups' || key === '_supabase_kv') return;
         localStorage.setItem(`${STORAGE_PREFIX}${key}`, typeof value === 'string' ? value : JSON.stringify(value));
       });
-      // Restore to Supabase if _supabase_kv exists
-      if (data._supabase_kv) {
+
+      // [AJAN-2]: Eğer dosya tablo formatındaysa (format: 'supabase_tables') Supabase tablolarına yaz
+      const fileBackup = restoreFileContent;
+      if (fileBackup.format === 'supabase_tables' && fileBackup.tables) {
+        setRestoreProgress('Supabase tablolarına geri yükleniyor...');
+        // Geçici backup ID oluştur ve restoreFromTableBackup'ı çağır için önce KV'e yaz
+        const result = await (async () => {
+          let ok = 0, fail = 0;
+          const { supabase } = await import('../lib/supabase');
+          const BATCH = 100;
+          for (const [tableName, rows] of Object.entries(fileBackup.tables as Record<string, any[]>)) {
+            if (!Array.isArray(rows) || rows.length === 0) continue;
+            for (let i = 0; i < rows.length; i += BATCH) {
+              const chunk = rows.slice(i, i + BATCH);
+              const { error } = await supabase.from(tableName).upsert(chunk, { onConflict: 'id' });
+              if (error) fail += chunk.length; else ok += chunk.length;
+            }
+          }
+          return { ok, fail };
+        })();
+        setRestoreProgress(`${result.ok} satır yüklendi${result.fail > 0 ? `, ${result.fail} hata` : ''}. Sayfa yenileniyor...`);
+      } else if (data._supabase_kv) {
+        // Eski KV format
         setRestoreProgress('Supabase KV veriler geri yükleniyor...');
         const tables = Object.keys(data._supabase_kv).filter(k => !k.startsWith('_kv_'));
         for (const tableName of tables) {
@@ -348,6 +445,33 @@ export function YedeklerPage() {
       setTimeout(() => window.location.reload(), 2000);
     } catch { toast.error('Geri yükleme hatası'); }
     finally { setRestoringId(null); setRestoreProgress(''); }
+  };
+
+  // ─── Restore from table backup (tbl_ prefix) ─────────────────────────────
+  // [AJAN-2]: createFullTableBackup ile alınan yedekleri geri yükler
+  const handleRestoreTableBackup = async (backupId: string) => {
+    if (!canBackup) { toast.error('Geri yükleme yetkiniz yok.'); return; }
+    if (!window.confirm('Bu yedekten geri yüklenecek. Mevcut veriler üzerine yazılacak. Devam edilsin mi?')) return;
+    setRestoringId(backupId);
+    setRestoreProgress('Supabase tablolarına geri yükleniyor...');
+    try {
+      const result = await restoreFromTableBackup(backupId);
+      if (result.ok > 0) {
+        toast.success(
+          `Geri yükleme tamamlandı: ${result.ok} satır, ${result.tables.length} tablo${result.fail > 0 ? ` (${result.fail} hata)` : ''}`,
+          { duration: 5000 }
+        );
+        logActivity('backup_restore', 'Tablo yedeğinden geri yüklendi', { employeeName: user?.name, page: 'Yedekler', description: `${result.ok} satır, ${result.tables.join(', ')}` });
+        setTimeout(() => window.location.reload(), 2000);
+      } else {
+        toast.error('Geri yükleme başarısız — ' + (result.fail > 0 ? `${result.fail} hata` : 'yedek bulunamadı'));
+      }
+    } catch (e: any) {
+      toast.error('Geri yükleme hatası: ' + e.message);
+    } finally {
+      setRestoringId(null);
+      setRestoreProgress('');
+    }
   };
 
   // ─── Auto-backup schedule save ───────────────────────────────────────────
@@ -614,21 +738,38 @@ export function YedeklerPage() {
             </div>
           ) : (
             <div className="space-y-2">
-              {localBackups.map((b, i) => (
-                <div key={b.id} className="card-premium rounded-xl p-3 flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <Clock className="w-4 h-4 text-muted-foreground/40" />
-                    <div>
-                      <p className="text-sm font-medium text-white">{new Date(b.timestamp).toLocaleDateString('tr-TR')} {new Date(b.timestamp).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}</p>
-                      <p className="text-[10px] text-muted-foreground/50">{b.keysCount} kayıt • {b.dataSize ? `${(b.dataSize / 1024).toFixed(0)} KB` : '-'}</p>
+              {localBackups.map((b) => {
+                const isTableBackup = b.id.startsWith('tbl_') || b.id.startsWith('cloud_');
+                return (
+                  <div key={b.id} className="card-premium rounded-xl p-3 flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <Clock className="w-4 h-4 text-muted-foreground/40" />
+                      <div>
+                        <p className="text-sm font-medium text-white">
+                          {new Date(b.timestamp).toLocaleDateString('tr-TR')} {new Date(b.timestamp).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}
+                          {isTableBackup && <span className="ml-2 text-[9px] px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-400 border border-emerald-500/20">Tablo Yedeği</span>}
+                        </p>
+                        <p className="text-[10px] text-muted-foreground/50">{b.keysCount} satır • {b.dataSize ? `${(b.dataSize / 1024).toFixed(0)} KB` : '-'} • {b.type}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {isTableBackup && (
+                        <button
+                          onClick={() => handleRestoreTableBackup(b.id)}
+                          disabled={!!restoringId}
+                          className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[10px] font-medium bg-blue-500/15 hover:bg-blue-500/25 text-blue-400 border border-blue-500/20 transition-all active:scale-95 disabled:opacity-50">
+                          {restoringId === b.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <RotateCcw className="w-3 h-3" />}
+                          Geri Yükle
+                        </button>
+                      )}
+                      <button onClick={() => { const updated = localBackups.filter(x => x.id !== b.id); setInStorage(StorageKey.BACKUPS, updated); kvSet('backups', updated).catch(() => {}); setLocalBackups(updated); toast.success('Silindi'); }}
+                        className="p-2 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 transition-all active:scale-95">
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
                     </div>
                   </div>
-                  <button onClick={() => { const updated = localBackups.filter(x => x.id !== b.id); setInStorage(StorageKey.BACKUPS, updated); setLocalBackups(updated); toast.success('Silindi'); }}
-                    className="p-2 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 transition-all active:scale-95">
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </motion.div>

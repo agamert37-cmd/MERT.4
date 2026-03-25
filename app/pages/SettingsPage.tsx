@@ -1,7 +1,7 @@
+// [AJAN-2 | claude/serene-gagarin | 2026-03-25] Son düzenleyen: Claude Sonnet 4.6
 import React, { useState, useRef, useEffect } from 'react';
 import OpenAI from 'openai';
-import { Settings, Database, Sparkles, Save, Trash2, Eye, EyeOff, CheckCircle, XCircle, Shield, ExternalLink, Building2, Phone, MapPin, FileText, Hash, Monitor, Upload, Loader2, RefreshCw, X, Plus, MessageCircle, Bell, ToggleLeft, ToggleRight } from 'lucide-react';
-import { DEFAULT_SMS_CONFIG, type SMSConfig } from '../utils/smsService';
+import { Settings, Database, Sparkles, Save, Trash2, Eye, EyeOff, CheckCircle, XCircle, Shield, ExternalLink, Building2, Phone, MapPin, FileText, Hash, Monitor, Upload, Loader2, RefreshCw, X, Plus, History, ShieldCheck, Zap, Wrench, Star } from 'lucide-react';
 import { getOpenAIKey, saveOpenAIKey, clearOpenAIKey, isOpenAIConfigured, getEmbeddedSupabaseConfig } from '../lib/api-config';
 import { reinitializeOpenAI } from '../lib/chatgpt-assistant';
 import { testSupabaseConnection } from '../lib/supabase';
@@ -18,6 +18,10 @@ import { logActivity } from '../utils/activityLogger';
 import { useModuleBus } from '../hooks/useModuleBus';
 import { getPagePermissions } from '../utils/permissions';
 import { LocalRepoPanel } from '../components/LocalRepoPanel';
+import { kvSet } from '../lib/supabase-kv';
+import { NodeStatusPanel } from '../components/NodeStatusPanel';
+import { getLocalNodeId, getLocalNodeConfig, saveLocalNodeConfig, type NodeInfo } from '../lib/node-registry';
+import { CHANGELOG, type ChangeType } from '../data/changelog';
 
 export interface CompanyInfo {
   companyName: string;
@@ -88,6 +92,14 @@ export function SettingsPage() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Node (sunucu) yapılandırması
+  const [nodeConfig, setNodeConfigState] = useState<Partial<NodeInfo>>(() => getLocalNodeConfig());
+  const handleSaveNodeConfig = () => {
+    saveLocalNodeConfig(nodeConfig);
+    toast.success('Sunucu yapılandırması kaydedildi');
+    logActivity('settings_change', 'Sunucu yapılandırması güncellendi', { employeeName: user?.name, page: 'Ayarlar' });
+  };
+
   const supabaseConfig = getEmbeddedSupabaseConfig();
   const serverBase = SERVER_BASE_URL;
 
@@ -131,7 +143,10 @@ export function SettingsPage() {
   const handleSaveCompanyInfo = () => {
     if (!canEdit) { toast.error('Ayarları değiştirme yetkiniz yok.'); logActivity('security_alert', 'Yetkisiz Şirket Bilgisi Değişikliği', { level: 'high', employeeName: user?.name }); return; }
     const existingSettings = getFromStorage<any>(StorageKey.SYSTEM_SETTINGS) || {};
-    setInStorage(StorageKey.SYSTEM_SETTINGS, { ...existingSettings, companyInfo });
+    const updatedSettings = { ...existingSettings, companyInfo };
+    setInStorage(StorageKey.SYSTEM_SETTINGS, updatedSettings);
+    // BUG FIX [AJAN-2]: Şirket bilgileri KV store'a da yaz — çapraz cihaz sync
+    kvSet('system_settings', updatedSettings).catch(e => console.error('[Settings] kv sync:', e));
     logActivity('settings_change', 'Şirket bilgileri güncellendi', { employeeName: user?.name, page: 'Ayarlar', description: `Şirket bilgileri güncellendi: ${companyInfo.companyName}` });
     toast.success('Şirket bilgileri kaydedildi!');
   };
@@ -158,7 +173,9 @@ export function SettingsPage() {
       const newImg: BrandingImage = { url: data.url, fileName: data.fileName, title: newImageTitle, subtitle: newImageSubtitle };
       const updated = [...brandingImages, newImg]; setBrandingImages(updated);
       const existingSettings = getFromStorage<any>(StorageKey.SYSTEM_SETTINGS) || {};
-      setInStorage(StorageKey.SYSTEM_SETTINGS, { ...existingSettings, loginBranding: { images: updated } });
+      const updatedBranding = { ...existingSettings, loginBranding: { images: updated } };
+      setInStorage(StorageKey.SYSTEM_SETTINGS, updatedBranding);
+      kvSet('system_settings', updatedBranding).catch(() => {});
       setNewImageTitle(''); setNewImageSubtitle(''); setSelectedFile(null); setUploadPreview(null);
       if (fileInputRef.current) fileInputRef.current.value = '';
       toast.success('Görsel yüklendi!');
@@ -172,7 +189,9 @@ export function SettingsPage() {
     }
     const updated = brandingImages.filter((_, i) => i !== index); setBrandingImages(updated);
     const existingSettings = getFromStorage<any>(StorageKey.SYSTEM_SETTINGS) || {};
-    setInStorage(StorageKey.SYSTEM_SETTINGS, { ...existingSettings, loginBranding: { images: updated } });
+    const updatedBranding = { ...existingSettings, loginBranding: { images: updated } };
+    setInStorage(StorageKey.SYSTEM_SETTINGS, updatedBranding);
+    kvSet('system_settings', updatedBranding).catch(() => {});
     toast.success('Görsel kaldırıldı!');
   };
 
@@ -187,10 +206,29 @@ export function SettingsPage() {
       const updatedImages = brandingImages.map(img => (img.fileName && data.urls[img.fileName] ? { ...img, url: data.urls[img.fileName] } : img));
       setBrandingImages(updatedImages);
       const existingSettings = getFromStorage<any>(StorageKey.SYSTEM_SETTINGS) || {};
-      setInStorage(StorageKey.SYSTEM_SETTINGS, { ...existingSettings, loginBranding: { images: updatedImages } });
+      const updatedBranding = { ...existingSettings, loginBranding: { images: updatedImages } };
+      setInStorage(StorageKey.SYSTEM_SETTINGS, updatedBranding);
+      kvSet('system_settings', updatedBranding).catch(() => {});
       toast.success(`URL'ler yenilendi!`);
     } catch (err: any) { toast.error(`URL yenileme hatası: ${err.message}`); } finally { setRefreshingUrls(false); }
   };
+
+  // BUG FIX [AJAN-2]: localStorage boşsa KV'den ayarları yükle (mobil ilk açılış)
+  useEffect(() => {
+    const localSettings = getFromStorage<any>(StorageKey.SYSTEM_SETTINGS);
+    if (!localSettings?.companyInfo && !localSettings?.loginBranding) {
+      import('../lib/supabase-kv').then(({ kvGet }) =>
+        kvGet<any>('system_settings').then(remote => {
+          if (remote) {
+            setInStorage(StorageKey.SYSTEM_SETTINGS, remote);
+            if (remote.companyInfo) setCompanyInfo({ ...remote.companyInfo });
+            if (remote.loginBranding?.images) setBrandingImages(remote.loginBranding.images);
+          }
+        }).catch(() => {})
+      );
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     const checkAndRefreshUrls = async () => {
@@ -522,8 +560,150 @@ export function SettingsPage() {
         </button>
       </motion.div>
 
+      {/* ── Çok Sunuculu HA Sistemi ─────────────────────────────────────── */}
+      <div className="space-y-4">
+        <div className="flex items-center gap-3">
+          <div className="p-2 bg-purple-500/20 rounded-xl border border-purple-500/30">
+            <Shield className="w-5 h-5 text-purple-400" />
+          </div>
+          <div>
+            <h2 className="text-lg font-bold">Yüksek Erişilebilirlik (HA)</h2>
+            <p className="text-xs text-muted-foreground">Bu cihazı yerel sunucu olarak kayıt edin. Cloud down olursa otomatik geçiş yapılır.</p>
+          </div>
+        </div>
+
+        {/* Bu cihazın yapılandırması */}
+        <div className="p-4 rounded-2xl bg-card border border-border space-y-3">
+          <div className="text-sm font-medium text-muted-foreground">Bu Cihazın Yapılandırması</div>
+          <div className="text-xs text-muted-foreground/60 font-mono">ID: {getLocalNodeId()}</div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs text-muted-foreground mb-1 block">Cihaz Adı</label>
+              <input
+                value={nodeConfig.name || ''}
+                onChange={e => setNodeConfigState(p => ({ ...p, name: e.target.value }))}
+                placeholder="Masaüstü PC, Laptop vb."
+                className="w-full px-3 py-2 bg-background border border-border rounded-xl text-sm text-white focus:outline-none focus:ring-2 focus:ring-purple-500/40"
+              />
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground mb-1 block">Cihaz Tipi</label>
+              <select
+                value={nodeConfig.platform || 'desktop'}
+                onChange={e => setNodeConfigState(p => ({ ...p, platform: e.target.value as any }))}
+                className="w-full px-3 py-2 bg-background border border-border rounded-xl text-sm text-white focus:outline-none focus:ring-2 focus:ring-purple-500/40"
+              >
+                <option value="desktop">Masaüstü PC</option>
+                <option value="laptop">Laptop</option>
+                <option value="server">Sunucu</option>
+                <option value="other">Diğer</option>
+              </select>
+            </div>
+          </div>
+
+          <div>
+            <label className="text-xs text-muted-foreground mb-1 block">
+              Yerel Docker Supabase URL
+              <span className="ml-1 text-muted-foreground/50">(örn: http://192.168.1.5:54321 veya Cloudflare Tunnel URL)</span>
+            </label>
+            <input
+              value={nodeConfig.localUrl || ''}
+              onChange={e => setNodeConfigState(p => ({ ...p, localUrl: e.target.value }))}
+              placeholder="http://192.168.1.5:54321"
+              className="w-full px-3 py-2 bg-background border border-border rounded-xl text-sm text-white font-mono focus:outline-none focus:ring-2 focus:ring-purple-500/40"
+            />
+          </div>
+
+          <div>
+            <label className="text-xs text-muted-foreground mb-1 block">Yerel Supabase Anon Key</label>
+            <input
+              value={nodeConfig.anonKey || ''}
+              onChange={e => setNodeConfigState(p => ({ ...p, anonKey: e.target.value }))}
+              placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+              type="password"
+              className="w-full px-3 py-2 bg-background border border-border rounded-xl text-sm text-white font-mono focus:outline-none focus:ring-2 focus:ring-purple-500/40"
+            />
+          </div>
+
+          <div className="flex items-center gap-2 p-3 rounded-xl bg-blue-500/5 border border-blue-500/20 text-xs text-blue-400/80">
+            <Zap className="w-3.5 h-3.5 flex-shrink-0" />
+            <span>
+              URL doldurulursa bu cihaz cloud KV'ye her 30 saniyede heartbeat yazar. Diğer cihazlar sizi "Çevrimiçi" olarak görür.
+              Cloud down olursa uygulama otomatik olarak sizin Docker'ınıza geçer.
+            </span>
+          </div>
+
+          <button
+            onClick={handleSaveNodeConfig}
+            className="w-full px-4 py-2.5 rounded-xl bg-purple-500/20 hover:bg-purple-500/30 border border-purple-500/30 text-purple-300 text-sm font-medium transition-all"
+          >
+            Yapılandırmayı Kaydet & Heartbeat Başlat
+          </button>
+        </div>
+
+        {/* Canlı durum paneli */}
+        <NodeStatusPanel />
+      </div>
+
       {/* Local Repo Panel */}
       <LocalRepoPanel />
+
+      {/* ── Güncelleme Notları ───────────────────────────────────────── */}
+      <div className="space-y-4">
+        <div className="flex items-center gap-3">
+          <div className="p-2 bg-blue-500/20 rounded-xl border border-blue-500/30">
+            <History className="w-5 h-5 text-blue-400" />
+          </div>
+          <div>
+            <h2 className="text-base font-bold text-white">Güncelleme Notları</h2>
+            <p className="text-xs text-gray-400">Sürüm geçmişi ve değişiklik kayıtları</p>
+          </div>
+        </div>
+
+        <div className="space-y-3">
+          {CHANGELOG.map((entry, idx) => (
+            <div key={entry.version} className={`rounded-2xl border overflow-hidden ${idx === 0 ? 'border-emerald-500/30 bg-emerald-500/5' : 'border-white/8 bg-white/3'}`}>
+              {/* Version header */}
+              <div className={`flex items-center gap-3 px-4 py-3 ${idx === 0 ? 'bg-emerald-500/10' : 'bg-white/4'}`}>
+                <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${idx === 0 ? 'bg-emerald-500/20 border border-emerald-500/30' : 'bg-white/8 border border-white/10'}`}>
+                  <ShieldCheck className={`w-5 h-5 ${idx === 0 ? 'text-emerald-400' : 'text-gray-400'}`} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className={`text-sm font-bold ${idx === 0 ? 'text-emerald-400' : 'text-white'}`}>v{entry.version}</span>
+                    <span className={`text-xs font-mono px-2 py-0.5 rounded-full ${idx === 0 ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' : 'bg-white/8 text-gray-400 border border-white/10'}`}>{entry.codename}</span>
+                    {idx === 0 && <span className="text-[10px] font-bold bg-emerald-500/30 text-emerald-200 px-2 py-0.5 rounded-full border border-emerald-400/30">GÜNCEL</span>}
+                  </div>
+                  <p className="text-xs text-gray-400 mt-0.5 truncate">{entry.summary}</p>
+                </div>
+                <span className="text-[11px] text-gray-500 flex-shrink-0">{entry.date}</span>
+              </div>
+
+              {/* Change list */}
+              <div className="px-4 py-3 space-y-2">
+                {entry.changes.map((change, ci) => {
+                  const typeConfig: Record<ChangeType, { label: string; color: string; icon: React.ReactNode }> = {
+                    yenilik:     { label: 'YENİ',   color: 'text-blue-400 bg-blue-500/15 border-blue-500/25',    icon: <Star className="w-3 h-3" /> },
+                    iyileştirme: { label: 'İYİ',    color: 'text-emerald-400 bg-emerald-500/15 border-emerald-500/25', icon: <Zap className="w-3 h-3" /> },
+                    düzeltme:    { label: 'DÜZ',    color: 'text-amber-400 bg-amber-500/15 border-amber-500/25',   icon: <Wrench className="w-3 h-3" /> },
+                    güvenlik:    { label: 'GÜV',    color: 'text-red-400 bg-red-500/15 border-red-500/25',         icon: <ShieldCheck className="w-3 h-3" /> },
+                  };
+                  const cfg = typeConfig[change.type];
+                  return (
+                    <div key={ci} className="flex items-start gap-2.5">
+                      <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-bold border flex-shrink-0 mt-0.5 ${cfg.color}`}>
+                        {cfg.icon}{cfg.label}
+                      </span>
+                      <p className="text-xs text-gray-300 leading-relaxed">{change.text}</p>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
 
     </div>
   );

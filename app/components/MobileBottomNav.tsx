@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react';
+// [AJAN-2 | claude/serene-gagarin | 2026-03-25] Son düzenleyen: Claude Opus 4.6
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate, useLocation } from 'react-router';
 import { motion, AnimatePresence } from 'motion/react';
 import {
@@ -6,11 +7,14 @@ import {
   MoreHorizontal, X, FileText, Banknote, CalendarCheck,
   UserCog, Factory, ArrowLeftRight, Receipt, FileCheck,
   FolderOpen, Database, MessageSquare, ShieldAlert, Settings,
-  Megaphone, Truck, Search, FileEdit, ChevronRight,
+  Megaphone, Truck, Search, FileEdit, RefreshCw, Wifi, WifiOff,
+  LogOut,
 } from 'lucide-react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useEmployee } from '../contexts/EmployeeContext';
+import { forceSync } from '../utils/storage';
+import { toast } from 'sonner';
 
 interface NavItem {
   path: string;
@@ -89,13 +93,22 @@ export function MobileBottomNav() {
   const navigate = useNavigate();
   const location = useLocation();
   const { t } = useLanguage();
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
   const { currentEmployee } = useEmployee();
   const [isMoreOpen, setIsMoreOpen] = useState(false);
-  const [search, setSearch] = useState('');
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
   const sheetRef = useRef<HTMLDivElement>(null);
   const startY = useRef(0);
   const searchRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    const onOnline  = () => setIsOnline(true);
+    const onOffline = () => setIsOnline(false);
+    window.addEventListener('online',  onOnline);
+    window.addEventListener('offline', onOffline);
+    return () => { window.removeEventListener('online', onOnline); window.removeEventListener('offline', onOffline); };
+  }, []);
 
   // Close on route change
   useEffect(() => {
@@ -125,8 +138,24 @@ export function MobileBottomNav() {
     if ('vibrate' in navigator) navigator.vibrate(type === 'light' ? 6 : 14);
   };
 
-  // Swipe down to close
-  const handleTouchStart = (e: React.TouchEvent) => { startY.current = e.touches[0].clientY; };
+  const handleSync = useCallback(async () => {
+    if (isSyncing) return;
+    setIsSyncing(true);
+    haptic('medium');
+    try {
+      await forceSync();
+      toast.success('Veriler güncellendi', { id: 'mobile-sync', duration: 2000 });
+    } catch {
+      toast.error('Senkronizasyon başarısız', { id: 'mobile-sync', duration: 2000 });
+    } finally {
+      setIsSyncing(false);
+    }
+  }, [isSyncing]);
+
+  // Swipe down to close (daha hassas eşik: 60px)
+  const handleTouchStart = (e: React.TouchEvent) => {
+    startY.current = e.touches[0].clientY;
+  };
   const handleTouchEnd = (e: React.TouchEvent) => {
     if (e.changedTouches[0].clientY - startY.current > 60) {
       haptic('light');
@@ -173,17 +202,45 @@ export function MobileBottomNav() {
                 <div className="w-9 h-[3px] rounded-full bg-white/20" />
               </div>
 
-              {/* Header row */}
-              <div className="flex items-center gap-3 px-4 pb-3 pt-1">
-                <h3 className="text-white font-bold text-base flex-1">
-                  {t('mobileNav.allModules') || 'Tüm Modüller'}
-                </h3>
-                <button
-                  onClick={() => setIsMoreOpen(false)}
-                  className="p-1.5 rounded-xl bg-white/[0.06] active:bg-white/[0.12] transition-colors"
-                >
-                  <X className="w-4 h-4 text-gray-400" />
-                </button>
+              {/* Header — Kullanıcı bilgisi + araçlar */}
+              <div className="px-5 pb-3 space-y-3">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-white font-bold text-lg">{t('mobileNav.allModules') || 'Tüm Modüller'}</h3>
+                  <div className="flex items-center gap-2">
+                    <motion.button
+                      whileTap={{ scale: 0.9 }}
+                      onClick={handleSync}
+                      disabled={isSyncing || !isOnline}
+                      className="p-2 rounded-xl bg-blue-600/15 border border-blue-500/20 text-blue-400 disabled:opacity-40 transition-colors"
+                      title="Verileri Senkronize Et"
+                    >
+                      <RefreshCw className={`w-4 h-4 ${isSyncing ? 'animate-spin' : ''}`} />
+                    </motion.button>
+                    <button
+                      onClick={() => setIsMoreOpen(false)}
+                      className="p-2 rounded-xl bg-white/5 hover:bg-white/10 transition-colors"
+                    >
+                      <X className="w-4 h-4 text-gray-400" />
+                    </button>
+                  </div>
+                </div>
+                {/* Kullanıcı kartı + durum */}
+                <div className="flex items-center gap-3 px-3 py-2.5 rounded-xl bg-white/[0.04] border border-white/[0.06]">
+                  <div className="w-9 h-9 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white text-sm font-bold flex-shrink-0">
+                    {user?.name?.charAt(0)?.toUpperCase() || 'U'}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-white truncate">{user?.name || 'Kullanıcı'}</p>
+                    <p className="text-[11px] text-muted-foreground truncate">{user?.role || ''}</p>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    {isOnline ? (
+                      <Wifi className="w-3.5 h-3.5 text-emerald-400" />
+                    ) : (
+                      <WifiOff className="w-3.5 h-3.5 text-red-400" />
+                    )}
+                  </div>
+                </div>
               </div>
 
               {/* Search bar */}
@@ -213,56 +270,58 @@ export function MobileBottomNav() {
                     <Search className="w-8 h-8 mb-2 opacity-40" />
                     <p className="text-sm">Sonuç bulunamadı</p>
                   </div>
-                ) : (
-                  filteredGroups.map((group, gi) => (
-                    <div key={gi}>
-                      <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-2 px-0.5">
-                        {t(group.titleKey) || group.titleKey}
-                      </p>
-                      {/* 4-column grid for compact fit */}
-                      <div className="grid grid-cols-4 gap-2">
-                        {group.items.map(item => {
-                          const Icon = item.icon;
-                          const active = isActive(item.path);
-                          const colors = colorMap[item.color] || colorMap.gray;
-                          return (
-                            <motion.button
-                              key={item.path}
-                              whileTap={{ scale: 0.88 }}
-                              onClick={() => { haptic('light'); navigate(item.path); }}
-                              className={`flex flex-col items-center gap-1.5 py-3 px-1 rounded-2xl border transition-all min-h-[72px] ${
-                                active
-                                  ? `${colors.bg} border-current`
-                                  : 'bg-white/[0.03] border-white/[0.05] active:bg-white/[0.07]'
-                              }`}
-                            >
-                              <div className={`p-1.5 rounded-xl ${active ? colors.bg : 'bg-white/[0.06]'}`}>
-                                <Icon className={`w-[18px] h-[18px] ${active ? colors.text : 'text-gray-400'}`} />
-                              </div>
-                              <span className={`text-[10px] font-medium leading-tight text-center px-0.5 ${
-                                active ? 'text-white' : 'text-gray-400'
-                              }`}>
-                                {t(item.labelKey)}
-                              </span>
-                            </motion.button>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  ))
-                )}
+                ))}
+
+                {/* Oturum Kapat */}
+                <div className="pt-3 mt-1 border-t border-white/[0.06]">
+                  <button
+                    onClick={() => { setIsMoreOpen(false); logout(); }}
+                    className="w-full flex items-center justify-center gap-2 px-3 py-3 rounded-xl text-sm font-semibold text-red-400 bg-red-500/10 border border-red-500/20 hover:bg-red-500/20 active:scale-[0.98] transition-all"
+                  >
+                    <LogOut className="w-4 h-4" />
+                    <span>Oturum Kapat</span>
+                  </button>
+                </div>
               </div>
             </motion.div>
           </>
         )}
       </AnimatePresence>
 
-      {/* ── Bottom Tab Bar ── */}
-      <nav
-        className="fixed bottom-0 left-0 right-0 z-[97] lg:hidden"
-        role="navigation"
-        aria-label="Ana navigasyon"
-      >
+      {/* Bottom Tab Bar */}
+      <nav className="fixed bottom-0 left-0 right-0 z-[97] lg:hidden">
+        {/* Çevrimdışı uyarı şeridi */}
+        <AnimatePresence>
+          {!isOnline && (
+            <motion.div
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: 'auto', opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              className="overflow-hidden"
+            >
+              <div className="flex items-center justify-center gap-2 px-4 py-1.5 bg-red-600/20 border-t border-red-500/30">
+                <WifiOff className="w-3 h-3 text-red-400 flex-shrink-0" />
+                <span className="text-[11px] text-red-300 font-medium">Çevrimdışı — değişiklikler bağlantı gelince senkronize edilecek</span>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+        {/* Sync göstergesi */}
+        <AnimatePresence>
+          {isSyncing && (
+            <motion.div
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: 'auto', opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              className="overflow-hidden"
+            >
+              <div className="flex items-center justify-center gap-2 px-4 py-1.5 bg-blue-600/20 border-t border-blue-500/30">
+                <RefreshCw className="w-3 h-3 text-blue-400 animate-spin flex-shrink-0" />
+                <span className="text-[11px] text-blue-300 font-medium">Senkronize ediliyor...</span>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
         {/* Glass background */}
         <div className="absolute inset-0 bg-[#0a0e14]/92 backdrop-blur-2xl border-t border-white/[0.07]" />
 

@@ -2,12 +2,14 @@ import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { useLanguage } from '../contexts/LanguageContext';
 import { useEmployee } from '../contexts/EmployeeContext';
 import { useAuth } from '../contexts/AuthContext';
+// [AJAN-2 | claude/serene-gagarin | 2026-03-25] Son düzenleyen: Claude Sonnet 4.6
 import { getFromStorage, setInStorage, StorageKey } from '../utils/storage';
 import { logActivity } from '../utils/activityLogger';
 import { useModuleBus } from '../hooks/useModuleBus';
 import { getPagePermissions } from '../utils/permissions';
 import { usePageSecurity } from '../hooks/usePageSecurity';
 import { useTableSync } from '../hooks/useTableSync';
+import { supabase } from '../lib/supabase';
 import { motion, AnimatePresence } from 'motion/react';
 import { toast } from 'sonner';
 import {
@@ -107,6 +109,10 @@ export function saveCek(cek: CekData) {
   else existing.unshift(cek);
   setInStorage(StorageKey.CEKLER_DATA, existing);
   window.dispatchEvent(new Event('storage_update'));
+  // [AJAN-2]: Supabase cekler tablosuna da yaz
+  supabase.from('cekler').upsert([cek], { onConflict: 'id' })
+    .then(({ error }) => { if (error) console.warn('[CeklerPage] Supabase upsert hatası:', error.message); })
+    .catch(e => console.warn('[CeklerPage] Supabase exception:', e));
 }
 
 export function getCekler(): CekData[] {
@@ -189,7 +195,8 @@ export function CeklerPage() {
   const { canAdd, canDelete, canEdit } = getPagePermissions(user, currentEmployee, 'cekler');
   const sec = usePageSecurity('cekler');
 
-  const { data: syncedCekler } = useTableSync<CekData>({
+  // [AJAN-2]: deleteItem artık cekler Supabase tablosundan da siliyor
+  const { data: syncedCekler, deleteItem: deleteCekFromSupabase } = useTableSync<CekData>({
     tableName: 'cekler',
     storageKey: StorageKey.CEKLER_DATA,
     initialData: [],
@@ -508,6 +515,8 @@ export function CeklerPage() {
     const existing = getFromStorage<CekData[]>(StorageKey.CEKLER_DATA) || [];
     setInStorage(StorageKey.CEKLER_DATA, existing.filter(c => c.id !== id));
     setCekler(existing.filter(c => c.id !== id));
+    // [AJAN-2]: Supabase cekler tablosundan da sil
+    deleteCekFromSupabase(id).catch(e => console.warn('[CeklerPage] Supabase delete hatası:', e));
     emit('cek:deleted', { cekId: id, bankName });
     setSelectedCek(null);
     sec.auditLog('cek_delete', id, bankName);

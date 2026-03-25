@@ -185,39 +185,112 @@ export async function chatWithAI(userMessage: string, conversationHistory: any[]
         return [];
       }
     };
-
-    const contextData = {
-      fisler: getLS('fisler') || [],
-      stok: getLS('stok_data') || [],
-      cari: getLS('cari_data') || [],
-      kasa: getLS('kasa_data') || [],
-      personel: getLS('personel_data') || []
+    const getLSObj = (key: string, fallback: any = {}) => {
+      try {
+        const data = localStorage.getItem('isleyen_et_' + key);
+        return data ? JSON.parse(data) : fallback;
+      } catch { return fallback; }
     };
 
-    const systemPrompt = `Sen İŞLEYEN ET adlı bir et işletmesinin ERP sisteminin uzman yapay zeka asistanısın. 
-Görevlerin: Kullanıcının sorularını sistemdeki güncel gerçek verilere dayanarak cevaplamak.
+    // ─── Tüm sistem verilerini çek ──────────────────────────────
+    const fisler        = getLS('fisler');
+    const stok          = getLS('stok_data');
+    const cari          = getLS('cari_data');
+    const kasa          = getLS('kasa_data');
+    const personel      = getLS('personel_data');
+    const uretim        = getLS('uretim_data');
+    const banka         = getLS('bank_data');
+    const cekler        = getLS('cekler_data');
+    const araclar       = getLS('arac_data');
+    const settings      = getLSObj('system_settings', {});
+    const stokCat       = getLS('stok_categories');
+    const posData       = getLS('pos_data');
 
-SİSTEMDEKİ MEVCUT GERÇEK VERİLER (ÖZET):
-Stok Durumu: ${JSON.stringify(contextData.stok.map((s:any) => ({ ad: s.name, stok: s.currentStock, birim: s.unit, kategori: s.category })))}
-Cari Hesaplar: ${JSON.stringify(contextData.cari.map((c:any) => ({ ad: c.companyName || c.name, tip: c.type, bakiye: c.balance })))}
-Kasa İşlemleri (Son 100): ${JSON.stringify(contextData.kasa.slice(0, 100).map((k:any) => ({ islem: k.type, tutar: k.amount, tarih: k.date, aciklama: k.description })))}
-Fişler (Son 100): ${JSON.stringify(contextData.fisler.slice(0, 100).map((f:any) => ({ tip: f.mode, toplam: f.total, tarih: f.date, personel: f.employee_name })))}
+    // ─── Ön hesaplama: bugünkü ve haftalık özet ─────────────────
+    const todayStr = new Date().toLocaleDateString('tr-TR');
+    const todaySales   = fisler.filter((f: any) => f.mode === 'satis' && (f.date === todayStr || (f.date || '').startsWith(todayStr.split('.').reverse().join('-'))));
+    const todayBuys    = fisler.filter((f: any) => f.mode === 'alis'  && (f.date === todayStr || (f.date || '').startsWith(todayStr.split('.').reverse().join('-'))));
+    const todayRevenue = todaySales.reduce((s: number, f: any) => s + Number(f.total || 0), 0);
+    const todayCost    = todayBuys.reduce((s: number, f: any) => s + Number(f.total || 0), 0);
 
-CEVAP FORMATI:
-SADECE aşağıdaki JSON formatında cevap ver, dışına markdown veya başka metin ekleme:
+    const criticalStok = stok.filter((s: any) => s.minStock != null && Number(s.currentStock || 0) <= Number(s.minStock));
+    const totalStokVal = stok.reduce((s: number, p: any) => s + Number(p.currentStock || 0) * Number(p.purchasePrice || 0), 0);
+
+    const kasaGelir  = kasa.filter((k: any) => k.type === 'Gelir').reduce((s: number, k: any) => s + Number(k.amount || 0), 0);
+    const kasaGider  = kasa.filter((k: any) => k.type === 'Gider').reduce((s: number, k: any) => s + Number(k.amount || 0), 0);
+    const kasaBakiye = kasaGelir - kasaGider;
+
+    const bankaTopBakiye = banka.reduce((s: number, b: any) => s + Number(b.balance || 0), 0);
+
+    const topProducts = [...fisler.filter((f: any) => f.mode === 'satis')]
+      .flatMap((f: any) => f.items || f.products || [])
+      .reduce((acc: any, item: any) => {
+        const key = item.name || item.productName || 'Bilinmeyen';
+        acc[key] = (acc[key] || 0) + Number(item.total || item.amount || 0);
+        return acc;
+      }, {} as Record<string, number>);
+    const topProductList = Object.entries(topProducts)
+      .sort((a: any, b: any) => b[1] - a[1])
+      .slice(0, 5)
+      .map(([name, total]) => ({ name, total: Math.round(total as number) }));
+
+    const companyInfo = settings?.companyInfo || {};
+
+    // ─── Sistem promptu ─────────────────────────────────────────
+    const systemPrompt = `Sen "${companyInfo.companyName || 'İŞLEYEN ET'}" adlı et işletmesinin ERP sistem asistanısın.
+Kullanıcının sorularını AŞAĞIDAKİ GERÇEK VERİLERE dayanarak cevapla. Veri yoksa "verilerde bulunamadı" de, asla uydurma.
+
+━━━ ŞİRKET BİLGİSİ ━━━
+Ad: ${companyInfo.companyName || 'İŞLEYEN ET'} | Adres: ${companyInfo.address || '-'} | Tel: ${companyInfo.phone || '-'}
+
+━━━ GÜNLÜK ÖZET (${todayStr}) ━━━
+Bugünkü satış adedi: ${todaySales.length} | Satış cirosu: ₺${todayRevenue.toLocaleString('tr-TR')} | Alım maliyeti: ₺${todayCost.toLocaleString('tr-TR')} | Net kâr tahmini: ₺${(todayRevenue - todayCost).toLocaleString('tr-TR')}
+
+━━━ STOK DURUMU (${stok.length} ürün) ━━━
+Kritik stok (${criticalStok.length} ürün): ${JSON.stringify(criticalStok.map((s: any) => ({ ad: s.name, mevcut: s.currentStock, min: s.minStock, birim: s.unit })))}
+Tüm stok özeti: ${JSON.stringify(stok.map((s: any) => ({ ad: s.name, stok: s.currentStock, birim: s.unit, kategori: s.category, min: s.minStock, alışFiyat: s.purchasePrice })))}
+Toplam stok değeri: ₺${Math.round(totalStokVal).toLocaleString('tr-TR')}
+Stok kategorileri: ${JSON.stringify(stokCat)}
+
+━━━ CARİ HESAPLAR (${cari.length} hesap) ━━━
+${JSON.stringify(cari.map((c: any) => ({ ad: c.companyName || c.name, tip: c.type, bakiye: c.balance, telefon: c.phone })))}
+
+━━━ KASA (${kasa.length} işlem) ━━━
+Toplam gelir: ₺${Math.round(kasaGelir).toLocaleString('tr-TR')} | Toplam gider: ₺${Math.round(kasaGider).toLocaleString('tr-TR')} | Net bakiye: ₺${Math.round(kasaBakiye).toLocaleString('tr-TR')}
+Son 50 kasa işlemi: ${JSON.stringify(kasa.slice(0, 50).map((k: any) => ({ islem: k.type, tutar: k.amount, tarih: k.date, açıklama: k.description, kategori: k.category })))}
+
+━━━ FİŞLER / SATIŞLAR (${fisler.length} fiş) ━━━
+En çok satan ürünler (toplam ciro): ${JSON.stringify(topProductList)}
+Son 50 fiş: ${JSON.stringify(fisler.slice(0, 50).map((f: any) => ({ tip: f.mode, toplam: f.total, tarih: f.date, personel: f.employee_name, müşteri: f.cari?.companyName || f.customerName })))}
+
+━━━ PERSONEL (${personel.length} kişi) ━━━
+${JSON.stringify(personel.filter((p: any) => p.id !== 'admin-super').map((p: any) => ({ ad: p.name, rol: p.role, departman: p.department, durum: p.status })))}
+
+━━━ BANKA HESAPLARI ━━━
+Toplam banka bakiyesi: ₺${Math.round(bankaTopBakiye).toLocaleString('tr-TR')}
+${JSON.stringify(banka.map((b: any) => ({ banka: b.bankName || b.name, bakiye: b.balance, para: b.currency || 'TRY' })))}
+
+━━━ ÇEK/SENET ━━━
+${JSON.stringify(cekler.slice(0, 30).map((c: any) => ({ tip: c.type, tutar: c.amount, vade: c.dueDate, durum: c.status })))}
+
+━━━ ARAÇLAR ━━━
+${JSON.stringify(araclar.map((a: any) => ({ plaka: a.plate, marka: a.brand, durum: a.status, km: a.currentKm })))}
+
+━━━ ÜRETİM ━━━
+${JSON.stringify(uretim.slice(0, 20).map((u: any) => ({ ürün: u.productName || u.name, miktar: u.quantity, tarih: u.date, fire: u.waste })))}
+
+━━━ POS ━━━
+${JSON.stringify(posData.slice(0, 20).map((p: any) => ({ tutar: p.amount, tarih: p.date, ödemeYöntemi: p.paymentMethod })))}
+
+━━━ CEVAP FORMATI (SADECE BU JSON'U DÖNDÜR) ━━━
 {
   "type": "chart" | "stat" | "text",
-  "answer": "Kullanıcıya verilecek Türkçe, profesyonel, detaylı ve net cevap.",
-  "data": [ {"name": "Örnek", "value": 100} ], // EĞER chart veya stat seçtiysen veriyi KENDİN bu diziye koy
-  "chartType": "bar" | "line" | "pie" | "area", // opsiyonel, grafik için
-  "chartConfig": { // opsiyonel
-    "xKey": "name",
-    "yKey": "value",
-    "color": "#3b82f6"
-  }
+  "answer": "Türkçe, profesyonel, hesaplamalara dayalı detaylı cevap",
+  "data": [{"name": "...", "value": 123}],
+  "chartType": "bar" | "line" | "pie" | "area",
+  "chartConfig": {"xKey": "name", "yKey": "value", "color": "#3b82f6"}
 }
-
-Eğer grafik veya istatistik göstermen istenmiyorsa type "text" yap ve sadece "answer" alanını doldur. Verilere göre hesaplama yap, uydurma. Verilerde yoksa "verilerde bulunmuyor" de.`;
+Grafik veya istatistik gerekmiyorsa type="text" yap, sadece answer doldur.`;
 
     const messages: any[] = [
       { role: 'system', content: systemPrompt },

@@ -1257,6 +1257,288 @@ export function stopAutoBackup() {
 }
 
 // ═══════════════════════════════════════════════════════════════
+// CLOUD DIRECT BACKUP — Edge Function gerektirmez
+// GÜÇLENDİRME [AJAN-2]: Yerel Docker Supabase olmayan kullanıcılar için
+// doğrudan Supabase JS client ile buluta yedek alır.
+// ═══════════════════════════════════════════════════════════════
+
+const LAST_CLOUD_DIRECT_BACKUP_KEY = 'isleyen_et_last_cloud_direct_backup';
+
+/**
+ * Doğrudan bulut Supabase kv_store_daadfb0c tablosuna yedek yazar.
+ * Edge Function gerektirmez — anon client ile çalışır.
+ */
+export async function createCloudDirectBackup(type: 'manual' | 'auto' = 'auto'): Promise<BackupSnapshot | null> {
+  const cloud = getCloudClient();
+
+  try {
+    // Tüm sync_ key'lerini buluttan oku
+    const { data, error } = await cloud
+      .from(KV_TABLE)
+      .select('key, value')
+      .like('key', 'sync_%');
+
+    if (error) throw new Error(`Bulut okuma hatası: ${error.message}`);
+
+    const rows = data ?? [];
+    const timestamp = new Date().toISOString();
+    const backupId = `cloud_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    const backupKey = `backup_${backupId}`;
+
+    const backupData = {
+      id: backupId,
+      timestamp,
+      type,
+      keysCount: rows.length,
+      data: Object.fromEntries(rows.map(r => [r.key, r.value])),
+    };
+
+    const sizeKB = Math.round(JSON.stringify(backupData).length / 1024);
+
+    // Buluta backup_ prefix ile yaz
+    const { error: writeError } = await cloud
+      .from(KV_TABLE)
+      .upsert({ key: backupKey, value: backupData });
+
+    if (writeError) throw new Error(`Backup yazma hatası: ${writeError.message}`);
+
+    const snapshot: BackupSnapshot = {
+      id: backupId,
+      timestamp,
+      source: 'cloud',
+      keysCount: rows.length,
+      sizeKB,
+      type,
+    };
+
+    const list = getLocalBackupList();
+    list.unshift(snapshot);
+    saveBackupList(list);
+
+    localStorage.setItem(LAST_CLOUD_DIRECT_BACKUP_KEY, timestamp);
+
+    addSyncLog({
+      direction: 'backup',
+      status: 'success',
+      keysUploaded: rows.length,
+      keysDownloaded: 0,
+      conflictsResolved: 0,
+      errors: [],
+      durationMs: 0,
+    });
+
+    console.log(`%c[DualSync] Doğrudan bulut yedeği oluşturuldu: ${rows.length} key, ${sizeKB} KB`, 'color: #22c55e; font-weight: bold');
+    return snapshot;
+  } catch (e: any) {
+    console.error('[DualSync] Doğrudan bulut yedek hatası:', e.message);
+    addSyncLog({
+      direction: 'backup',
+      status: 'failed',
+      keysUploaded: 0,
+      keysDownloaded: 0,
+      conflictsResolved: 0,
+      errors: [e.message],
+      durationMs: 0,
+    });
+    return null;
+  }
+}
+
+let _cloudDirectBackupInterval: ReturnType<typeof setInterval> | null = null;
+
+/**
+ * Cloud-only otomatik yedekleme zamanlayıcısı.
+ * Yerel Supabase aktif olmasa bile 24 saatte bir buluta yedek alır.
+ */
+export function startCloudDirectBackupScheduler(intervalHours = 24): void {
+  if (_cloudDirectBackupInterval) return;
+
+  const intervalMs = intervalHours * 60 * 60 * 1000;
+
+  const runBackup = () => {
+    if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return;
+    // [AJAN-2] createCloudDirectBackup → createFullTableBackup: gerçek tablolardan yedek al
+    createFullTableBackup('auto').catch(() => {});
+  };
+
+  // İlk çalıştırmada yeterli süre geçmişse hemen al
+  const lastRaw = localStorage.getItem(LAST_CLOUD_DIRECT_BACKUP_KEY);
+  const lastTs = lastRaw ? new Date(lastRaw).getTime() : 0;
+  if (Date.now() - lastTs >= intervalMs) {
+    setTimeout(runBackup, 8000); // Uygulama açılışından 8s sonra
+  }
+
+  _cloudDirectBackupInterval = setInterval(runBackup, intervalMs);
+  console.log(`%c[DualSync] Bulut otomatik yedek zamanlayıcısı aktif (${intervalHours}s)`, 'color: #a855f7');
+}
+
+export function stopCloudDirectBackupScheduler(): void {
+  if (_cloudDirectBackupInterval) {
+    clearInterval(_cloudDirectBackupInterval);
+    _cloudDirectBackupInterval = null;
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// FULL TABLE BACKUP [AJAN-2] — Gerçek Supabase tablolarından yedek
+// KV store değil, asıl tablolardan (fisler, urunler, cari vb.) okur.
+// Backup butonu ve zamanlayıcı bu fonksiyonu kullanır.
+// ═══════════════════════════════════════════════════════════════
+
+const REAL_TABLES = [
+  'fisler', 'urunler', 'cari_hesaplar', 'kasa_islemleri', 'personeller',
+  'bankalar', 'cekler', 'araclar', 'arac_shifts', 'arac_km_logs',
+  'uretim_profilleri', 'uretim_kayitlari', 'faturalar', 'fatura_stok', 'tahsilatlar',
+];
+
+/**
+ * Tüm gerçek Supabase tablolarını okur ve kv_store_daadfb0c'ye yedek olarak yazar.
+ * Edge Function gerektirmez. Hem backup butonu hem zamanlayıcı bu fonksiyonu kullanır.
+ */
+export async function createFullTableBackup(type: 'manual' | 'auto' = 'manual'): Promise<BackupSnapshot | null> {
+  const cloud = getCloudClient();
+
+  try {
+    const tableData: Record<string, any[]> = {};
+    let totalRows = 0;
+    const tableStats: Record<string, number> = {};
+
+    for (const table of REAL_TABLES) {
+      try {
+        const { data, error } = await cloud.from(table).select('*');
+        if (!error && data && data.length > 0) {
+          tableData[table] = data;
+          totalRows += data.length;
+          tableStats[table] = data.length;
+        }
+      } catch {
+        // Tablo henüz oluşturulmamışsa sessizce atla
+      }
+    }
+
+    const timestamp = new Date().toISOString();
+    const backupId = `tbl_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+
+    const backupData = {
+      id: backupId,
+      timestamp,
+      type,
+      version: '2.0',
+      format: 'supabase_tables',
+      totalRows,
+      tableStats,
+      tables: tableData,
+    };
+
+    const sizeKB = Math.round(JSON.stringify(backupData).length / 1024);
+
+    const { error: writeError } = await cloud
+      .from(KV_TABLE)
+      .upsert({ key: `backup_${backupId}`, value: backupData });
+
+    if (writeError) throw new Error(`Yedek yazma hatası: ${writeError.message}`);
+
+    // Meta: liste sayfası için ayrıca kaydet
+    await cloud.from(KV_TABLE).upsert({
+      key: `backup_meta_${backupId}`,
+      value: { id: backupId, timestamp, type, format: 'supabase_tables', totalRows, sizeKB, tableStats },
+    });
+
+    const snapshot: BackupSnapshot = {
+      id: backupId,
+      timestamp,
+      source: 'cloud',
+      keysCount: totalRows,
+      sizeKB,
+      type,
+    };
+
+    const list = getLocalBackupList();
+    list.unshift(snapshot);
+    saveBackupList(list);
+    localStorage.setItem(LAST_CLOUD_DIRECT_BACKUP_KEY, timestamp);
+
+    addSyncLog({
+      direction: 'backup',
+      status: 'success',
+      keysUploaded: totalRows,
+      keysDownloaded: 0,
+      conflictsResolved: 0,
+      errors: [],
+      durationMs: 0,
+    });
+
+    console.log(
+      `%c[DualSync] Tam tablo yedeği oluşturuldu: ${totalRows} satır, ${sizeKB} KB, ${Object.keys(tableData).length} tablo`,
+      'color: #22c55e; font-weight: bold'
+    );
+    return snapshot;
+  } catch (e: any) {
+    console.error('[DualSync] Tam tablo yedek hatası:', e.message);
+    addSyncLog({
+      direction: 'backup',
+      status: 'failed',
+      keysUploaded: 0,
+      keysDownloaded: 0,
+      conflictsResolved: 0,
+      errors: [e.message],
+      durationMs: 0,
+    });
+    return null;
+  }
+}
+
+/**
+ * KV store'daki table-format yedeğini okur ve tüm tabloları geri yükler.
+ * Her tabloya 100'er satırlık batch upsert yapar.
+ */
+export async function restoreFromTableBackup(backupId: string): Promise<{ ok: number; fail: number; tables: string[] }> {
+  const cloud = getCloudClient();
+  let ok = 0, fail = 0;
+  const restoredTables: string[] = [];
+
+  try {
+    const { data, error } = await cloud
+      .from(KV_TABLE)
+      .select('value')
+      .eq('key', `backup_${backupId}`)
+      .single();
+
+    if (error || !data) throw new Error('Yedek bulunamadı');
+
+    const backup = data.value as any;
+    if (!backup.tables) throw new Error('Bu yedek eski formatta (tablo verisi yok), dosya geri yüklemesini kullanın');
+
+    const BATCH = 100;
+    for (const [tableName, rows] of Object.entries(backup.tables as Record<string, any[]>)) {
+      if (!Array.isArray(rows) || rows.length === 0) continue;
+      try {
+        for (let i = 0; i < rows.length; i += BATCH) {
+          const chunk = rows.slice(i, i + BATCH);
+          const { error: upsertErr } = await cloud.from(tableName).upsert(chunk, { onConflict: 'id' });
+          if (upsertErr) {
+            fail += chunk.length;
+            console.warn(`[Restore] ${tableName} batch hatası:`, upsertErr.message);
+          } else {
+            ok += chunk.length;
+          }
+        }
+        restoredTables.push(tableName);
+      } catch (e: any) {
+        fail += rows.length;
+        console.warn(`[Restore] ${tableName} exception:`, e.message);
+      }
+    }
+
+    console.log(`%c[DualSync] Geri yükleme tamamlandı: ${ok} başarılı, ${fail} hatalı`, 'color: #22c55e');
+    return { ok, fail, tables: restoredTables };
+  } catch (e: any) {
+    console.error('[DualSync] Geri yükleme hatası:', e.message);
+    return { ok: 0, fail: 1, tables: [] };
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
 // DOCKER SETUP
 // ═══════════════════════════════════════════════════════════════
 

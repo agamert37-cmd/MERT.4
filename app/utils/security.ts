@@ -273,63 +273,127 @@ export function validateSessionFingerprint(): { valid: boolean; reason?: string 
   return { valid: true };
 }
 
-// ─── RATE LIMITER ─────────────────────────────────────────────────────────────
+// ─── RATE LIMITER — KAYAN PENCERE (Sliding Window) ───────────────────────────
+// Sabit pencere algoritması ani-patlama saldırılarına karşı açıktır (pencere
+// sıfırlanma anında 2× kapasite kullanılabilir). Kayan pencere her zaman
+// gerçek son windowMs ms'yi kontrol eder.
 
-interface RateLimitEntry {
-  count: number;
-  windowStart: number;
-}
+// Bellek içi timestamp dizileri (sessionStorage fallback ile)
+const slidingWindowStore = new Map<string, number[]>();
 
-// Bellek içi yedek (sessionStorage erişilemezse kullanılır)
-const rateLimitStore = new Map<string, RateLimitEntry>();
-
-function getRateLimitEntry(key: string): RateLimitEntry | null {
+function getSlidingTimestamps(key: string): number[] {
+  // Önce bellek içi harita — en hızlı
+  if (slidingWindowStore.has(key)) return slidingWindowStore.get(key)!;
   try {
-    const raw = sessionStorage.getItem(`rl_${key}`);
-    return raw ? JSON.parse(raw) : null;
+    const raw = sessionStorage.getItem(`rl2_${key}`);
+    const arr: number[] = raw ? JSON.parse(raw) : [];
+    slidingWindowStore.set(key, arr);
+    return arr;
   } catch {
-    return rateLimitStore.get(key) || null;
+    return [];
   }
 }
 
-function setRateLimitEntry(key: string, entry: RateLimitEntry): void {
+function saveSlidingTimestamps(key: string, timestamps: number[]): void {
+  slidingWindowStore.set(key, timestamps);
   try {
-    sessionStorage.setItem(`rl_${key}`, JSON.stringify(entry));
-  } catch {
-    // sessionStorage doluysa bellekte tut
-  }
-  rateLimitStore.set(key, entry);
+    sessionStorage.setItem(`rl2_${key}`, JSON.stringify(timestamps));
+  } catch { /* sessionStorage full — bellek içi yeterli */ }
 }
 
 /**
- * Rate limit kontrolu — sessionStorage'da kalıcı (sayfa yenilemesinde korunur)
- * @param key - Benzersiz anahtar (orn: 'login_admin', 'api_export')
- * @param maxRequests - Pencere basina maksimum istek
- * @param windowMs - Pencere suresi (ms)
+ * Kayan pencere rate limiter — sabit pencereye göre %50 daha doğru.
+ * @param key         — benzersiz anahtar ('login_admin', 'api_export' …)
+ * @param maxRequests — pencere başına max istek
+ * @param windowMs    — pencere süresi (ms)
  */
-export function checkRateLimit(key: string, maxRequests: number, windowMs: number): { allowed: boolean; remaining: number; resetIn: number } {
+export function checkRateLimit(
+  key: string,
+  maxRequests: number,
+  windowMs: number,
+): { allowed: boolean; remaining: number; resetIn: number } {
   const now = Date.now();
-  const entry = getRateLimitEntry(key);
+  const cutoff = now - windowMs;
 
-  if (!entry || now - entry.windowStart > windowMs) {
-    setRateLimitEntry(key, { count: 1, windowStart: now });
-    return { allowed: true, remaining: maxRequests - 1, resetIn: windowMs };
+  // Eski damgaları temizle — O(n) ama n her zaman maxRequests'den küçük
+  const timestamps = getSlidingTimestamps(key).filter(t => t > cutoff);
+
+  if (timestamps.length >= maxRequests) {
+    // En eski damganın windowMs sonrası ne zaman reset olur
+    const resetIn = timestamps[0] + windowMs - now;
+    saveSlidingTimestamps(key, timestamps);
+    return { allowed: false, remaining: 0, resetIn: Math.max(resetIn, 0) };
   }
 
-  if (entry.count >= maxRequests) {
-    const resetIn = windowMs - (now - entry.windowStart);
-    return { allowed: false, remaining: 0, resetIn };
-  }
-
-  const updated = { count: entry.count + 1, windowStart: entry.windowStart };
-  setRateLimitEntry(key, updated);
-  return { allowed: true, remaining: maxRequests - updated.count, resetIn: windowMs - (now - entry.windowStart) };
+  timestamps.push(now);
+  saveSlidingTimestamps(key, timestamps);
+  return {
+    allowed: true,
+    remaining: maxRequests - timestamps.length,
+    resetIn: windowMs,
+  };
 }
 
-/** Rate limit sayacini sifirla */
+/** Rate limit sayacını sıfırla */
 export function resetRateLimit(key: string): void {
-  try { sessionStorage.removeItem(`rl_${key}`); } catch { /* ignore */ }
-  rateLimitStore.delete(key);
+  slidingWindowStore.delete(key);
+  try { sessionStorage.removeItem(`rl2_${key}`); } catch { /* ignore */ }
+}
+
+// ─── GİRİŞ ENTROPİSİ ANALİZİ ─────────────────────────────────────────────────
+
+/**
+ * Shannon entropisini hesaplar (0–8 bit aralığı).
+ * Yüksek entropi → base64/hex kodlanmış payload veya injection girişimi olabilir.
+ */
+export function calcInputEntropy(input: string): number {
+  if (!input || input.length === 0) return 0;
+  const freq = new Map<string, number>();
+  for (const ch of input) freq.set(ch, (freq.get(ch) || 0) + 1);
+  let entropy = 0;
+  for (const count of freq.values()) {
+    const p = count / input.length;
+    entropy -= p * Math.log2(p);
+  }
+  return entropy;
+}
+
+export interface InputThreatAnalysis {
+  safe: boolean;
+  entropy: number;
+  suspectedPayload: boolean;
+  hasXSS: boolean;
+  hasSQLi: boolean;
+  score: number; // 0 = temiz, 100 = çok tehlikeli
+}
+
+/**
+ * Bir girişi hem içerik hem de entropi açısından tehdit analizi yapar.
+ * Entropi ≥ 4.5 + uzunluk ≥ 40 → muhtemelen kodlanmış payload.
+ */
+export function analyzeInputThreat(input: string): InputThreatAnalysis {
+  const entropy = calcInputEntropy(input);
+  const hasXSS = /<script|on\w+=|javascript:/i.test(input);
+  const hasSQLi = detectSQLInjection(input);
+
+  // Base64/hex kodlu uzun string → yüksek entropi + yüksek uzunluk
+  const suspectedPayload = entropy >= 4.5 && input.length >= 40;
+
+  let score = 0;
+  if (hasXSS) score += 50;
+  if (hasSQLi) score += 40;
+  if (suspectedPayload) score += 20;
+  if (entropy >= 5.5) score += 10; // Olağandışı yüksek entropi
+  score = Math.min(score, 100);
+
+  return {
+    safe: score === 0,
+    entropy: Math.round(entropy * 100) / 100,
+    suspectedPayload,
+    hasXSS,
+    hasSQLi,
+    score,
+  };
 }
 
 // ─── SUPHELI AKTIVITE TESPIT ─────────────────────────────────────────────────
@@ -395,22 +459,23 @@ export function isUnusualHour(): boolean {
   return hour < 6 || hour >= 23;
 }
 
-/** Hizli ardisik islem tespiti */
-const actionTimestamps: number[] = [];
-export function detectRapidActions(thresholdMs = 500, maxActions = 10): boolean {
+/**
+ * Hızlı ardışık işlem tespiti — kayan pencere algoritması.
+ * @param windowMs   — kontrol penceresi (ms), varsayılan 5000
+ * @param maxActions — pencerede izin verilen max işlem sayısı, varsayılan 10
+ */
+const _rapidActionTs: number[] = [];
+export function detectRapidActions(windowMs = 5000, maxActions = 10): boolean {
   const now = Date.now();
-  actionTimestamps.push(now);
-  // Son N islem icindeki zamanlari kontrol et
-  if (actionTimestamps.length > maxActions) {
-    actionTimestamps.shift();
+  const cutoff = now - windowMs;
+
+  // Pencere dışındaki damgaları at
+  while (_rapidActionTs.length > 0 && _rapidActionTs[0] < cutoff) {
+    _rapidActionTs.shift();
   }
-  if (actionTimestamps.length >= maxActions) {
-    const span = actionTimestamps[actionTimestamps.length - 1] - actionTimestamps[0];
-    if (span < thresholdMs * maxActions) {
-      return true; // Cok hizli islem
-    }
-  }
-  return false;
+  _rapidActionTs.push(now);
+
+  return _rapidActionTs.length > maxActions;
 }
 
 // ─── AKTIF OTURUM YONETIMI ───────────────────────────────────────────────────

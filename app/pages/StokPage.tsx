@@ -1,3 +1,4 @@
+// [AJAN-2 | claude/serene-gagarin | 2026-03-25] Son düzenleyen: Claude Sonnet 4.6
 import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import {
   Plus, Search, AlertCircle, CheckCircle, TrendingUp, Package, ChevronDown,
@@ -27,6 +28,7 @@ import {
   PieChart as RePieChart, Pie, Cell, AreaChart, Area
 } from 'recharts';
 import { PremiumTooltip, GlowBar, EmptyChartState } from '../components/ChartComponents';
+import { kvGet, kvSet } from '../lib/supabase-kv';
 
 export type MovementType = 'ALIS' | 'SATIS' | 'MUSTERI_IADE' | 'TOPTANCI_IADE' | 'FIRE' | 'URETIM_CIKIS' | 'URETIM_GIRIS' | 'FATURA_ALIS' | 'FATURA_SATIS' | 'FATURA_IPTAL';
 export type ProductCategory = string;
@@ -437,6 +439,19 @@ export function StokPage() {
     return saved && saved.length > 0 ? saved : DEFAULT_CATEGORIES;
   });
 
+  // BUG FIX [AJAN-2]: localStorage boşsa KV store'dan kategorileri yükle (mobil ilk açılış)
+  useEffect(() => {
+    const saved = getFromStorage<string[]>(StorageKey.STOK_CATEGORIES);
+    if (!saved || saved.length === 0) {
+      kvGet<string[]>('stok_categories').then(remote => {
+        if (remote && remote.length > 0) {
+          setCategories(remote);
+          setInStorage(StorageKey.STOK_CATEGORIES, remote);
+        }
+      }).catch(() => {});
+    }
+  }, []);
+
   // UI State
   const [activeTab, setActiveTab] = useState<TabKey>('urunler');
   const [searchTerm, setSearchTerm] = useState('');
@@ -679,6 +694,7 @@ export function StokPage() {
     const updated = [...categories, name];
     setCategories(updated);
     setInStorage(StorageKey.STOK_CATEGORIES, updated);
+    kvSet('stok_categories', updated).catch(e => console.error('[Stok] kategori kv sync:', e));
     setNewCategoryName('');
     emit('stok:category_changed', { action: 'add', categoryName: name });
     logActivity('employee_update', 'Kategori Eklendi', { employeeName: user?.name, page: 'Stok', description: `"${name}" kategorisi eklendi.` });
@@ -696,6 +712,7 @@ export function StokPage() {
     updated[idx] = name;
     setCategories(updated);
     setInStorage(StorageKey.STOK_CATEGORIES, updated);
+    kvSet('stok_categories', updated).catch(e => console.error('[Stok] kategori kv sync:', e));
     // Update products with batch
     const affectedProducts = safeProducts.filter(p => p.category === oldName);
     if (affectedProducts.length > 0) {
@@ -725,6 +742,7 @@ export function StokPage() {
     const updated = categories.filter((_, i) => i !== idx);
     setCategories(updated);
     setInStorage(StorageKey.STOK_CATEGORIES, updated);
+    kvSet('stok_categories', updated).catch(e => console.error('[Stok] kategori kv sync:', e));
     emit('stok:category_changed', { action: 'delete', categoryName: name });
     logActivity('employee_update', 'Kategori Silindi', { employeeName: user?.name, page: 'Stok', description: `"${name}" kategorisi silindi.` });
     sec.auditLog('stok_category_delete', name, name);

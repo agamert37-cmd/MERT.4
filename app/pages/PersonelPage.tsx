@@ -1,5 +1,6 @@
+// [AJAN-2 | claude/serene-gagarin | 2026-03-25] Son düzenleyen: Claude Sonnet 4.6
 import React, { useState, useMemo } from 'react';
-import { UserCog, Shield, Clock, MapPin, Phone, Mail, Plus, Trash2, Activity, MousePointerClick, History, Eye, EyeOff, Edit3, Lock, Key, Save, X, Search, CheckCircle2 } from 'lucide-react';
+import { UserCog, Shield, Clock, MapPin, Phone, Mail, Plus, Trash2, Activity, MousePointerClick, History, Eye, EyeOff, Edit3, Lock, Key, Save, X, Search, CheckCircle2, LogOut, WifiOff } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { staggerContainer, gridCard, hover, tap } from '../utils/animations';
 import * as Dialog from '@radix-ui/react-dialog';
@@ -13,7 +14,9 @@ import { useModuleBus } from '../hooks/useModuleBus';
 import { getPagePermissions } from '../utils/permissions';
 import { SyncStatusBar, SyncBadge } from '../components/SyncStatusBar';
 import { getFromStorage, setInStorage, StorageKey } from '../utils/storage';
-import { hashString, hashStringWithSalt } from '../utils/security';
+import { hashString } from '../utils/security';
+import { supabase } from '../lib/supabase';
+import { kvSet } from '../lib/supabase-kv';
 import { analyzePasswordStrength, getSecurityPolicy, checkRateLimit, generateCSRFToken, validateCSRFToken, addSecurityThreat, detectRapidActions, deepSanitize, detectSQLInjection, appendToLogChain } from '../utils/security';
 import { useSecurityMonitor } from '../hooks/useSecurityMonitor';
 import { PasswordStrengthBar } from '../components/PasswordStrengthBar';
@@ -263,7 +266,7 @@ export function PersonelPage() {
     const requestedRole = fd.get('role') as 'Yönetici' | 'Personel';
     if (requestedRole === 'Yönetici' && user?.role !== 'Yönetici') {
       toast.error('Yönetici rolü atama yetkiniz bulunmamaktadır.');
-      logActivity('security_alert', 'Yetkisiz Yönetici Rolü Atama Denemesi', { level: 'critical', employeeName: user?.name, description: 'Personel, yönetici rolü atamaya çalıştı.' });
+      logActivity('security_alert', 'Yetkisiz Yönetici Rolü Atama Denemesi', { level: 'high', employeeName: user?.name, description: 'Personel, yönetici rolü atamaya çalıştı.' });
       addSecurityThreat({ type: 'privilege_escalation', severity: 'critical', title: 'Yetkisiz Rol Atama', description: `${user?.name} yönetici rolü atamaya çalıştı.`, source: 'personel_form', metadata: { userId: user?.id } });
       return;
     }
@@ -340,7 +343,7 @@ export function PersonelPage() {
     // GÜVENLİK: Yalnızca yöneticiler Yönetici rolü atayabilir
     if (editRole === 'Yönetici' && user?.role !== 'Yönetici') {
       toast.error('Yönetici rolü atama yetkiniz bulunmamaktadır.');
-      logActivity('security_alert', 'Yetkisiz Yönetici Rolü Düzenleme Denemesi', { level: 'critical', employeeName: user?.name, description: 'Personel, yönetici rolü atamaya çalıştı.' });
+      logActivity('security_alert', 'Yetkisiz Yönetici Rolü Düzenleme Denemesi', { level: 'high', employeeName: user?.name, description: 'Personel, yönetici rolü atamaya çalıştı.' });
       addSecurityThreat({ type: 'privilege_escalation', severity: 'critical', title: 'Yetkisiz Rol Düzenleme', description: `${user?.name} personel düzenleme ile yönetici rolü atamaya çalıştı.`, source: 'personel_edit', metadata: { userId: user?.id } });
       return;
     }
@@ -365,6 +368,50 @@ export function PersonelPage() {
     } finally {
       setIsSaving(false);
     }
+  };
+
+  // ── Uzaktan Zorla Oturum Kapatma ───────────────────────────────
+  const handleForceLogout = async (e: React.MouseEvent, personId: string, personName: string) => {
+    e.stopPropagation();
+    if (!canEdit) {
+      toast.error('Bu işlem için yönetici yetkisi gereklidir.');
+      return;
+    }
+    if (personId === 'admin-super') {
+      toast.error('Sistem yöneticisi oturumu uzaktan kapatılamaz.');
+      return;
+    }
+    toast(`${personName} adlı kullanıcının oturumu kapatılsın mı?`, {
+      action: {
+        label: 'Evet, Kapat',
+        onClick: async () => {
+          try {
+            // Supabase KV'e force_logout sinyali yaz — kullanıcının tarayıcısı 60s içinde algılar
+            await supabase.from('kv_store_daadfb0c').upsert({
+              key: `sync_force_logout_${personId}`,
+              value: {
+                reason: `Yönetici (${user?.name || 'Admin'}) tarafından oturumunuz sonlandırıldı.`,
+                by: user?.name || 'Admin',
+                at: new Date().toISOString(),
+              },
+            });
+            // Personel durumunu offline olarak işaretle — [AJAN-2]: useTableSync üzerinden güncelle
+            // setInStorage bypass kaldırıldı — useTableSync hem localStorage hem Supabase'i yönetir
+            updateItem(personId, { status: 'offline' } as any).catch(e => console.warn('[PersonelPage] status update hatası:', e));
+            logActivity('security_alert', 'Uzaktan oturum kapatma tetiklendi', {
+              employeeName: user?.name,
+              level: 'high',
+              description: `${personName} kullanıcısının oturumu uzaktan kapatıldı.`,
+            });
+            toast.success(`${personName} adlı kullanıcının oturumu kapatma sinyali gönderildi.`);
+          } catch {
+            toast.error('İşlem başarısız. Ağ bağlantısını kontrol edin.');
+          }
+        },
+      },
+      cancel: { label: 'İptal', onClick: () => {} },
+      duration: 6000,
+    });
   };
 
   const handleDelete = async (e: React.MouseEvent, id: string, name: string) => {
@@ -393,6 +440,8 @@ export function PersonelPage() {
     const allReqs = getFromStorage<any[]>('role_requests') || [];
     const updatedReqs = allReqs.map(r => r.id === request.id ? { ...r, status: 'approved', approvedAt: new Date().toISOString(), expiresAt } : r);
     setInStorage('role_requests', updatedReqs); setRoleRequests(updatedReqs);
+    // BUG FIX [AJAN-2]: role_requests KV store'a da yaz — çapraz cihaz onay akışı
+    kvSet('role_requests', updatedReqs).catch(e => console.error('[Personel] role_requests kv sync:', e));
 
     const allPersonnel = getFromStorage<any[]>('personel_data') || [];
     const updatedPersonnel = allPersonnel.map(p => {
@@ -407,6 +456,12 @@ export function PersonelPage() {
       return p;
     });
     setInStorage('personel_data', updatedPersonnel);
+    // BUG FIX [AJAN-2]: Personel izin değişikliği Supabase'e de yaz
+    const updatedEmployee = updatedPersonnel.find((p: any) => p.id === request.employeeId);
+    if (updatedEmployee) {
+      updateItem(request.employeeId, { permissions: updatedEmployee.permissions, tempPermissions: updatedEmployee.tempPermissions } as any)
+        .catch(e => console.error('[Personel] perm update sync:', e));
+    }
     logActivity('employee_update', `Gecici yetki onaylandi: ${request.panelName}`, {
       employeeId: request.employeeId,
       employeeName: request.employeeName,
@@ -419,6 +474,8 @@ export function PersonelPage() {
     const allReqs = getFromStorage<any[]>('role_requests') || [];
     const updatedReqs = allReqs.map(r => r.id === request.id ? { ...r, status: 'rejected' } : r);
     setInStorage('role_requests', updatedReqs); setRoleRequests(updatedReqs);
+    // BUG FIX [AJAN-2]: role_requests KV store'a da yaz
+    kvSet('role_requests', updatedReqs).catch(e => console.error('[Personel] role_requests kv sync:', e));
     logActivity('employee_update', `Gecici yetki reddedildi: ${request.panelName}`, {
       employeeId: request.employeeId,
       employeeName: request.employeeName,
@@ -566,9 +623,18 @@ export function PersonelPage() {
                     </div>
                   </div>
                   <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <button onClick={(e) => openEditModal(person, e)} className="p-2 bg-white/5 hover:bg-blue-600 rounded-xl text-gray-400 hover:text-white transition-all"><Edit3 className="w-4 h-4" /></button>
+                    <button onClick={(e) => openEditModal(person, e)} className="p-2 bg-white/5 hover:bg-blue-600 rounded-xl text-gray-400 hover:text-white transition-all" title="Düzenle"><Edit3 className="w-4 h-4" /></button>
+                    {person.id !== '1' && person.id !== 'admin-super' && person.status === 'online' && (
+                      <button
+                        onClick={(e) => handleForceLogout(e, person.id, person.name)}
+                        className="p-2 bg-white/5 hover:bg-orange-600 rounded-xl text-gray-400 hover:text-white transition-all"
+                        title="Oturumu Uzaktan Kapat"
+                      >
+                        <WifiOff className="w-4 h-4" />
+                      </button>
+                    )}
                     {person.id !== '1' && person.id !== 'admin-super' && (
-                      <button onClick={(e) => handleDelete(e, person.id, person.name)} className="p-2 bg-white/5 hover:bg-red-600 rounded-xl text-gray-400 hover:text-white transition-all"><Trash2 className="w-4 h-4" /></button>
+                      <button onClick={(e) => handleDelete(e, person.id, person.name)} className="p-2 bg-white/5 hover:bg-red-600 rounded-xl text-gray-400 hover:text-white transition-all" title="Sil"><Trash2 className="w-4 h-4" /></button>
                     )}
                   </div>
                 </div>
@@ -600,7 +666,8 @@ export function PersonelPage() {
 
       {/* Add Modal */}
       <Dialog.Root open={isAddModalOpen} onOpenChange={setIsAddModalOpen}>
-        <Dialog.Portal><Dialog.Overlay className="fixed inset-0 bg-black/80 z-50"/><Dialog.Content aria-describedby={undefined} className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-[#111] p-4 sm:p-8 rounded-2xl sm:rounded-3xl border border-white/10 w-[95vw] max-w-3xl z-50 shadow-2xl max-h-[90vh] overflow-y-auto">
+        <Dialog.Portal><Dialog.Overlay className="fixed inset-0 bg-black/80 z-50"/><Dialog.Content aria-describedby={undefined} className="fixed inset-2 sm:inset-auto sm:top-1/2 sm:left-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 bg-[#111] p-4 sm:p-8 rounded-2xl sm:rounded-3xl border border-white/10 sm:w-[95vw] sm:max-w-3xl z-50 shadow-2xl overflow-y-auto" style={{maxHeight: 'calc(100dvh - 1rem)'}}>
+
           <Dialog.Title className="text-2xl font-bold mb-6">Yeni Kullanıcı Oluştur</Dialog.Title>
           <form onSubmit={handleAddPersonnel} className="space-y-8">
             <div>
@@ -643,7 +710,8 @@ export function PersonelPage() {
 
       {/* Edit Modal */}
       <Dialog.Root open={isEditModalOpen} onOpenChange={setIsEditModalOpen}>
-        <Dialog.Portal><Dialog.Overlay className="fixed inset-0 bg-black/80 z-50"/><Dialog.Content aria-describedby={undefined} className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-[#111] p-4 sm:p-8 rounded-2xl sm:rounded-3xl border border-white/10 w-[95vw] max-w-3xl z-50 shadow-2xl max-h-[90vh] overflow-y-auto">
+        <Dialog.Portal><Dialog.Overlay className="fixed inset-0 bg-black/80 z-50"/><Dialog.Content aria-describedby={undefined} className="fixed inset-2 sm:inset-auto sm:top-1/2 sm:left-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 bg-[#111] p-4 sm:p-8 rounded-2xl sm:rounded-3xl border border-white/10 sm:w-[95vw] sm:max-w-3xl z-50 shadow-2xl overflow-y-auto" style={{maxHeight: 'calc(100dvh - 1rem)'}}>
+
           <Dialog.Title className="text-2xl font-bold mb-6">Kullanıcıyı Düzenle</Dialog.Title>
           <form onSubmit={handleUpdatePersonnel} className="space-y-8">
             <div>

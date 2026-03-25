@@ -1,6 +1,7 @@
 /**
- * SyncStatusBar - Her sayfada gosterilen Supabase sync durumu paneli
- * KV store bazli senkronizasyon durumunu gercek zamanli gosterir
+ * SyncStatusBar — Gelişmiş senkronizasyon durumu paneli
+ * Framer Motion spring animasyonları, dinamik açılma/kapanma,
+ * nabız efekti ve premium koyu tema tasarımı.
  */
 
 import React, { useState } from 'react';
@@ -11,8 +12,6 @@ import {
   CheckCircle2,
   XCircle,
   AlertTriangle,
-  ChevronDown,
-  ChevronUp,
   Wifi,
   WifiOff,
   Upload,
@@ -21,89 +20,96 @@ import {
   Zap,
   HardDrive,
   Clock,
+  ChevronDown,
+  Activity,
 } from 'lucide-react';
 import { useSyncContext } from '../contexts/SyncContext';
-import { getSupabaseSQLEditorUrl, getSupabaseTableEditorUrl } from '../lib/auto-setup';
+import { getSupabaseTableEditorUrl } from '../lib/auto-setup';
 import { toast } from 'sonner';
-import { SUPABASE_ANON_KEY, SERVER_BASE_URL } from '../lib/supabase-config';
+import { supabase } from '../lib/supabase';
 
 interface SyncStatusBarProps {
   tableName?: string;
 }
 
-const KV_SERVER_URL = SERVER_BASE_URL;
+// [AJAN-2] BUG FIX: localStorage verisini Supabase'e göndermeden önce toDb dönüşümü uygula
+// Eski kod ham camelCase veri gönderiyordu → Supabase sütun adı uyuşmazlığı → gönderilemedi hatası
+import { productToDb } from '../pages/StokPage';
+import { cariToDb } from '../pages/CariPage';
 
-// localStorage'daki tum verileri KV Store'a gonder
-// Always use server endpoints to bypass RLS (anon key cannot write to kv_store_daadfb0c)
+// Tablo→localStorage key + toDb dönüşüm haritası
+const TABLE_CONFIG: Record<string, { storageKey: string; toDb?: (item: any) => any }> = {
+  personeller:       { storageKey: 'personel_data', toDb: (p: any) => ({
+    id: p.id, name: p.name, username: p.username, position: p.position, role: p.role, status: p.status,
+    phone: p.phone, email: p.email, last_login: p.lastLogin || p.last_login, join_date: p.joinDate || p.join_date,
+    department: p.department, salary: p.salary, active: p.active, pin_code: p.pinCode || p.pin_code,
+    password: p.password, permissions: typeof p.permissions === 'string' ? p.permissions : JSON.stringify(p.permissions || []),
+  }) },
+  cari_hesaplar:     { storageKey: 'cari_data', toDb: cariToDb },
+  urunler:           { storageKey: 'stok_data', toDb: productToDb },
+  araclar:           { storageKey: 'arac_data', toDb: (v: any) => ({
+    id: v.id, plate: v.plate, model: v.model, driver: v.driver, km: v.km,
+    last_maintenance: v.lastMaintenance || v.last_maintenance, next_inspection: v.nextInspection || v.next_inspection,
+    insurance: v.insurance, status: v.status,
+  }) },
+  arac_shifts:       { storageKey: 'arac_shifts' },
+  arac_km_logs:      { storageKey: 'arac_km_logs' },
+  bankalar:          { storageKey: 'bank_data' },
+  fisler:            { storageKey: 'fisler' },
+  kasa_islemleri:    { storageKey: 'kasa_data' },
+  cekler:            { storageKey: 'cekler_data' },
+  uretim_profilleri: { storageKey: 'uretim_profiles' },
+  uretim_kayitlari:  { storageKey: 'uretim_data' },
+  faturalar:         { storageKey: 'faturalar' },
+  fatura_stok:       { storageKey: 'fatura_stok' },
+  tahsilatlar:       { storageKey: 'tahsilatlar' },
+};
+
 async function pushAllLocalToSupabase(
   tableName: string,
   onProgress?: (msg: string) => void
 ): Promise<{ ok: number; fail: number }> {
   const STORAGE_PREFIX = 'isleyen_et_';
+  const config = TABLE_CONFIG[tableName];
+  if (!config) return { ok: 0, fail: 0 };
 
-  // tableName -> storageKey eslestirmesi
-  const TABLE_STORAGE_MAP: Record<string, string> = {
-    personeller:       'personel_data',
-    cari_hesaplar:     'cari_data',
-    urunler:           'stok_data',
-    araclar:           'arac_data',
-    arac_shifts:       'arac_shifts',
-    bankalar:          'bank_data',
-    fisler:            'fisler',
-    kasa_islemleri:    'kasa_data',
-    cekler:            'cekler_data',
-    uretim_profilleri: 'uretim_profiles',
-    uretim_kayitlari:  'uretim_data',
-    faturalar:         'faturalar',
-    fatura_stok:       'fatura_stok',
-  };
-
-  const storageKey = TABLE_STORAGE_MAP[tableName];
-  if (!storageKey) return { ok: 0, fail: 0 };
-
-  const raw = localStorage.getItem(STORAGE_PREFIX + storageKey);
+  const raw = localStorage.getItem(STORAGE_PREFIX + config.storageKey);
   if (!raw) return { ok: 0, fail: 0 };
 
   let items: any[] = [];
   try { items = JSON.parse(raw); } catch { return { ok: 0, fail: 0 }; }
   if (!Array.isArray(items) || items.length === 0) return { ok: 0, fail: 0 };
 
-  onProgress?.(`${items.length} kayit KV Store'a gonderiliyor...`);
+  onProgress?.(`${items.length} kayıt gönderiliyor...`);
 
   let ok = 0;
   let fail = 0;
-
-  // Always use server endpoint for writes (bypasses RLS via service_role_key)
   const chunkSize = 100;
-  for (let i = 0; i < items.length; i += chunkSize) {
-    const chunk = items.slice(i, i + chunkSize);
-    const validItems = chunk.filter((item: any) => item && item.id);
-    
-    if (validItems.length === 0) continue;
 
-    const keys = validItems.map((item: any) => `${tableName}_${item.id}`);
-    const values = validItems.map((item: any) => item);
+  for (let i = 0; i < items.length; i += chunkSize) {
+    const chunk = items.slice(i, i + chunkSize).filter((item: any) => item && item.id);
+    if (chunk.length === 0) continue;
+
+    // toDb dönüşümü uygula (camelCase → snake_case, JSON stringify vb.)
+    const dbRows = config.toDb ? chunk.map(item => {
+      try { return config.toDb!(item); } catch { return item; }
+    }) : chunk;
 
     try {
-      const res = await fetch(`${KV_SERVER_URL}/kv/mset`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
-        },
-        body: JSON.stringify({ keys, values }),
-      });
-      if (res.ok) {
-        ok += validItems.length;
-        onProgress?.(`${ok}/${items.length} kayit gonderildi...`);
+      const { error } = await supabase
+        .from(tableName)
+        .upsert(dbRows, { onConflict: 'id' });
+
+      if (error) {
+        console.warn(`[SyncStatusBar] ${tableName} upsert hatası:`, error.message);
+        fail += chunk.length;
       } else {
-        const text = await res.text().catch(() => 'unknown');
-        console.error(`[pushAllLocalToSupabase] Server mset failed (${res.status}): ${text}`);
-        fail += validItems.length;
+        ok += chunk.length;
+        onProgress?.(`${ok}/${items.length} kayıt gönderildi...`);
       }
     } catch (e: any) {
-      console.error('[pushAllLocalToSupabase] Server mset error:', e);
-      fail += validItems.length;
+      console.warn(`[SyncStatusBar] ${tableName} gönderim hatası:`, e.message);
+      fail += chunk.length;
     }
   }
 
@@ -111,278 +117,373 @@ async function pushAllLocalToSupabase(
 }
 
 export function SyncStatusBar({ tableName }: SyncStatusBarProps) {
-  const { setupStatus, isChecking, lastChecked, recheckTables, isSupabaseConfigured } = useSyncContext();
+  const {
+    setupStatus, isChecking, lastChecked, recheckTables, isSupabaseConfigured,
+    pendingCount, isSyncing: isCloudSyncing, lastSyncAt, isOnline: cloudOnline, syncError,
+  } = useSyncContext();
   const [isExpanded, setIsExpanded] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncProgress, setSyncProgress] = useState('');
 
-  // Aktif tablodaki lokal veriyi Supabase'e gonder
   const handleSyncNow = async () => {
     if (!tableName || !isSupabaseConfigured || isSyncing) return;
 
     setIsSyncing(true);
-    setSyncProgress('Senkronizasyon baslatildi...');
+    setSyncProgress('Başlatılıyor...');
     toast.loading('Supabase\'e senkronize ediliyor...', { id: 'sync-toast' });
 
     try {
       const { ok, fail } = await pushAllLocalToSupabase(tableName, setSyncProgress);
-      
+
       if (ok > 0 && fail === 0) {
-        toast.success(`${ok} kayit basariyla Supabase'e yazildi!`, { id: 'sync-toast' });
+        toast.success(`${ok} kayıt başarıyla yazıldı!`, { id: 'sync-toast' });
       } else if (ok > 0 && fail > 0) {
-        toast.warning(`${ok} basarili, ${fail} hatali kayit`, { id: 'sync-toast' });
+        toast.warning(`${ok} başarılı, ${fail} hatalı`, { id: 'sync-toast' });
       } else if (fail > 0) {
-        toast.error(`${fail} kayit gonderilemedi`, { id: 'sync-toast' });
+        toast.error(`${fail} kayıt gönderilemedi`, { id: 'sync-toast' });
       } else {
-        toast.info('Gonderilecek kayit bulunamadi', { id: 'sync-toast' });
+        toast.info('Gönderilecek kayıt bulunamadı', { id: 'sync-toast' });
       }
 
       await recheckTables();
     } catch (e: any) {
-      toast.error(`Senkronizasyon hatasi: ${e.message}`, { id: 'sync-toast' });
+      toast.error(`Hata: ${e.message}`, { id: 'sync-toast' });
     } finally {
       setIsSyncing(false);
       setSyncProgress('');
     }
   };
 
-  // Supabase bagli degilse minimal goster
+  // Supabase bağlı değilse minimal göster
   if (!isSupabaseConfigured) {
     return (
-      <div className="flex items-center gap-2 px-3 py-1.5 bg-secondary/60 border border-border/50 rounded-lg text-xs text-muted-foreground">
+      <motion.div
+        initial={{ opacity: 0, y: -8 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="flex items-center gap-2 px-3 py-1.5 bg-white/[0.03] border border-white/8 rounded-xl text-xs text-white/30 mb-4"
+      >
         <WifiOff className="w-3 h-3" />
-        <span>Supabase bagli degil - Yerel depo</span>
-      </div>
+        <span>Yerel depo — bulut bağlantısı yok</span>
+      </motion.div>
     );
   }
 
   if (!setupStatus) {
     return (
-      <div className="flex items-center gap-2 px-3 py-1.5 bg-secondary/60 border border-border/50 rounded-lg text-xs text-muted-foreground">
+      <motion.div
+        initial={{ opacity: 0, y: -8 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="flex items-center gap-2 px-3 py-1.5 bg-white/[0.03] border border-white/8 rounded-xl text-xs text-white/40 mb-4"
+      >
         <Loader2 className="w-3 h-3 animate-spin" />
-        <span>Veritabani kontrol ediliyor...</span>
-      </div>
+        <span>Veritabanı kontrol ediliyor...</span>
+      </motion.div>
     );
   }
 
   const isConnected = setupStatus.isConnected;
-  const tablesWithData = setupStatus.tables.filter(t => t.rowCount > 0);
   const totalRecords = setupStatus.tables.reduce((sum, t) => sum + t.rowCount, 0);
-
-  // Aktif tablonun durumu
-  const activeTable = tableName
-    ? setupStatus.tables.find(t => t.table === tableName)
-    : null;
+  const tablesWithData = setupStatus.tables.filter(t => t.rowCount > 0).length;
 
   return (
-    <>
-      <div className="mb-4">
-        {/* Ana durum satiri */}
+    <div className="mb-4">
+      {/* ── Ana bar ───────────────────────────────────────────── */}
+      <motion.div
+        layout
+        initial={{ opacity: 0, y: -10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ type: 'spring', stiffness: 400, damping: 30 }}
+        onClick={() => setIsExpanded(v => !v)}
+        className={`
+          relative flex items-center gap-3 px-4 py-2.5 rounded-2xl border cursor-pointer
+          overflow-hidden select-none transition-colors duration-300
+          ${isConnected
+            ? 'bg-emerald-950/30 border-emerald-800/30 hover:border-emerald-700/50 hover:bg-emerald-950/40'
+            : 'bg-red-950/30 border-red-800/30 hover:border-red-700/50 hover:bg-red-950/40'
+          }
+        `}
+      >
+        {/* Arka plan ışıltısı */}
         <div
-          className={`flex items-center gap-3 px-4 py-2 rounded-xl border cursor-pointer transition-all ${
+          className={`absolute inset-0 opacity-[0.04] pointer-events-none ${
             isConnected
-              ? 'bg-green-950/40 border-green-800/50 hover:bg-green-950/60'
-              : 'bg-red-950/40 border-red-800/50 hover:bg-red-950/60'
+              ? 'bg-gradient-to-r from-emerald-500 via-transparent to-transparent'
+              : 'bg-gradient-to-r from-red-500 via-transparent to-transparent'
           }`}
-          onClick={() => setIsExpanded(!isExpanded)}
-        >
-          {/* Sol: Baglanti gostergesi */}
-          <div className={`flex items-center gap-2 ${isConnected ? 'text-green-400' : 'text-red-400'}`}>
-            {isChecking ? (
-              <RefreshCw className="w-4 h-4 animate-spin" />
-            ) : isConnected ? (
-              <Zap className="w-4 h-4" />
-            ) : (
-              <AlertTriangle className="w-4 h-4" />
-            )}
-            <Database className="w-3.5 h-3.5" />
-            <span className="text-xs font-medium">
-              {isConnected ? 'KV Store Bagli' : 'Baglanti Yok'}
-            </span>
-          </div>
+        />
 
-          {/* Orta: Tablo gostergeleri (mini dots) */}
-          <div className="flex items-center gap-1 flex-1">
-            {setupStatus.tables.map(t => (
-              <div
-                key={t.table}
-                title={`${t.displayName}: ${t.rowCount} kayit`}
-                className={`w-2 h-2 rounded-full transition-colors ${
-                  t.table === tableName
-                    ? t.rowCount > 0
-                      ? 'bg-green-400 ring-1 ring-green-400 ring-offset-1 ring-offset-background'
-                      : 'bg-yellow-400 ring-1 ring-yellow-400 ring-offset-1 ring-offset-background'
-                    : t.rowCount > 0
-                    ? 'bg-green-600'
-                    : 'bg-muted-foreground/40'
-                }`}
+        {/* Bağlantı göstergesi */}
+        <div className="relative flex items-center gap-2 flex-shrink-0">
+          {/* Nabız animasyonu */}
+          {isConnected && !isChecking && (
+            <span className="absolute -inset-1.5">
+              <motion.span
+                className="block w-full h-full rounded-full bg-emerald-500/20"
+                animate={{ scale: [1, 1.8, 1], opacity: [0.5, 0, 0.5] }}
+                transition={{ duration: 2.5, repeat: Infinity, ease: 'easeInOut' }}
               />
-            ))}
-          </div>
-
-          {/* Sag: Bilgi + butonlar */}
-          <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
-            {/* Toplam kayit */}
-            <span className="text-xs text-muted-foreground">
-              <HardDrive className="w-3 h-3 inline mr-1" />
-              {totalRecords} kayit
             </span>
-
-            {/* Latency */}
-            {setupStatus.latencyMs && (
-              <span className="text-xs text-muted-foreground">
-                <Clock className="w-3 h-3 inline mr-1" />
-                {setupStatus.latencyMs}ms
-              </span>
-            )}
-
-            {/* Senkronize Et Butonu */}
-            {tableName && isConnected && (
-              <button
-                onClick={handleSyncNow}
-                disabled={isSyncing}
-                className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold transition-all ${
-                  isSyncing
-                    ? 'bg-blue-800/50 text-blue-400 cursor-wait'
-                    : 'bg-blue-600 hover:bg-blue-500 text-white shadow-sm hover:shadow-blue-500/30'
-                }`}
-                title="Lokal veriyi Supabase'e yaz"
-              >
-                <Upload className={`w-3 h-3 ${isSyncing ? 'animate-bounce' : ''}`} />
-                {isSyncing ? (syncProgress || 'Senkronize...') : 'Senkronize Et'}
-              </button>
-            )}
-
-            {lastChecked && (
-              <span className="text-xs text-muted-foreground">
-                {lastChecked.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
-              </span>
-            )}
-            <button
-              onClick={(e) => { e.stopPropagation(); recheckTables(); }}
-              className="p-1 hover:bg-accent rounded transition-colors"
-              title="Tablolari yeniden kontrol et"
-            >
-              <RefreshCw className={`w-3 h-3 text-muted-foreground ${isChecking ? 'animate-spin' : ''}`} />
-            </button>
-            {isExpanded ? (
-              <ChevronUp className="w-3 h-3 text-muted-foreground" />
+          )}
+          <div className={`relative w-7 h-7 rounded-xl flex items-center justify-center flex-shrink-0 ${
+            isConnected ? 'bg-emerald-500/15' : 'bg-red-500/15'
+          }`}>
+            {isChecking ? (
+              <RefreshCw className="w-3.5 h-3.5 text-white/50 animate-spin" />
+            ) : isConnected ? (
+              <Zap className="w-3.5 h-3.5 text-emerald-400" />
             ) : (
-              <ChevronDown className="w-3 h-3 text-muted-foreground" />
+              <AlertTriangle className="w-3.5 h-3.5 text-red-400" />
             )}
           </div>
         </div>
 
-        {/* Genisletilmis panel */}
-        <AnimatePresence>
-          {isExpanded && (
-            <motion.div
-              initial={{ height: 0, opacity: 0 }}
-              animate={{ height: 'auto', opacity: 1 }}
-              exit={{ height: 0, opacity: 0 }}
-              transition={{ duration: 0.2 }}
-              className="overflow-hidden"
-            >
-              <div className="mt-2 bg-card/90 border border-border/50 rounded-xl p-4">
-                {/* Baglanti bilgisi */}
-                {isConnected && (
-                  <div className="flex items-center gap-4 mb-4 px-3 py-2 bg-green-900/20 border border-green-700/30 rounded-lg text-xs">
-                    <div className="flex items-center gap-1.5 text-green-400">
-                      <CheckCircle2 className="w-3.5 h-3.5" />
-                      <span className="font-medium">KV Store Aktif</span>
-                    </div>
-                    <span className="text-muted-foreground">
-                      Toplam: {setupStatus.kvTotalKeys ?? '?'} key
-                    </span>
-                    {setupStatus.latencyMs && (
-                      <span className="text-muted-foreground">
-                        Gecikme: {setupStatus.latencyMs}ms
-                      </span>
-                    )}
-                    <span className="text-green-600 font-medium">
-                      Dogrudan okuma aktif
-                    </span>
-                  </div>
-                )}
+        {/* Durum metni */}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className={`text-xs font-semibold ${isConnected ? 'text-emerald-300' : 'text-red-300'}`}>
+              {isChecking ? 'Kontrol ediliyor...' : isConnected ? 'Bulut Bağlı' : 'Bağlantı Yok'}
+            </span>
+            {isConnected && (
+              <motion.span
+                key={totalRecords}
+                initial={{ opacity: 0, scale: 0.8 }}
+                animate={{ opacity: 1, scale: 1 }}
+                className="text-[10px] text-white/30 font-mono"
+              >
+                {totalRecords} kayıt · {tablesWithData}/{setupStatus.tables.length} tablo
+              </motion.span>
+            )}
+            {setupStatus.latencyMs && isConnected && (
+              <span className="text-[10px] text-white/20 font-mono hidden sm:inline">
+                {setupStatus.latencyMs}ms
+              </span>
+            )}
+            {/* Canlı sync durumu */}
+            {(isCloudSyncing || pendingCount > 0) && (
+              <motion.span
+                initial={{ opacity: 0, scale: 0.8 }}
+                animate={{ opacity: 1, scale: 1 }}
+                className="flex items-center gap-1 text-[10px] font-semibold text-blue-300 bg-blue-500/10 border border-blue-500/20 px-2 py-0.5 rounded-full"
+              >
+                <Loader2 className="w-2.5 h-2.5 animate-spin" />
+                {pendingCount > 0 ? `${pendingCount} bekliyor` : 'Gönderiliyor'}
+              </motion.span>
+            )}
+            {!isCloudSyncing && pendingCount === 0 && lastSyncAt > 0 && (
+              <span className="text-[10px] text-white/20 font-mono hidden sm:inline">
+                son sync {new Date(lastSyncAt).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}
+              </span>
+            )}
+            {syncError && !isCloudSyncing && (
+              <span className="text-[10px] text-red-400/70 hidden sm:inline truncate max-w-[120px]" title={syncError}>
+                ⚠ {syncError}
+              </span>
+            )}
+            {!cloudOnline && (
+              <span className="text-[10px] text-amber-400/80 font-semibold">
+                Çevrimdışı
+              </span>
+            )}
+          </div>
+        </div>
 
-                {/* Tablo grid */}
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-4">
-                  {setupStatus.tables.map(t => (
-                    <div
-                      key={t.table}
-                      className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-xs transition-all ${
-                        t.table === tableName
-                          ? t.rowCount > 0
-                            ? 'bg-green-900/40 border-green-700/50 ring-1 ring-green-600/30'
-                            : 'bg-yellow-900/40 border-yellow-700/50 ring-1 ring-yellow-600/30'
-                          : t.rowCount > 0
-                          ? 'bg-secondary/50 border-border/30'
-                          : 'bg-secondary/30 border-border/20 opacity-60'
-                      }`}
+        {/* Tablo dots */}
+        <div className="flex items-center gap-0.5 flex-shrink-0" onClick={e => e.stopPropagation()}>
+          {setupStatus.tables.map((t, i) => (
+            <motion.div
+              key={t.table}
+              title={`${t.displayName}: ${t.rowCount} kayıt`}
+              initial={{ scale: 0, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              transition={{ delay: i * 0.03, type: 'spring', stiffness: 500, damping: 25 }}
+              className={`rounded-full transition-all duration-300 ${
+                t.table === tableName
+                  ? t.rowCount > 0
+                    ? 'w-2.5 h-2.5 bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.8)]'
+                    : 'w-2.5 h-2.5 bg-amber-400 shadow-[0_0_6px_rgba(251,191,36,0.8)]'
+                  : t.rowCount > 0
+                  ? 'w-1.5 h-1.5 bg-emerald-600/80'
+                  : 'w-1.5 h-1.5 bg-white/10'
+              }`}
+            />
+          ))}
+        </div>
+
+        {/* Sağ: butonlar */}
+        <div className="flex items-center gap-1.5 flex-shrink-0" onClick={e => e.stopPropagation()}>
+          {/* Senkronize Et butonu */}
+          {tableName && isConnected && (
+            <motion.button
+              onClick={handleSyncNow}
+              disabled={isSyncing}
+              whileHover={{ scale: 1.03 }}
+              whileTap={{ scale: 0.97 }}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all ${
+                isSyncing
+                  ? 'bg-blue-800/40 text-blue-400 cursor-wait'
+                  : 'bg-blue-600/80 hover:bg-blue-500 text-white shadow-sm shadow-blue-500/20'
+              }`}
+            >
+              <Upload className={`w-3 h-3 ${isSyncing ? 'animate-bounce' : ''}`} />
+              <span className="hidden sm:inline">
+                {isSyncing ? (syncProgress || 'Senkronize...') : 'Senkronize Et'}
+              </span>
+            </motion.button>
+          )}
+
+          {/* Yenile */}
+          <motion.button
+            onClick={() => recheckTables()}
+            whileHover={{ scale: 1.1 }}
+            whileTap={{ scale: 0.9 }}
+            className="p-1.5 hover:bg-white/8 rounded-lg transition-colors"
+            title="Yenile"
+          >
+            <RefreshCw className={`w-3 h-3 text-white/30 ${isChecking ? 'animate-spin' : ''}`} />
+          </motion.button>
+
+          {/* Son kontrol zamanı */}
+          {lastChecked && (
+            <span className="text-[10px] text-white/20 font-mono hidden md:inline">
+              {lastChecked.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}
+            </span>
+          )}
+
+          {/* Expand chevron */}
+          <motion.div
+            animate={{ rotate: isExpanded ? 180 : 0 }}
+            transition={{ type: 'spring', stiffness: 400, damping: 30 }}
+          >
+            <ChevronDown className="w-3.5 h-3.5 text-white/25" />
+          </motion.div>
+        </div>
+      </motion.div>
+
+      {/* ── Genişletilmiş panel ────────────────────────────────── */}
+      <AnimatePresence>
+        {isExpanded && (
+          <motion.div
+            key="expanded"
+            initial={{ height: 0, opacity: 0, y: -4 }}
+            animate={{ height: 'auto', opacity: 1, y: 0 }}
+            exit={{ height: 0, opacity: 0, y: -4 }}
+            transition={{ type: 'spring', stiffness: 350, damping: 30 }}
+            className="overflow-hidden"
+          >
+            <div className="mt-2 rounded-2xl border border-white/8 bg-[#0d1117] overflow-hidden">
+              {/* Başlık şeridi */}
+              <div className="flex items-center justify-between px-4 py-3 border-b border-white/5 bg-white/[0.02]">
+                <div className="flex items-center gap-2">
+                  <Activity className="w-3.5 h-3.5 text-white/40" />
+                  <span className="text-xs font-semibold text-white/60">Veritabanı Durumu</span>
+                  {isConnected && (
+                    <motion.span
+                      initial={{ scale: 0 }}
+                      animate={{ scale: 1 }}
+                      className="flex items-center gap-1 text-[10px] font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-full"
                     >
-                      <span>{t.icon}</span>
+                      <CheckCircle2 className="w-2.5 h-2.5" /> Aktif
+                    </motion.span>
+                  )}
+                </div>
+                <div className="flex items-center gap-3 text-[10px] text-white/25 font-mono">
+                  {setupStatus.latencyMs && <span>{setupStatus.latencyMs}ms gecikme</span>}
+                  {setupStatus.kvTotalKeys != null && <span>{setupStatus.kvTotalKeys} KV key</span>}
+                </div>
+              </div>
+
+              {/* Tablo grid */}
+              <div className="p-3">
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
+                  {setupStatus.tables.map((t, i) => (
+                    <motion.div
+                      key={t.table}
+                      initial={{ opacity: 0, y: 8, scale: 0.95 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      transition={{ delay: i * 0.03, type: 'spring', stiffness: 400, damping: 28 }}
+                      className={`
+                        flex items-center gap-2 px-3 py-2 rounded-xl border text-xs transition-all
+                        ${t.table === tableName
+                          ? t.rowCount > 0
+                            ? 'bg-emerald-950/40 border-emerald-700/40 shadow-[inset_0_0_12px_rgba(52,211,153,0.06)]'
+                            : 'bg-amber-950/40 border-amber-700/40'
+                          : t.rowCount > 0
+                          ? 'bg-white/[0.03] border-white/8'
+                          : 'bg-transparent border-white/5 opacity-50'
+                        }
+                      `}
+                    >
+                      <span className="text-sm leading-none">{t.icon}</span>
                       <div className="flex-1 min-w-0">
-                        <p className={`font-medium truncate ${t.rowCount > 0 ? 'text-foreground' : 'text-muted-foreground'}`}>
+                        <p className={`font-medium truncate text-[11px] ${
+                          t.rowCount > 0 ? 'text-white/80' : 'text-white/30'
+                        }`}>
                           {t.displayName}
                         </p>
-                        <p className="text-muted-foreground">
-                          {t.rowCount > 0 ? `${t.rowCount} kayit` : 'Bos'}
+                        <p className="text-white/25 text-[9px]">
+                          {t.rowCount > 0 ? `${t.rowCount} kayıt` : 'Boş'}
                         </p>
                       </div>
-                      {t.rowCount > 0 ? (
-                        <CheckCircle2 className="w-3 h-3 text-green-500 flex-shrink-0" />
-                      ) : (
-                        <span className="w-3 h-3 rounded-full bg-muted-foreground/30 flex-shrink-0" />
-                      )}
-                    </div>
+                      {t.rowCount > 0
+                        ? <CheckCircle2 className="w-3 h-3 text-emerald-500/70 flex-shrink-0" />
+                        : <span className="w-2.5 h-2.5 rounded-full bg-white/8 flex-shrink-0" />
+                      }
+                    </motion.div>
                   ))}
                 </div>
+              </div>
 
-                {/* Baglanti durumu */}
-                {isConnected ? (
-                  <div className="bg-green-900/20 border border-green-700/30 rounded-lg p-3 flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <Zap className="w-4 h-4 text-green-500" />
-                      <p className="text-green-400 text-xs font-medium">
-                        KV Store aktif - Dogrudan Supabase okuma/yazma
+              {/* Alt bilgi şeridi */}
+              <div className={`
+                flex items-center justify-between px-4 py-3 border-t border-white/5
+                ${isConnected ? 'bg-emerald-950/20' : 'bg-red-950/20'}
+              `}>
+                <div className="flex items-center gap-2">
+                  {isConnected ? (
+                    <>
+                      <Zap className="w-3.5 h-3.5 text-emerald-500" />
+                      <p className="text-[11px] text-emerald-400/80 font-medium">
+                        KV Store aktif — Supabase okuma/yazma çalışıyor
                       </p>
-                    </div>
-                    <a
-                      href={getSupabaseTableEditorUrl()}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="px-3 py-1.5 bg-secondary hover:bg-accent text-foreground text-xs rounded-lg font-medium transition-colors flex items-center gap-1"
-                    >
-                      <ExternalLink className="w-3 h-3" />
-                      Supabase Tablo Editoru
-                    </a>
-                  </div>
-                ) : (
-                  <div className="bg-red-900/20 border border-red-700/30 rounded-lg p-3 flex items-center gap-2">
-                    <XCircle className="w-4 h-4 text-red-500" />
-                    <p className="text-red-400 text-xs font-medium">
-                      Supabase baglantisiniz yok. Veriler yerel olarak saklanmaya devam edecek.
-                    </p>
-                  </div>
+                    </>
+                  ) : (
+                    <>
+                      <XCircle className="w-3.5 h-3.5 text-red-500" />
+                      <p className="text-[11px] text-red-400/80 font-medium">
+                        Bağlantı yok — veriler yalnızca yerel olarak saklanıyor
+                      </p>
+                    </>
+                  )}
+                </div>
+                {isConnected && (
+                  <a
+                    href={getSupabaseTableEditorUrl()}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-white/5 hover:bg-white/10 border border-white/10 text-white/50 hover:text-white/80 text-[10px] font-medium rounded-lg transition-all"
+                  >
+                    <ExternalLink className="w-3 h-3" />
+                    Tablo Editörü
+                  </a>
                 )}
               </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </div>
-    </>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
   );
 }
 
 /**
- * Kompakt versiyon - Sayfa basliginin yaninda kucuk badge olarak
+ * Kompakt versiyon — sayfa başlığının yanında küçük badge
  */
 export function SyncBadge({ tableName }: { tableName: string }) {
   const { setupStatus, isChecking } = useSyncContext();
 
   if (!setupStatus) {
     return (
-      <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-secondary text-muted-foreground text-xs rounded-full">
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-white/5 text-white/30 text-xs rounded-full border border-white/8">
         <RefreshCw className="w-2.5 h-2.5 animate-spin" />
         Kontrol ediliyor
       </span>
@@ -394,17 +495,21 @@ export function SyncBadge({ tableName }: { tableName: string }) {
 
   if (!setupStatus.isConnected) {
     return (
-      <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-yellow-900/40 text-yellow-400 text-xs rounded-full border border-yellow-700/40">
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-amber-950/40 text-amber-400 text-xs rounded-full border border-amber-700/30">
         <AlertTriangle className="w-2.5 h-2.5" />
-        Yerel Depo
+        Yerel
       </span>
     );
   }
 
   return (
-    <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-secondary text-muted-foreground text-xs rounded-full">
+    <motion.span
+      initial={{ opacity: 0, scale: 0.9 }}
+      animate={{ opacity: 1, scale: 1 }}
+      className="inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-950/40 text-emerald-400 text-xs rounded-full border border-emerald-700/30"
+    >
       <CheckCircle2 className="w-2.5 h-2.5" />
-      {isChecking ? 'Senkron ediliyor' : `Senkron - ${table.rowCount} kayit`}
-    </span>
+      {isChecking ? 'Senkron ediliyor' : `${table.rowCount} kayıt`}
+    </motion.span>
   );
 }

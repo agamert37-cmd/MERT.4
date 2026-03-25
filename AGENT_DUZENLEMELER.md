@@ -1,0 +1,132 @@
+# AJAN DEVİR TESLİM & DÜZENLEME GÜNLÜĞÜ
+
+## Proje: İŞLEYEN ET - ERP Sistemi v3.5
+
+---
+
+## AJAN BİLGİLERİ
+
+| | Bilgi |
+|---|---|
+| **Önceki Ajan (Ajan 1)** | X1 hesabı - Claude (club ajanı) |
+| **Mevcut Ajan (Ajan 2)** | Claude Sonnet 4.6 — `claude/serene-gagarin` worktree |
+| **Devir Tarihi** | 2026-03-24 |
+| **Branch** | `claude/serene-gagarin` |
+
+---
+
+## KURAL: DOSYA İMZALAMA
+
+Her düzenlenen dosyanın **en üstüne** şu yorum satırı eklenir:
+
+```
+// [AJAN-2 | claude/serene-gagarin | YYYY-MM-DD] Son düzenleyen: Claude Sonnet 4.6
+```
+
+---
+
+## DÜZENLEME GÜNLÜĞÜ
+
+| # | Dosya | Tarih | Açıklama |
+|---|-------|-------|----------|
+| 1 | `app/App.tsx` | 2026-03-24 | BUG FIX: `handleFocus` artık önce `stopRealtimeSync()` çağırıyor — stale `_realtimeUnsubscribe` yüzünden mobil'de realtime asla yeniden bağlanamıyordu. `visibilitychange` handler eklendi. |
+| 2 | `app/hooks/useTableSync.ts` | 2026-03-24 | BUG FIX: Mobil arka plandan dönünce `clearConnectionCooldown()` eklendi (module-level cooldown tüm tabloları blokluyordu). `visibilitychange → hidden`'da write queue flush eklendi. |
+| 3 | `app/utils/supabase-storage.ts` | 2026-03-24 | BUG FIX: `visibilitychange → visible`'da `stopRealtimeSync()` + `startRealtimeSync()` çağrısı eklendi — ölü WebSocket kanalı temizlenip yeniden başlatılıyor. |
+| 4 | `app/contexts/SyncContext.tsx` | 2026-03-24 | BUG FIX: `window.addEventListener('online', ...)` eklendi — ağ gelince backoff beklenmeden anında tablo kontrolü yapılıyor. |
+| 5 | `app/lib/auto-setup.ts` | 2026-03-24 | BUG FIX: `tahsilatlar` ve `arac_km_logs` tabloları `SYSTEM_TABLES` listesine eklendi — migration'da var ama kontrol listesinde yoktu. |
+| 6 | `app/hooks/useTableSync.ts` | 2026-03-24 | GÜÇLENDİRME: `withTimeout` (10s) eklendi. WriteQueue'ya localStorage persistence eklendi. `online` event → write flush + fetchData. `CONNECTION_COOLDOWN_MS` 15s→8s. |
+| 7 | `app/utils/supabase-storage.ts` | 2026-03-24 | GÜÇLENDİRME: Başlangıçta kalan kuyruğu 3s sonra auto-flush. `online` event'e `flushWrites()` eklendi. `MIN_RESYNC_INTERVAL_MS` 30s→15s. Heartbeat 5dk→2dk. |
+| 8 | `app/lib/dual-supabase.ts` | 2026-03-24 | GÜÇLENDİRME: `createCloudDirectBackup` + `startCloudDirectBackupScheduler` eklendi — Edge Function olmadan doğrudan Supabase client ile buluta yedek alır. |
+| 9 | `app/App.tsx` | 2026-03-24 | GÜÇLENDİRME: `startCloudDirectBackupScheduler(24)` entegre edildi — yapılandırma gerektirmeden her 24s otomatik yedek. |
+| 10 | `app/contexts/GlobalTableSyncContext.tsx` | 2026-03-24 | YENİ DOSYA: App geneli tablo senkronizasyon provider'ı oluşturuldu. Tüm kritik Supabase tablolarını (fisler, urunler, cari_hesaplar, kasa_islemleri, personeller, bankalar, cekler, araclar, arac_shifts, arac_km_logs, uretim_profilleri, uretim_kayitlari, faturalar, fatura_stok, tahsilatlar) localStorage'a yükler. Mobil'de DashboardPage verilerin görünmemesi sorunu çözüldü. |
+| 11 | `app/App.tsx` | 2026-03-24 | ENTEGRASYON: `GlobalTableSyncProvider` import edildi ve `RouterProvider` sarıldı — hangi sayfada olunursa olsun tüm tablolar senkronize edilir. |
+| 12 | `app/pages/FisHistoryPage.tsx` | 2026-03-24 | BUG FIX: Delete, edit ve restore işlemlerinde Supabase tablosu da güncelleniyor. `deleteFisFromSupabase`, `updateFisInSupabase`, `addFisToSupabase` kullanılıyor. Stok/cari değişikliklerinde `supabase.from('urunler').upsert()` ve `supabase.from('cari_hesaplar').upsert()` eklendi. |
+| 13 | `app/pages/UretimPage.tsx` | 2026-03-24 | BUG FIX: Üretim kaydedilince stok değişiklikleri KV'nin yanında doğrudan `urunler` Supabase tablosuna da yazılıyor (`syncStokItemsToSupabase` eklendi). Mobil üretim sonrası doğru stok görüyor. |
+| 14 | `app/lib/dual-supabase.ts` | 2026-03-25 | KRİTİK FIX: `createFullTableBackup()` ve `restoreFromTableBackup()` eklendi — 15 gerçek Supabase tablosundan (fisler, urunler, cari vb.) yedek alır. Zamanlayıcı artık KV değil gerçek tabloları yedekliyor. |
+| 15 | `app/pages/YedeklerPage.tsx` | 2026-03-25 | GÜNCELLEŞTİRME: Yedek butonu önce Edge Function dener, başarısız olursa `createFullTableBackup()` çalıştırır. "Yerel Yedek İndir" artık localStorage + Supabase tablolarını birlikte indirir. Tablo yedeklerine Geri Yükle butonu eklendi. |
+| 16 | `app/pages/UretimPage.tsx` | 2026-03-25 | UI FIX: `StokSearchSelect` ve `CiktiUrunSelect` dropdown'ları `createPortal` + `position:fixed` ile yeniden yazıldı. `.card-shine { overflow:hidden }` CSS'i dropdown'ı kesiyordu. Tüm `overflow:hidden` üst container'lardan bağımsız, viewport'a göre konumlanıyor. |
+| 17 | `app/pages/CeklerPage.tsx` | 2026-03-25 | KRİTİK FIX: `saveCek()` fonksiyonuna `supabase.from('cekler').upsert()` eklendi. `handleDelete`'e `deleteCekFromSupabase()` eklendi. Tüm çek kayıt/silme işlemleri artık Supabase cekler tablosunu güncelliyor. |
+| 18 | `app/pages/PersonelPage.tsx` | 2026-03-25 | FIX: Uzaktan oturum kapatmada `setInStorage` yanına `updateItem(personId, { status: 'offline' })` eklendi — Supabase personeller tablosu da güncelleniyor. |
+| 19 | `app/pages/CariDetailPage.tsx` | 2026-03-25 | FIX: `updateFisInStorage()` fatura durum güncellemesinde `supabase.from('fisler').update()` eklendi — fatura kesildi/iptal gibi değişiklikler Supabase'e de yansıyor. |
+| 20 | `app/pages/AracTakipPage.tsx` | 2026-03-25 | KRİTİK FIX: KM logları (`arac_km_logs`) hiç Supabase'e yazılmıyordu — `useTableSync` eklendi ve her 3 handler'da `addKmLogToSupabase` + `addShiftToSupabase` çağrısı eklendi. `supabase` import eklendi. |
+| 21 | `app/hooks/useTableSync.ts` | 2026-03-25 | KRİTİK FIX: Modül-seviyesi `_lastConnectionFailure` değişkeni `useRef` ile her instance'a taşındı — bir tablo başarısız olunca diğer 14 tablo 8s bloklanıyordu. Artık her tablo bağımsız cooldown kullanıyor. |
+| 22 | `app/pages/PersonelPage.tsx` | 2026-03-25 | FIX: `handleApproveRequest`'te `updateItem` eklendi — personel izin değişikliği Supabase'e yazılıyordu. `kvSet('role_requests')` eklendi — rol talepleri çapraz cihaz senkronize ediliyor. `handleRejectRequest`'te de aynı KV sync. |
+| 23 | `app/pages/StokPage.tsx` | 2026-03-25 | FIX: `handleAddCategory`, `handleEditCategory`, `handleDeleteCategory`'de `kvSet('stok_categories')` eklendi. Mount'ta KV'den kategori yükleme `useEffect` eklendi — mobil'de kategoriler görünmüyordu. |
+| 24 | `app/pages/KasaPage.tsx` | 2026-03-25 | FIX: POS cihazı ekle/sil işlemlerinde `kvSet('pos_devices')` eklendi. Mount'ta KV'den POS cihazları yükleme `useEffect` eklendi — mobil'de POS listesi görünmüyordu. |
+| 25 | `app/pages/GunSonuPage.tsx` | 2026-03-25 | KRİTİK FIX: Gün sonu kapanış/açılış durumu `kvSet('gun_sonu_{tarih}')` ile KV store'a yazılıyor. Mount'ta KV'den durum yükleniyor — başka cihazda kapatılan gün sonu artık tüm cihazlarda görünüyor. |
+| 26 | `app/pages/CariPage.tsx` | 2026-03-25 | FIX: `saveRegions` ve `saveCategories` fonksiyonlarına `kvSet` eklendi. Mount'ta KV'den bölge/kategori yükleme `useEffect` eklendi — çapraz cihaz metadata sync. |
+| 27 | `app/pages/PazarlamaPage.tsx` | 2026-03-25 | FIX: `handleSave`'e `kvSet('pazarlama_content')` ve `kvSet('login_content')` eklendi — login sayfası içeriği artık tüm cihazlarda senkronize. |
+| 28 | `app/pages/SettingsPage.tsx` | 2026-03-25 | FIX: `handleSaveCompanyInfo`, `handleUploadAndAdd`, `handleRemoveBrandingImage`, `handleRefreshBrandingUrls`'e `kvSet('system_settings')` eklendi — şirket bilgisi ve marka görselleri çapraz cihaz senkronize. |
+| 29 | `app/pages/PazarlamaPage.tsx` | 2026-03-25 | FIX: Mount `useEffect`'e KV fallback eklendi — localStorage boşsa `kvGet('pazarlama_content')` ile yükleniyor. |
+| 30 | `app/pages/SettingsPage.tsx` | 2026-03-25 | FIX: Mount `useEffect`'e KV fallback eklendi — localStorage boşsa `kvGet('system_settings')` ile şirket bilgisi ve görseller yükleniyor. |
+| 31 | `app/lib/node-registry.ts` | 2026-03-25 | YENİ: Çok sunuculu HA sistemi — heartbeat, node keşfi, cloud sağlık kontrolü, otomatik failover, tüm node'lara paralel yedekleme. |
+| 32 | `app/components/NodeStatusPanel.tsx` | 2026-03-25 | YENİ: Sunucu durumu paneli — cloud + tüm yerel node'lar canlı durum, gecikme, failover göstergesi, "Tüm Sunuculara Yedekle" butonu. `NodeStatusBadge` header'da gösterilir. |
+| 33 | `app/pages/SettingsPage.tsx` | 2026-03-25 | ÖZELLİK: HA node yapılandırma UI eklendi — cihaz adı, tipi, yerel Docker URL, anon key. Heartbeat otomatik başlar. NodeStatusPanel entegre. |
+| 34 | `app/App.tsx` | 2026-03-25 | ÖZELLİK: `startNodeHeartbeat()` eklendi — app başlayınca bu cihaz cloud KV'ye kayıt olur. Cleanup'ta `stopHeartbeatFn()` çağrılır. |
+| 35 | `app/components/MainLayout.tsx` | 2026-03-25 | ÖZELLİK: `NodeStatusBadge` header'a eklendi — failover aktifse "Yerel Sunucu", cloud offline ise uyarı, normal ise "N/M Aktif" gösterir. |
+| 36 | `app/lib/active-client.ts` | 2026-03-25 | YENİ: HA dual-write motoru — WAL (Write-Ahead Log, localStorage kalıcı kuyruk), aktif yerel node Supabase client yönetimi, `dualWrite()` (cloud + yerel node'a eş zamanlı yaz), `replayWAL()` (cloud gelince WAL'ı toplu gönder), `runAutoSync()` / `startAutoNodeSync()` (periyodik cloud→node yedekleme), `bootstrapNode()` (yeni node'a cloud verisi yükle, 100'lük batch), `syncNodeToCloud()` (yerel→cloud ters senkron). |
+| 37 | `app/hooks/useTableSync.ts` | 2026-03-25 | ENTEGRASYON: `dualWrite()` import edildi — WriteQueue flush'ta upsert/delete sonrası yerel node'a da yaz; cloud başarısızsa WAL'a ekle. `onOnline` handler'a `replayWAL(supabase)` eklendi — ağ gelince WAL otomatik gönderilir. |
+| 38 | `app/components/NodeStatusPanel.tsx` | 2026-03-25 | GELİŞTİRME: Bootstrap butonu (Cloud→Node, ilerleme çubuğu), Node→Cloud sync butonu, WAL sayısı göstergesi + temizle butonu, otomatik senkron toggle, failover tetiklenince `setActiveLocalNode()` ile dual-write aktive edilir, WAL badge NodeStatusBadge'e eklendi. |
+| 39 | `app/App.tsx` | 2026-03-25 | ENTEGRASYON: `startAutoNodeSync(cloudSupabase)` eklendi — ayar aktifse başlangıçta periyodik node sync başlar. `replayWAL(cloudSupabase)` eklendi — başlangıçta önceki oturumdan kalan WAL yazmaları gönderilir. |
+| 40 | `app/utils/activityLogger.ts` | 2026-03-25 | FIX: `logActivity()` ve `clearActivityLogs()` sonrası `kvSet('activity_logs')` eklendi — denetim logları tüm cihazlarda senkron. |
+| 41 | `app/utils/vitrinAnalytics.ts` | 2026-03-25 | FIX: `saveAnalytics()` ve `clearVitrinAnalytics()` sonrası `kvSet('vitrin_analytics')` eklendi — vitrin analitik verileri senkron. |
+| 42 | `app/contexts/AuthContext.tsx` | 2026-03-25 | FIX: Logout akışında `kvSet('personel_status')` eklendi — personel online/offline durumu senkron. |
+| 43 | `app/contexts/EmployeeContext.tsx` | 2026-03-25 | FIX: `setCurrentEmployee`, doğrulama fallback ve rol düzeltme sonrası `kvSet('current_employee')` eklendi — aktif çalışan bilgisi senkron. |
+| 44 | `app/pages/FisHistoryPage.tsx` | 2026-03-25 | FIX: Tüm `DELETED_FISLER` yazmaları sonrası `kvSet('deleted_fisler')` eklendi — silinen fiş geçmişi senkron. |
+| 45 | `app/pages/UretimPage.tsx` | 2026-03-25 | FIX: `URETIM_DEFAULTS` sonrası `kvSet('uretim_defaults')` eklendi — üretim varsayılan maliyetleri senkron. |
+| 46 | `app/pages/YedeklerPage.tsx` | 2026-03-25 | FIX: Yedek oluşturma ve silme sonrası `kvSet('backups')` eklendi — yedek listesi senkron. |
+| 47 | `app/components/ProfileEditModal.tsx` | 2026-03-25 | FIX: Profil güncellemesi sonrası `kvSet('personel_status')` eklendi — profil değişiklikleri senkron. |
+| 48 | `app/pages/FisHistoryPage.tsx` | 2026-03-25 | FIX: `setInStorage(StorageKey.FISLER)` bypass kaldırıldı — fiş geri yükleme ve düzenleme artık useTableSync üzerinden (addItem/updateItem). Mount-time `kvGet('deleted_fisler')` fallback eklendi. |
+| 49 | `app/pages/PersonelPage.tsx` | 2026-03-25 | FIX: Uzaktan oturum kapatmada `setInStorage(StorageKey.PERSONEL_DATA)` bypass kaldırıldı — artık yalnızca `updateItem()` ile useTableSync üzerinden güncelleniyor. |
+| 50 | `app/components/RoleRequestModal.tsx` | 2026-03-25 | FIX: Yetki talebi oluşturma sonrası `kvSet('role_requests')` eklendi — talepler tüm cihazlarda senkron. |
+| 51 | `app/pages/UretimPage.tsx` | 2026-03-25 | FIX: Mount-time `kvGet('uretim_defaults')` fallback eklendi — yeni cihazda varsayılan maliyetler KV'den yükleniyor. |
+| 52 | `app/pages/YedeklerPage.tsx` | 2026-03-25 | FIX: Mount-time `kvGet('backups')` fallback eklendi — yedek listesi yeni cihazda KV'den yükleniyor. |
+| 53 | `app/contexts/EmployeeContext.tsx` | 2026-03-25 | FIX: Mount-time `kvGet('current_employee')` fallback eklendi — yeni cihazda aktif çalışan KV'den yükleniyor. |
+| 54 | `app/utils/activityLogger.ts` | 2026-03-25 | FIX: `loadActivityLogsFromKV()` async helper eklendi — localStorage boşsa denetim logları KV'den yüklenir. App.tsx'de başlangıçta çağrılır. |
+| 55 | `app/utils/vitrinAnalytics.ts` | 2026-03-25 | FIX: `loadVitrinAnalyticsFromKV()` async helper eklendi — localStorage boşsa vitrin analitik KV'den yüklenir. App.tsx'de başlangıçta çağrılır. |
+| 56 | `app/App.tsx` | 2026-03-25 | FIX: Başlangıçta `loadActivityLogsFromKV()` ve `loadVitrinAnalyticsFromKV()` çağrısı eklendi — KV fallback aktif. |
+| 57 | `app/components/MainLayout.tsx` | 2026-03-25 | FIX: Mobil sidebar z-index z-50→z-[100] (MobileBottomNav'ın üstüne çıktı). Bottom padding eklendi — logout butonu artık alt çubuk altında kalmıyor. Kullanıcı bilgi kartı (avatar, ad, rol) + belirgin kırmızı logout butonu eklendi. |
+| 58 | `app/components/MobileBottomNav.tsx` | 2026-03-25 | FIX: More drawer'a "Oturum Kapat" butonu eklendi (kırmızı, en altta, border-top ile ayrılmış). `logout` fonksiyonu useAuth'dan destructure edildi. Kullanıcı yan menüyü açmadan da çıkış yapabiliyor. |
+
+---
+
+## PROJE ÖZETİ (Ajan 2 Gözünden)
+
+### Teknoloji Stack
+- **Frontend:** React 18 + TypeScript + Vite 6
+- **UI:** Radix UI + shadcn/ui + Tailwind CSS v4
+- **Database:** Supabase (local Docker + Cloud dual-instance)
+- **AI:** OpenAI GPT-4o-mini (ChatGPT entegrasyonu)
+- **Deployment:** Docker + Nginx + Cloudflare Tunnel
+
+### Kritik Dosyalar
+| Dosya | Boyut | Önem |
+|-------|-------|------|
+| `app/lib/dual-supabase.ts` | 48.4 KB | ★★★ Sync motoru |
+| `app/utils/security.ts` | 49 KB | ★★★ Güvenlik |
+| `app/pages/UretimPage.tsx` | 239 KB | ★★★ En büyük modül |
+| `app/utils/reportGenerator.ts` | 92 KB | ★★ PDF/Rapor |
+| `app/utils/i18n.ts` | 263 KB | ★★ Çeviriler |
+| `app/hooks/useTableSync.ts` | 26 KB | ★★ Tablo sync |
+
+### Son Commit Geçmişi (Ajan 1'den devralınan)
+```
+cec36d8 - fix(uretim): dropdown overflow + sync status components
+523ed3d - feat(sync): major storage/sync engine improvements
+7d47618 - fix(UretimPage): dropdown overlap in two-column layout
+42769f7 - feat: login config, security hardening, kiyma processing
+61f3d75 - fix: senkronizasyon ve UI iyileştirmeleri
+```
+
+---
+
+## NOTLAR
+
+- Site **GitHub'dan veri çekecek** şekilde çalışacak
+- Tüm değişiklikler GitHub'a push edilecek
+- Her dosya düzenlemesinde bu günlük güncellenecek
+- Açık (vulnerable) kod yazılmayacak
+
+---
+
+*Bu dosya Ajan 2 (Claude Sonnet 4.6) tarafından yönetilmektedir.*

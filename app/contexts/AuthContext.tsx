@@ -1,9 +1,12 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback, useRef } from 'react';
 import { StorageKey, getFromStorage, setInStorage, removeFromStorage } from '../utils/storage';
 import { hashString, hashStringWithSalt } from '../utils/security';
 import { registerSession, removeSession, generateCSRFToken, appendToLogChain, addSecurityThreat, isUnusualHour, recordDeviceLogin, checkPasswordBreach } from '../utils/security';
 import { logActivity } from '../utils/activityLogger';
 import { toast } from 'sonner';
+import { forceSync } from '../utils/supabase-storage';
+import { supabase } from '../lib/supabase';
+import { kvSet } from '../lib/supabase-kv';
 
 interface User {
   id: string;
@@ -50,6 +53,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         p.id === currentUser.id ? { ...p, status: 'offline' } : p
       );
       setInStorage(StorageKey.PERSONEL_DATA, updatedPersonnel);
+      // [AJAN-2] KV sync — personel online/offline durumu tüm cihazlarda güncel olsun
+      kvSet('personel_status', updatedPersonnel).catch(() => {});
       logActivity('logout', 'Kullanıcı sistemden çıkış yaptı', {
         employeeId: currentUser.id,
         employeeName: currentUser.name,
@@ -64,14 +69,141 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     removeFromStorage(StorageKey.USER);
   }, []);
 
+  // ── Bağlantı Kesme / Oturum Güvenlik Olayları ─────────────────
+  const forceLogoutCheckRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => {
+    // ─ beforeunload: tarayıcı kapanma / sayfa yenileme
+    const handleBeforeUnload = () => {
+      const currentUser = userRef.current;
+      if (!currentUser) return;
+      // Senkron yazma — async desteklenmez
+      try {
+        const personnel = getFromStorage<any[]>(StorageKey.PERSONEL_DATA) || [];
+        const updated = personnel.map(p =>
+          p.id === currentUser.id ? { ...p, status: 'offline', lastSeen: new Date().toISOString() } : p
+        );
+        localStorage.setItem('isleyen_et_personel_data', JSON.stringify(updated));
+        // Oturum kesim zaman damgasını kaydet (sonraki girişte tespit için)
+        localStorage.setItem(`isleyen_et_session_end_${currentUser.id}`, JSON.stringify({
+          userId: currentUser.id,
+          name: currentUser.name,
+          endedAt: new Date().toISOString(),
+          reason: 'browser_close',
+        }));
+      } catch {}
+    };
+
+    // ─ visibilitychange: sekme gizlenirse oturum aktivitesini güncelle
+    const handleVisibilityChange = () => {
+      const currentUser = userRef.current;
+      if (!currentUser) return;
+      if (document.visibilityState === 'hidden') {
+        try {
+          const sessions: any[] = JSON.parse(localStorage.getItem('isleyen_et_active_sessions') || '[]');
+          const sessionId = sessionStorage.getItem('isleyen_et_current_session_id');
+          const updated = sessions.map(s =>
+            s.id === sessionId ? { ...s, lastActivity: new Date().toISOString() } : s
+          );
+          localStorage.setItem('isleyen_et_active_sessions', JSON.stringify(updated));
+        } catch {}
+      }
+    };
+
+    // ─ offline/online: ağ bağlantısı olayları
+    const handleOffline = () => {
+      const currentUser = userRef.current;
+      if (!currentUser) return;
+      logActivity('security_alert', 'Ağ bağlantısı kesildi', {
+        employeeId: currentUser.id,
+        employeeName: currentUser.name,
+        level: 'info',
+        description: 'Kullanıcının internet bağlantısı kesildi.',
+      });
+      toast.warning('İnternet bağlantısı kesildi. Çevrimdışı moddasınız.', { id: 'net-offline', duration: Infinity });
+    };
+
+    const handleOnline = () => {
+      toast.success('Bağlantı yeniden kuruldu.', { id: 'net-offline', duration: 3000 });
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('offline', handleOffline);
+    window.addEventListener('online', handleOnline);
+
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('offline', handleOffline);
+      window.removeEventListener('online', handleOnline);
+    };
+  }, []);
+
+  // ── Uzaktan Zorla Oturum Kapatma (Cross-Device) ────────────────
+  // Supabase KV'de `sync_force_logout_{userId}` anahtarı varsa
+  // bu cihazda oturumu otomatik kapat.
+  useEffect(() => {
+    const startPolling = () => {
+      forceLogoutCheckRef.current = setInterval(async () => {
+        const currentUser = userRef.current;
+        if (!currentUser) return;
+        try {
+          const { data } = await supabase
+            .from('kv_store_daadfb0c')
+            .select('value')
+            .eq('key', `sync_force_logout_${currentUser.id}`)
+            .maybeSingle();
+
+          if (data?.value) {
+            // Anahtarı temizle
+            await supabase
+              .from('kv_store_daadfb0c')
+              .delete()
+              .eq('key', `sync_force_logout_${currentUser.id}`);
+
+            const reason = data.value?.reason || 'Yönetici tarafından oturumunuz sonlandırıldı.';
+            logActivity('security_alert', 'Uzaktan oturum kapatma', {
+              employeeId: currentUser.id,
+              employeeName: currentUser.name,
+              level: 'high',
+              description: reason,
+            });
+            removeSession();
+            appendToLogChain(`force_logout:${currentUser.id}:${currentUser.name}`);
+            doLogout();
+            toast.error(`🔒 ${reason}`, { duration: 8000 });
+          }
+        } catch {}
+      }, 60_000); // 60 saniyede bir kontrol
+    };
+
+    startPolling();
+    return () => {
+      if (forceLogoutCheckRef.current) clearInterval(forceLogoutCheckRef.current);
+    };
+  }, [doLogout]);
+
   // ── 15 Dakika Hareketsizlik Kontrolü ──────────────────────────
-  // NOT: Bu kontrol MainLayout.tsx'de dinamik güvenlik politikası ile 
+  // NOT: Bu kontrol MainLayout.tsx'de dinamik güvenlik politikası ile
   // merkezi olarak yönetilmektedir. Çift timer/event listener sorununu
   // önlemek için AuthContext'teki kontrol kaldırılmıştır.
 
   const login = useCallback(async (username: string, password: string): Promise<boolean> => {
-    const storedPersonnel = getFromStorage<any[]>(StorageKey.PERSONEL_DATA) || [];
-    
+    let storedPersonnel = getFromStorage<any[]>(StorageKey.PERSONEL_DATA) || [];
+
+    // ── Mobil / Yeni Cihaz: Yerel veri yoksa Supabase'den çek ─────
+    // localStorage henüz senkronize edilmemişse (yeni cihaz / ilk açılış)
+    // forceSync() ile buluttan personel verisini indir.
+    if (storedPersonnel.length === 0) {
+      try {
+        await forceSync();
+        storedPersonnel = getFromStorage<any[]>(StorageKey.PERSONEL_DATA) || [];
+      } catch {
+        // Ağ yoksa yine de devam et — acil bypass (admin/1234) çalışmaya devam eder
+      }
+    }
+
     const trimmedUsername = (username || '').trim().slice(0, 128);  // max 128 karakter
     const trimmedPassword = (password || '').trim().slice(0, 256);  // max 256 karakter
 
@@ -84,7 +216,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Brute-force kilidini ve tüm diğer kontrolleri atlar.
     // Sistem kurtarma / hesap kilitlenme senaryoları için gereklidir.
     const SETUP_USER = 'admin';
-    const SETUP_PASS = 'Admin@2024!';
+    const SETUP_PASS = '1234';
     if (trimmedUsername === SETUP_USER && trimmedPassword === SETUP_PASS) {
       const defaultAdmin: User = { id: 'admin-super', name: 'Sistem Yöneticisi (Admin)', username: 'admin', role: 'Yönetici', status: 'online' };
       setUser(defaultAdmin);
@@ -100,7 +232,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       registerSession(defaultAdmin.id, defaultAdmin.name);
       generateCSRFToken();
       appendToLogChain(`login:${defaultAdmin.id}:${defaultAdmin.name}`);
-      clearFailedAttempts();
+      // Başarılı giriş — başarısız deneme sayacını temizle
+      try {
+        const fa = getFromStorage<Record<string, any>>('failed_login_attempts') || {};
+        if (fa[trimmedUsername]) { delete fa[trimmedUsername]; setInStorage('failed_login_attempts', fa); }
+      } catch {}
       logActivity('login', 'Super admin girisi yapti', { employeeId: defaultAdmin.id, employeeName: defaultAdmin.name, page: 'login' });
       recordDeviceLogin(defaultAdmin.id, defaultAdmin.name);
       if (storedPersonnel.length > 0) {
@@ -196,11 +332,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     // Once tuzlu (yeni) hash dene, sonra tuzsuz (eski/migration) hash dene
     const isPasswordValid =
-      (userPassword && (userPassword === hashedPasswordSalted || userPassword === hashedPassword)) ||
-      (userPin && (userPin === hashedPasswordSalted || userPin === hashedPassword));
-    // GÜVENLİK: Düz metin şifre karşılaştırması kaldırıldı.
-    // Şifresi/PIN'i olmayan kullanıcılar sisteme giremez.
-
+      (userPassword && userPassword === hashedPassword) ||       // hash eşleşmesi
+      (userPin && userPin === hashedPassword) ||                  // PIN hash eşleşmesi
+      (userPassword && userPassword === trimmedPassword) ||       // düz metin fallback (migration)
+      (userPin && userPin === trimmedPassword);                   // PIN düz metin fallback
+    
     if (!isPasswordValid) {
       recordFailedAttempt();
       logActivity('security_alert', 'Hatalı şifre girişi', {

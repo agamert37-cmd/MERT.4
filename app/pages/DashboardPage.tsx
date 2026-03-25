@@ -8,7 +8,7 @@ import {
   Sparkles, CalendarCheck, Banknote, Trash2,
   Activity, Zap, Award, ShieldCheck, ArrowUpRight, ArrowDownRight,
   BarChart3, PieChart, Target, Wallet, RefreshCw, Clock,
-  CreditCard, Landmark, Flame, ArrowLeftRight, Factory
+  CreditCard, Landmark, Flame, ArrowLeftRight, Factory, Bot, X
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { staggerContainer, staggerItem, hover, tap } from '../utils/animations';
@@ -34,8 +34,7 @@ import {
   CalendarHeatmap, BarRace, GradientArc
 } from '../components/ChartComponents';
 import { ActivityTimeline } from '../components/ActivityTimeline';
-import { useIsMobile } from '../hooks/useMobile';
-import { getLatestUpdates, CURRENT_VERSION } from '../utils/updateNotes';
+import { DashboardAIChat } from '../components/DashboardAIChat';
 
 const safeNum = (v: any, fallback = 0): number => {
   if (v === null || v === undefined || v === '') return fallback;
@@ -117,16 +116,7 @@ export function DashboardPage() {
   const [refreshCounter, setRefreshCounter] = useState(0);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [chartView, setChartView] = useState<'area' | 'bar' | 'composed'>('composed');
-  const [liveCounter, setLiveCounter] = useState(0);
-
-  // Canlı otomatik yenileme - her 15 saniyede veriler güncellenir
-  useEffect(() => {
-    const liveInterval = setInterval(() => {
-      setRefreshCounter(c => c + 1);
-      setLiveCounter(c => c + 1);
-    }, 15_000);
-    return () => clearInterval(liveInterval);
-  }, []);
+  const [showAIChat, setShowAIChat] = useState(false);
 
   // Sayfa ziyaretini logla (kullanıcı yüklenince bir kez)
   useEffect(() => {
@@ -728,114 +718,20 @@ export function DashboardPage() {
   return (
     <div className="p-3 sm:p-6 lg:p-10 space-y-4 sm:space-y-6 lg:space-y-8 bg-background min-h-screen text-white font-sans pb-28 sm:pb-6 lg:pb-10">
       
-      {/* ─── Güvenlik Kalkanı — Güncelleme Notları ─── */}
-      <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }}
-        className="relative overflow-hidden rounded-2xl lg:rounded-3xl bg-gradient-to-br from-emerald-500/[0.07] via-[#111] to-blue-500/[0.05] border border-emerald-500/20 hover:border-emerald-500/40 hover:shadow-xl hover:shadow-emerald-500/5 transition-all group"
-      >
-        {/* Dekoratif arka plan */}
-        <div className="absolute top-0 right-0 p-6 opacity-[0.06]">
-          <ShieldCheck className="w-32 h-32 text-emerald-400" />
-        </div>
-        <div className="absolute bottom-0 left-0 w-48 h-48 bg-emerald-500/5 rounded-full blur-3xl -translate-x-1/2 translate-y-1/2" />
-
-        {/* Üst başlık */}
-        <div
-          className="relative z-10 flex items-center gap-3 sm:gap-4 p-4 sm:p-5 pb-3 cursor-pointer"
-          onClick={() => isMobile ? setNotesExpanded(v => !v) : navigate('/guncelleme-notlari')}
+      {/* AI Banner — API key eksikse paneli açmaya davet et */}
+      {!isOpenAIConfigured() && !showAIChat && (
+        <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}
+          onClick={() => setShowAIChat(true)}
+          className="flex items-center gap-3 p-3.5 bg-blue-500/8 border border-blue-500/15 rounded-2xl cursor-pointer hover:bg-blue-500/12 transition-all group"
         >
-          <div className="p-2.5 sm:p-3 bg-emerald-500/20 rounded-xl backdrop-blur-sm border border-emerald-500/30 shadow-lg shadow-emerald-500/10">
-            <ShieldCheck className="w-5 h-5 sm:w-6 sm:h-6 text-emerald-400" />
+          <div className="w-9 h-9 bg-blue-600/20 border border-blue-500/20 rounded-xl flex items-center justify-center flex-shrink-0">
+            <Bot className="w-4.5 h-4.5 text-blue-400" />
           </div>
           <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 mb-0.5 flex-wrap">
-              <h3 className="text-sm sm:text-base font-bold text-emerald-400">{t('dashboard.releaseTitle')}</h3>
-              <span className="px-2 py-0.5 text-[9px] font-bold bg-emerald-500/20 text-emerald-300 rounded-full border border-emerald-500/30 animate-pulse">{t('dashboard.releaseNew')}</span>
-            </div>
-            <p className="text-[10px] sm:text-xs text-gray-500">Son güncellemeler ve yapılan iyileştirmeler</p>
+            <p className="text-sm font-bold text-white/70">AI Asistanı Etkinleştir</p>
+            <p className="text-xs text-white/30">Tüm sistem verilerine erişebilen asistanı başlatmak için tıklayın.</p>
           </div>
-          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/20 shrink-0">
-            {isMobile ? (
-              <span className="text-[9px] font-bold text-emerald-400">{notesExpanded ? '▲ Kapat' : '▼ Göster'}</span>
-            ) : (
-              <>
-                <span className="relative flex h-2 w-2">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-60" />
-                  <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-400" />
-                </span>
-                <span className="text-[9px] font-bold text-emerald-400 uppercase tracking-wider">Koruma Aktif</span>
-              </>
-            )}
-          </div>
-        </div>
-
-        {/* Güncelleme notları listesi — merkezi veriden beslenir */}
-        {(!isMobile || notesExpanded) && (
-        <div className="relative z-10 px-4 sm:px-5 pb-4 sm:pb-5">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-2.5">
-            {getLatestUpdates(8).map((note, i) => {
-              const catColorMap: Record<string, string> = {
-                security:    'bg-emerald-500/10 border-emerald-500/20 text-emerald-400',
-                feature:     'bg-blue-500/10 border-blue-500/20 text-blue-400',
-                bugfix:      'bg-red-500/10 border-red-500/20 text-red-400',
-                ui:          'bg-cyan-500/10 border-cyan-500/20 text-cyan-400',
-                performance: 'bg-orange-500/10 border-orange-500/20 text-orange-400',
-                analytics:   'bg-purple-500/10 border-purple-500/20 text-purple-400',
-              };
-              const catLabelMap: Record<string, string> = {
-                security: 'Güvenlik', feature: 'Özellik', bugfix: 'Düzeltme',
-                ui: 'Arayüz', performance: 'Performans', analytics: 'Analiz',
-              };
-              const cls = catColorMap[note.category] || catColorMap.feature;
-              return (
-                <motion.div
-                  key={note.id}
-                  initial={{ opacity: 0, x: -10 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: 0.1 + i * 0.05, type: 'spring', stiffness: 300, damping: 25 }}
-                  className="flex items-start gap-2.5 p-2.5 sm:p-3 rounded-xl bg-white/[0.02] border border-white/[0.05] hover:bg-white/[0.04] hover:border-white/[0.1] transition-all group"
-                >
-                  <span className="text-sm sm:text-base shrink-0 mt-0.5">{note.emoji || '✨'}</span>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-1.5 mb-0.5 flex-wrap">
-                      <span className={`px-1.5 py-0.5 text-[8px] font-bold rounded-md border ${cls}`}>
-                        {catLabelMap[note.category] || note.category}
-                      </span>
-                      <span className="text-[8px] text-gray-600 font-mono">{note.version}</span>
-                      {note.isNew && (
-                        <span className="text-[7px] font-bold text-amber-400 border border-amber-500/30 px-1 py-0.5 rounded bg-amber-500/10">YENİ</span>
-                      )}
-                    </div>
-                    <p className="text-[10px] sm:text-[11px] text-gray-400 leading-relaxed group-hover:text-gray-300 transition-colors line-clamp-2">{note.description}</p>
-                  </div>
-                </motion.div>
-              );
-            })}
-          </div>
-
-          {/* Alt açıklama */}
-          <div className="mt-3 pt-3 border-t border-white/[0.05] flex items-center justify-between">
-            <p className="text-[9px] sm:text-[10px] text-gray-600">
-              <ShieldCheck className="w-3 h-3 inline-block mr-1 text-emerald-500/50" />
-              Güvenlik Kalkanı {CURRENT_VERSION} KALKAN · Tüm sistemler korunuyor
-            </p>
-            <span className="text-[8px] sm:text-[9px] text-gray-600 font-mono">Son güncelleme: {new Date().toLocaleDateString('tr-TR')}</span>
-          </div>
-        </div>
-        )}
-      </motion.div>
-
-      {/* OpenAI Banner */}
-      {!isOpenAIConfigured() && (
-        <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }}
-          onClick={() => navigate('/settings')}
-          className="flex items-center gap-4 p-4 bg-orange-500/10 border border-orange-500/20 rounded-2xl cursor-pointer hover:bg-orange-500/20 transition-all group"
-        >
-          <div className="p-2 bg-orange-500/20 rounded-xl"><Sparkles className="w-5 h-5 text-orange-400" /></div>
-          <div className="flex-1">
-            <p className="text-sm font-bold text-orange-400">AI Asistan Devre Dışı</p>
-            <p className="text-xs text-orange-400/80">OpenAI API Key eksik. Ayarlar üzerinden hemen entegre edin.</p>
-          </div>
-          <ArrowRight className="w-5 h-5 text-orange-400 group-hover:translate-x-1 transition-transform" />
+          <ArrowRight className="w-4 h-4 text-white/20 group-hover:text-blue-400 group-hover:translate-x-0.5 transition-all" />
         </motion.div>
       )}
 
@@ -857,6 +753,18 @@ export function DashboardPage() {
               title="Verileri Yenile"
             >
               <RefreshCw className={`w-4 h-4 sm:w-5 sm:h-5 text-gray-400 ${isRefreshing ? 'animate-spin' : ''}`} />
+            </button>
+            {/* AI Chat toggle butonu */}
+            <button
+              onClick={() => setShowAIChat(v => !v)}
+              title="AI Asistan"
+              className={`p-2.5 sm:p-3 rounded-xl border transition-all ${
+                showAIChat
+                  ? 'bg-blue-600 border-blue-500 text-white shadow-lg shadow-blue-600/30'
+                  : 'bg-white/5 hover:bg-white/10 border-white/10 text-gray-400 hover:text-blue-400'
+              }`}
+            >
+              <Bot className="w-4 h-4 sm:w-5 sm:h-5" />
             </button>
             <button onClick={handleDownloadPDF}
               className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 sm:px-5 py-2.5 sm:py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-xl font-bold transition-all shadow-lg shadow-blue-600/20 text-xs sm:text-sm"
@@ -887,6 +795,22 @@ export function DashboardPage() {
           </motion.div>
         </div>
       </div>
+
+      {/* ─── AI Sohbet Paneli ─── */}
+      <AnimatePresence>
+        {showAIChat && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={{ type: 'spring', stiffness: 200, damping: 30 }}
+            className="rounded-2xl bg-[#0d111b] border border-white/[0.08] overflow-hidden"
+            style={{ minHeight: '580px' }}
+          >
+            <DashboardAIChat onClose={() => setShowAIChat(false)} />
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* ─── Stat Cards Grid ─── */}
       <motion.div
