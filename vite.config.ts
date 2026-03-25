@@ -14,6 +14,8 @@ export default defineConfig({
     alias: {
       // Alias @ to the src directory
       '@': path.resolve(__dirname, './app'),
+      // PouchDB browser: Node.js 'events' polyfill
+      events: path.resolve(__dirname, 'node_modules/events/events.js'),
     },
   },
 

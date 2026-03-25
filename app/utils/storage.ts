@@ -31,6 +31,7 @@ export const StorageKey = {
   SETTINGS: 'settings',
   DELETED_FISLER: 'deleted_fisler',
   BACKUPS: 'local_backups',
+  VITRIN_ANALYTICS: 'vitrin_analytics',
 } as const;
 
 // ─── Okuma/Yazma ─────────────────────────────────────────────────────────────

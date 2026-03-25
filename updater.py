@@ -1040,6 +1040,90 @@ class MertUpdater(tk.Tk):
             font=("Segoe UI", 9), fg=FG_DIM, bg=BG_CARD, pady=6
         ).pack()
 
+        # ── CouchDB Yapılandırma Paneli ───────────────────────────────────────
+        cfg_bar = tk.Frame(self, bg=BG_DARK)
+        cfg_bar.pack(fill="x", padx=20, pady=(8, 0))
+
+        tk.Label(
+            cfg_bar, text="CouchDB Yapılandırma",
+            font=("Segoe UI", 9, "bold"), fg=FG_DIM, bg=BG_DARK
+        ).pack(side="left")
+
+        cfg_card = tk.Frame(self, bg=BG_CARD, highlightbackground=BORDER, highlightthickness=1)
+        cfg_card.pack(fill="x", padx=20, pady=(3, 0))
+        cfg_inner = tk.Frame(cfg_card, bg=BG_CARD)
+        cfg_inner.pack(fill="x", padx=14, pady=8)
+
+        # Satır 1: Veritabanı URL
+        row1 = tk.Frame(cfg_inner, bg=BG_CARD)
+        row1.pack(fill="x", pady=(0, 4))
+        tk.Label(
+            row1, text="📦 Veritabanı URL",
+            font=("Segoe UI", 9, "bold"), fg=ACCENT, bg=BG_CARD, width=18, anchor="w"
+        ).pack(side="left")
+        tk.Label(
+            row1, text="(Veri çekilecek CouchDB adresi, örnek: http://localhost:5984)",
+            font=("Segoe UI", 8), fg=FG_DIM, bg=BG_CARD
+        ).pack(side="left", padx=(4, 0))
+
+        row1b = tk.Frame(cfg_inner, bg=BG_CARD)
+        row1b.pack(fill="x", pady=(0, 6))
+        self._cfg_db_url_var = tk.StringVar()
+        tk.Entry(
+            row1b, textvariable=self._cfg_db_url_var,
+            font=("Consolas", 10), fg=FG_TEXT, bg=BG_INPUT,
+            insertbackground=FG_TEXT, relief="flat",
+            highlightthickness=1, highlightbackground=BORDER, highlightcolor=ACCENT
+        ).pack(side="left", fill="x", expand=True, ipady=5, padx=(0, 6))
+
+        # Satır 2: Sunucu Kullanıcı Adı & Şifre
+        row2 = tk.Frame(cfg_inner, bg=BG_CARD)
+        row2.pack(fill="x", pady=(0, 4))
+        tk.Label(
+            row2, text="🔐 Sunucu Bağlantısı",
+            font=("Segoe UI", 9, "bold"), fg=PURPLE, bg=BG_CARD, width=18, anchor="w"
+        ).pack(side="left")
+        tk.Label(
+            row2, text="(CouchDB kullanıcı adı ve şifresi — site bu bilgilerle senkronize olur)",
+            font=("Segoe UI", 8), fg=FG_DIM, bg=BG_CARD
+        ).pack(side="left", padx=(4, 0))
+
+        row2b = tk.Frame(cfg_inner, bg=BG_CARD)
+        row2b.pack(fill="x", pady=(0, 6))
+        tk.Label(row2b, text="Kullanıcı:", font=("Segoe UI", 9), fg=FG_DIM, bg=BG_CARD).pack(side="left", padx=(0, 4))
+        self._cfg_user_var = tk.StringVar()
+        tk.Entry(
+            row2b, textvariable=self._cfg_user_var,
+            font=("Consolas", 10), fg=FG_TEXT, bg=BG_INPUT,
+            insertbackground=FG_TEXT, relief="flat", width=14,
+            highlightthickness=1, highlightbackground=BORDER, highlightcolor=ACCENT
+        ).pack(side="left", ipady=5, padx=(0, 10))
+        tk.Label(row2b, text="Şifre:", font=("Segoe UI", 9), fg=FG_DIM, bg=BG_CARD).pack(side="left", padx=(0, 4))
+        self._cfg_pass_var = tk.StringVar()
+        tk.Entry(
+            row2b, textvariable=self._cfg_pass_var,
+            font=("Consolas", 10), fg=FG_TEXT, bg=BG_INPUT,
+            insertbackground=FG_TEXT, relief="flat", width=16, show="•",
+            highlightthickness=1, highlightbackground=BORDER, highlightcolor=ACCENT
+        ).pack(side="left", ipady=5, padx=(0, 10))
+
+        save_cfg_btn = tk.Button(
+            row2b, text="💾 Kaydet (.env.local)",
+            command=self._save_couchdb_config,
+            font=("Segoe UI", 9, "bold"), fg=BG_DARK, bg=SUCCESS,
+            relief="flat", cursor="hand2", bd=0, padx=10, pady=4
+        )
+        save_cfg_btn.pack(side="left")
+        _bind_hover(save_cfg_btn, SUCCESS, SUCCESS_H)
+
+        self._cfg_status_lbl = tk.Label(
+            cfg_inner, text="", font=("Segoe UI", 8), fg=FG_DIM, bg=BG_CARD
+        )
+        self._cfg_status_lbl.pack(anchor="w")
+
+        # Mevcut ayarları yükle
+        self._load_couchdb_config_ui()
+
         # ── Güncelleme Özeti Paneli ───────────────────────────────────────────
         sbar = tk.Frame(self, bg=BG_DARK)
         sbar.pack(fill="x", padx=20, pady=(10, 0))
@@ -1249,6 +1333,75 @@ class MertUpdater(tk.Tk):
 
         # İlk yükleme
         self.after(400, self._refresh_commits)
+
+    # ─── CouchDB Yapılandırma ─────────────────────────────────────────────────
+
+    _ENV_FILE = os.path.join(REPO_DIR, ".env.local")
+
+    def _load_couchdb_config_ui(self):
+        """Mevcut .env.local dosyasından CouchDB ayarlarını oku ve UI'a doldur."""
+        config = {"url": "http://localhost:5984", "user": "admin", "password": "mert2024"}
+        env_path = self._ENV_FILE
+        if os.path.exists(env_path):
+            try:
+                with open(env_path, "r", encoding="utf-8") as f:
+                    for line in f:
+                        line = line.strip()
+                        if line.startswith("VITE_COUCHDB_URL="):
+                            config["url"] = line.split("=", 1)[1]
+                        elif line.startswith("VITE_COUCHDB_USER="):
+                            config["user"] = line.split("=", 1)[1]
+                        elif line.startswith("VITE_COUCHDB_PASSWORD="):
+                            config["password"] = line.split("=", 1)[1]
+            except Exception:
+                pass
+        self._cfg_db_url_var.set(config["url"])
+        self._cfg_user_var.set(config["user"])
+        self._cfg_pass_var.set(config["password"])
+
+    def _save_couchdb_config(self):
+        """CouchDB ayarlarını .env.local dosyasına kaydet."""
+        url  = self._cfg_db_url_var.get().strip()
+        user = self._cfg_user_var.get().strip()
+        pwd  = self._cfg_pass_var.get().strip()
+
+        if not url:
+            self._cfg_status_lbl.configure(text="⚠ Veritabanı URL boş olamaz.", fg=ERROR)
+            return
+
+        env_path = self._ENV_FILE
+        # Mevcut satırları oku (diğer değişkenleri koru)
+        existing_lines = []
+        if os.path.exists(env_path):
+            try:
+                with open(env_path, "r", encoding="utf-8") as f:
+                    existing_lines = f.readlines()
+            except Exception:
+                pass
+
+        keys_to_set = {
+            "VITE_COUCHDB_URL":      url,
+            "VITE_COUCHDB_USER":     user,
+            "VITE_COUCHDB_PASSWORD": pwd,
+        }
+
+        # Mevcut satırlardan ilgili key'leri çıkar
+        filtered = [l for l in existing_lines
+                    if not any(l.startswith(k + "=") for k in keys_to_set)]
+        # Yeni değerleri ekle
+        for k, v in keys_to_set.items():
+            filtered.append(f"{k}={v}\n")
+
+        try:
+            with open(env_path, "w", encoding="utf-8") as f:
+                f.writelines(filtered)
+            self._cfg_status_lbl.configure(
+                text=f"✓ Kaydedildi: {env_path}  |  Değişikliklerin geçerli olması için Build & Başlat'a basın.",
+                fg=SUCCESS
+            )
+            self._log(f"CouchDB config .env.local'e kaydedildi → {url}  user={user}", "success")
+        except Exception as exc:
+            self._cfg_status_lbl.configure(text=f"✗ Kayıt hatası: {exc}", fg=ERROR)
 
     # ─── Konsol yardımcıları ─────────────────────────────────────────────────
     def _log(self, msg: str, tag: str = "info"):

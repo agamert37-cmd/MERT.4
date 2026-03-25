@@ -11,10 +11,12 @@ export interface CouchDbConfig {
 }
 
 const DEFAULT_CONFIG: CouchDbConfig = {
-  url: 'http://localhost:5984',
-  user: 'admin',
-  password: 'mert2024',
-  peerUrl: '',
+  // Önce .env.local değerlerini kullan (updater.py'de yapılandırılır),
+  // yoksa varsayılan değerlere dön.
+  url: (import.meta as any).env?.VITE_COUCHDB_URL || 'http://localhost:5984',
+  user: (import.meta as any).env?.VITE_COUCHDB_USER || 'admin',
+  password: (import.meta as any).env?.VITE_COUCHDB_PASSWORD || 'mert2024',
+  peerUrl: (import.meta as any).env?.VITE_COUCHDB_PEER_URL || '',
 };
 
 export function getCouchDbConfig(): CouchDbConfig {
