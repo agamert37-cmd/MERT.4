@@ -16,7 +16,8 @@ import {
   CheckCircle2,
   Calendar
 } from 'lucide-react';
-import { motion } from 'motion/react';
+import { motion, AnimatePresence } from 'motion/react';
+import { staggerContainer, gridCard, hover, tap } from '../utils/animations';
 import { toast } from 'sonner';
 import { getFromStorage, setInStorage, StorageKey } from '../utils/storage';
 import { useAuth } from '../contexts/AuthContext';
@@ -386,7 +387,7 @@ export function FilesPage() {
   const exportLogs = getFromStorage<any[]>('export_logs') || [];
 
   return (
-    <div className="p-3 sm:p-6 lg:p-8 space-y-4 sm:space-y-6 pb-28 sm:pb-6">
+    <div className="p-3 sm:p-6 lg:p-10 space-y-4 sm:space-y-6 lg:space-y-8 pb-28 sm:pb-6">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl sm:text-3xl font-bold text-white mb-2">Dosyalar & PDF Yedekleme</h1>
@@ -432,18 +433,23 @@ export function FilesPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {FILE_SECTIONS.map((section, index) => {
+      <motion.div
+        className="grid grid-cols-1 lg:grid-cols-2 gap-6"
+        variants={staggerContainer(0.07, 0.03)}
+        initial="initial"
+        animate="animate"
+      >
+        {FILE_SECTIONS.map((section) => {
           const colors = getColorClasses(section.color);
           const dataCount = (getFromStorage<any[]>(section.storageKey) || []).length;
-          
+
           return (
             <motion.div
               key={section.id}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: index * 0.1 }}
-              className={`${colors.bg} border ${colors.border} rounded-xl p-6 hover:shadow-lg transition-all`}
+              variants={gridCard}
+              whileHover={hover.card}
+              whileTap={tap.card}
+              className={`${colors.bg} border ${colors.border} rounded-xl p-6 cursor-default`}
             >
               <div className="flex items-start gap-4 mb-4">
                 <div className={`w-12 h-12 rounded-lg ${colors.icon} flex items-center justify-center flex-shrink-0`}>
@@ -475,7 +481,7 @@ export function FilesPage() {
             </motion.div>
           );
         })}
-      </div>
+      </motion.div>
 
       <div className="bg-muted border border-border rounded-xl overflow-hidden">
         <div className="p-6 border-b border-border">

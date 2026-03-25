@@ -17,9 +17,14 @@ import {
   History, BarChart3, Sparkles, ArrowRight, FileText, Layers,
   Edit2, Copy, PlayCircle, CheckCircle, Clock, Zap, Gauge,
   Search, ArrowDown, ArrowUp, ShoppingCart, Minus, Info, Truck, Star, BadgeCheck,
-  Scissors, ToggleLeft, ToggleRight
+  Scissors, ToggleLeft, ToggleRight, ChefHat
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import {
+  PieChart as PieChartRC, Pie, Cell,
+  BarChart as BarChartRC, Bar, XAxis, YAxis, CartesianGrid,
+  Tooltip as RCTooltip, ResponsiveContainer, ReferenceLine,
+} from 'recharts';
 import { toast } from 'sonner';
 import { getFromStorage, setInStorage, StorageKey } from '../utils/storage';
 import { kvGet, kvSet } from '../lib/supabase-kv';
@@ -170,6 +175,51 @@ const DEFAULT_URETIM_DEFAULTS: UretimDefaults = {
   isyeriMaliyeti: 10,
   calisanMaliyeti: 5,
 };
+
+// ─── Kıyma Interfaces ────────────────────────────────────────────
+interface KiymaKalem {
+  id: string;
+  name: string;
+  stokId: string;
+  kg: number;
+  birimFiyat: number;
+  useStokFiyat: boolean;
+  stokOrtMaliyet: number;
+}
+interface KiymaRecete {
+  id: string;
+  name: string;
+  kalemler: KiymaKalem[];
+  createdAt: string;
+}
+interface KiymaCalcResult {
+  toplamKg: number;
+  toplamMaliyet: number;
+  ortMaliyet: number;
+  stdSapma: number;
+  minKalem: { name: string; fiyat: number } | null;
+  maxKalem: { name: string; fiyat: number } | null;
+  potansiyelTasarruf: number;
+  pieData: { name: string; value: number; kg: number }[];
+  barData: { name: string; birimMaliyet: number; aboveAvg: boolean }[];
+}
+
+const KIYMA_STORAGE_KEY = 'kiyma_receteler_v1';
+
+const KIYMA_COLORS = [
+  '#f38ba8', '#fab387', '#f9e2af', '#a6e3a1',
+  '#89b4fa', '#b4befe', '#cba6f7', '#74c7ec',
+];
+
+/** Stok kaleminden ağırlıklı ortalama alış maliyetini hesapla */
+function getKiymaStokMaliyet(stokItem: any): number {
+  const movements = Array.isArray(stokItem.movements) ? stokItem.movements : [];
+  const alis = movements.filter((m: any) => m.type === 'ALIS' && (m.quantity || 0) > 0 && (m.price || 0) > 0);
+  if (alis.length === 0) return (stokItem.sellPrice || 0) / 1.2;
+  const totKg = alis.reduce((s: number, m: any) => s + m.quantity, 0);
+  const totM = alis.reduce((s: number, m: any) => s + m.quantity * m.price, 0);
+  return totKg > 0 ? totM / totKg : (stokItem.sellPrice || 0) / 1.2;
+}
 
 // ─── Step Indicator ────────────────────────────────────────────────
 function StepIndicator({ currentStep, steps }: { currentStep: number; steps: string[] }) {
@@ -800,7 +850,17 @@ export function UretimPage() {
 
   const [defaults, setDefaults] = useState<UretimDefaults>(DEFAULT_URETIM_DEFAULTS);
 
-  const [activeView, setActiveView] = useState<'kayitlar' | 'yeni' | 'hizli' | 'profiller' | 'analiz'>('kayitlar');
+  const [activeView, setActiveView] = useState<'kayitlar' | 'yeni' | 'hizli' | 'profiller' | 'analiz' | 'kiyma'>('kayitlar');
+
+  // ─── Kıyma state ────────────────────────────────────────────────
+  const [kiymaKalemler, setKiymaKalemler] = useState<KiymaKalem[]>([
+    { id: crypto.randomUUID(), name: '', stokId: '', kg: 0, birimFiyat: 0, useStokFiyat: true, stokOrtMaliyet: 0 },
+  ]);
+  const [kiymaReceteler, setKiymaReceteler] = useState<KiymaRecete[]>(() =>
+    getFromStorage<KiymaRecete[]>(KIYMA_STORAGE_KEY as any) || []
+  );
+  const [kiymaReceteAdi, setKiymaReceteAdi] = useState('');
+  const [kiymaOzelMarj, setKiymaOzelMarj] = useState<number>(40);
   const [currentStep, setCurrentStep] = useState(0);
   const [selectedProfile, setSelectedProfile] = useState<UretimProfile | null>(null);
   const [showProfileModal, setShowProfileModal] = useState(false);
@@ -1077,6 +1137,58 @@ export function UretimPage() {
       toplamMaliyet, kgBasinaMaliyet,
     };
   }, [form]);
+
+  // ─── Kıyma Calculations ──────────────────────────────────────────
+  const kiymaCalc = useMemo((): KiymaCalcResult => {
+    const aktif = kiymaKalemler.filter(k => k.kg > 0 && (k.useStokFiyat ? k.stokOrtMaliyet : k.birimFiyat) > 0);
+    const toplamKg = aktif.reduce((s, k) => s + k.kg, 0);
+    const toplamMaliyet = aktif.reduce((s, k) => s + k.kg * (k.useStokFiyat ? k.stokOrtMaliyet : k.birimFiyat), 0);
+    const ortMaliyet = toplamKg > 0 ? toplamMaliyet / toplamKg : 0;
+
+    // Standart sapma (birim maliyetlerin ağırlıklı varyansı)
+    const stdSapma = aktif.length > 1
+      ? Math.sqrt(
+          aktif.reduce((s, k) => {
+            const fiyat = k.useStokFiyat ? k.stokOrtMaliyet : k.birimFiyat;
+            return s + k.kg * Math.pow(fiyat - ortMaliyet, 2);
+          }, 0) / (toplamKg || 1)
+        )
+      : 0;
+
+    // En pahalı / en ucuz malzeme (birim maliyet bazında)
+    const sorted = [...aktif].sort((a, b) => {
+      const fa = a.useStokFiyat ? a.stokOrtMaliyet : a.birimFiyat;
+      const fb = b.useStokFiyat ? b.stokOrtMaliyet : b.birimFiyat;
+      return fa - fb;
+    });
+    const minKalem = sorted.length > 0
+      ? { name: sorted[0].name || 'İsimsiz', fiyat: sorted[0].useStokFiyat ? sorted[0].stokOrtMaliyet : sorted[0].birimFiyat }
+      : null;
+    const maxKalem = sorted.length > 0
+      ? { name: sorted[sorted.length - 1].name || 'İsimsiz', fiyat: sorted[sorted.length - 1].useStokFiyat ? sorted[sorted.length - 1].stokOrtMaliyet : sorted[sorted.length - 1].birimFiyat }
+      : null;
+
+    // Potansiyel tasarruf: en pahalı malzemeyi en ucuzla değiştirseydik ne kadar tasarruf ederdin?
+    const potansiyelTasarruf = (aktif.length > 1 && minKalem && maxKalem)
+      ? (maxKalem.fiyat - minKalem.fiyat) *
+        (sorted[sorted.length - 1].kg)
+      : 0;
+
+    const pieData = aktif.map(k => ({
+      name: k.name || 'İsimsiz',
+      value: k.kg * (k.useStokFiyat ? k.stokOrtMaliyet : k.birimFiyat),
+      kg: k.kg,
+    }));
+    const barData = aktif.map(k => {
+      const fiyat = k.useStokFiyat ? k.stokOrtMaliyet : k.birimFiyat;
+      return {
+        name: (k.name || 'İsimsiz').slice(0, 12),
+        birimMaliyet: fiyat,
+        aboveAvg: fiyat > ortMaliyet,
+      };
+    });
+    return { toplamKg, toplamMaliyet, ortMaliyet, stdSapma, minKalem, maxKalem, potansiyelTasarruf, pieData, barData };
+  }, [kiymaKalemler]);
 
   // ─── Stoktan ürün seçildiğinde ──────────────────────────────────
   const handleStokSelect = (item: any) => {
@@ -1824,6 +1936,7 @@ export function UretimPage() {
           { key: 'yeni', label: t('uretim.tabs.new') || 'Yeni Uretim', shortLabel: t('uretim.tabs.new_short') || 'Yeni', icon: PlayCircle },
           { key: 'profiller', label: t('uretim.tabs.profiles') || 'Urun Profilleri', shortLabel: t('uretim.tabs.profiles_short') || 'Profiller', icon: Layers, count: profiles.length },
           { key: 'analiz', label: t('uretim.tabs.analytics') || 'Analiz & Raporlar', shortLabel: t('uretim.tabs.analytics_short') || 'Analiz', icon: BarChart3 },
+          { key: 'kiyma', label: 'Kıyma Maliyeti', shortLabel: 'Kıyma', icon: ChefHat },
         ].map(tab => (
           <motion.button
             key={tab.key}
@@ -3913,6 +4026,567 @@ export function UretimPage() {
               ))}
             </div>
           </div>
+        </motion.div>
+      )}
+
+      {/* ═══════════════════════════════════════════════════════
+           KIYMA MALİYET HESAPLAMA
+         ═══════════════════════════════════════════════════════ */}
+      {activeView === 'kiyma' && (
+        <motion.div
+          key="view-kiyma"
+          initial={{ opacity: 0, x: 24 }}
+          animate={{ opacity: 1, x: 0 }}
+          exit={{ opacity: 0, x: -24 }}
+          transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
+          className="space-y-4 md:space-y-6"
+        >
+          {/* Başlık kartı */}
+          <div className="card-premium card-shine rounded-xl md:rounded-2xl p-4 md:p-5">
+            <div className="flex items-center gap-3">
+              <div className="relative">
+                <div className="w-10 h-10 md:w-12 md:h-12 rounded-xl bg-gradient-to-br from-red-500 to-rose-600 flex items-center justify-center shadow-lg shadow-red-500/20">
+                  <ChefHat className="w-5 h-5 md:w-6 md:h-6 text-white" />
+                </div>
+                <div className="absolute -inset-1 rounded-xl bg-red-500/15 blur-md -z-10" />
+              </div>
+              <div>
+                <h2 className="text-base md:text-xl font-bold text-white">Kıyma Maliyet Hesaplama</h2>
+                <p className="text-[11px] md:text-sm text-muted-foreground/70">Farklı ağırlık ve fiyattaki ürünleri karıştırarak ağırlıklı ortalama maliyet hesaplayın ve reçeteleri karşılaştırın</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Ana içerik - iki sütun */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6 items-start">
+
+            {/* ─── Sol: Reçete oluşturucu ─────────────────────────── */}
+            <div className="space-y-3">
+              <div className="card-premium card-shine rounded-xl md:rounded-2xl p-4 md:p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-sm md:text-base font-bold text-white flex items-center gap-2">
+                    <Scale className="w-4 h-4 text-red-400" />
+                    Malzeme Listesi
+                  </h3>
+                  <button
+                    onClick={() => setKiymaKalemler(prev => [...prev, {
+                      id: crypto.randomUUID(), name: '', stokId: '', kg: 0, birimFiyat: 0, useStokFiyat: true, stokOrtMaliyet: 0,
+                    }])}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-red-500/10 hover:bg-red-500/20 text-red-400 hover:text-red-300 text-xs font-medium rounded-lg border border-red-500/20 transition-all duration-200"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    Malzeme Ekle
+                  </button>
+                </div>
+
+                <div className="space-y-2.5">
+                  {kiymaKalemler.map((kalem) => (
+                    <motion.div
+                      key={kalem.id}
+                      initial={{ opacity: 0, y: -6 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className="p-3 rounded-xl bg-secondary/30 border border-border/30 space-y-2"
+                    >
+                      {/* Ürün seç + sil */}
+                      <div className="flex items-center gap-2">
+                        <div className="flex-1">
+                          <select
+                            value={kalem.stokId}
+                            onChange={e => {
+                              const sel = stokList.find(s => s.id === e.target.value);
+                              const ortMaliyet = sel ? getKiymaStokMaliyet(sel) : 0;
+                              setKiymaKalemler(prev => prev.map(k => k.id === kalem.id ? {
+                                ...k, stokId: e.target.value,
+                                name: sel?.name || k.name,
+                                stokOrtMaliyet: ortMaliyet,
+                                birimFiyat: k.useStokFiyat ? ortMaliyet : k.birimFiyat,
+                              } : k));
+                            }}
+                            className="w-full text-xs bg-secondary/50 border border-border/40 rounded-lg px-2.5 py-1.5 text-foreground/90 focus:outline-none focus:border-red-500/40"
+                          >
+                            <option value="">— Stoktan Seç —</option>
+                            {stokList.map(s => (
+                              <option key={s.id} value={s.id}>{s.name}</option>
+                            ))}
+                          </select>
+                        </div>
+                        {kiymaKalemler.length > 1 && (
+                          <button
+                            onClick={() => setKiymaKalemler(prev => prev.filter(k => k.id !== kalem.id))}
+                            className="p-1.5 text-muted-foreground/40 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-all"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
+
+                      {/* Manuel ürün adı (stok seçilmediyse) */}
+                      {!kalem.stokId && (
+                        <input
+                          type="text"
+                          placeholder="Ürün adı (manuel giriş)"
+                          value={kalem.name}
+                          onChange={e => setKiymaKalemler(prev => prev.map(k => k.id === kalem.id ? { ...k, name: e.target.value } : k))}
+                          className="w-full text-xs bg-secondary/50 border border-border/40 rounded-lg px-2.5 py-1.5 text-foreground/90 focus:outline-none focus:border-red-500/40 placeholder:text-muted-foreground/40"
+                        />
+                      )}
+
+                      {/* Miktar + Fiyat */}
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="text-[10px] text-muted-foreground/70 mb-1 block">Miktar (kg)</label>
+                          <input
+                            type="number"
+                            value={kalem.kg || ''}
+                            onChange={e => setKiymaKalemler(prev => prev.map(k => k.id === kalem.id ? { ...k, kg: Number(e.target.value) } : k))}
+                            placeholder="0"
+                            min={0} step={0.5}
+                            className="w-full text-xs bg-secondary/50 border border-border/40 rounded-lg px-2.5 py-1.5 text-foreground/90 focus:outline-none focus:border-red-500/40"
+                          />
+                        </div>
+                        <div>
+                          <div className="flex items-center justify-between mb-1">
+                            <label className="text-[10px] text-muted-foreground/70">
+                              {kalem.useStokFiyat && kalem.stokId ? 'Stok Ort. Fiyat (₺/kg)' : 'Manuel Fiyat (₺/kg)'}
+                            </label>
+                            {kalem.stokId && (
+                              <button
+                                onClick={() => setKiymaKalemler(prev => prev.map(k => k.id === kalem.id ? {
+                                  ...k, useStokFiyat: !k.useStokFiyat,
+                                  birimFiyat: !k.useStokFiyat ? k.stokOrtMaliyet : k.birimFiyat,
+                                } : k))}
+                                className={`text-[9px] px-1.5 py-0.5 rounded-md border font-medium transition-all ${
+                                  kalem.useStokFiyat
+                                    ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
+                                    : 'bg-orange-500/10 border-orange-500/30 text-orange-400'
+                                }`}
+                              >
+                                {kalem.useStokFiyat ? '📦 Stok' : '✏️ Manuel'}
+                              </button>
+                            )}
+                          </div>
+                          <input
+                            type="number"
+                            value={kalem.useStokFiyat && kalem.stokId
+                              ? (kalem.stokOrtMaliyet || '')
+                              : (kalem.birimFiyat || '')}
+                            onChange={e => {
+                              if (kalem.useStokFiyat && kalem.stokId) return;
+                              setKiymaKalemler(prev => prev.map(k => k.id === kalem.id ? { ...k, birimFiyat: Number(e.target.value) } : k));
+                            }}
+                            readOnly={kalem.useStokFiyat && !!kalem.stokId}
+                            placeholder="0.00"
+                            min={0} step={0.01}
+                            className={`w-full text-xs border rounded-lg px-2.5 py-1.5 text-foreground/90 focus:outline-none transition-colors ${
+                              kalem.useStokFiyat && kalem.stokId
+                                ? 'bg-emerald-500/5 border-emerald-500/20 text-emerald-300 cursor-not-allowed'
+                                : 'bg-secondary/50 border-border/40 focus:border-red-500/40'
+                            }`}
+                          />
+                        </div>
+                      </div>
+
+                      {/* Kalem alt satırı */}
+                      {kalem.kg > 0 && (kalem.useStokFiyat ? kalem.stokOrtMaliyet : kalem.birimFiyat) > 0 && (
+                        <div className="flex items-center justify-between text-[10px] pt-1.5 border-t border-border/20">
+                          <span className="text-muted-foreground/60">
+                            {kalem.kg} kg × ₺{(kalem.useStokFiyat ? kalem.stokOrtMaliyet : kalem.birimFiyat).toFixed(2)}/kg
+                          </span>
+                          <span className="font-bold text-white">
+                            = ₺{(kalem.kg * (kalem.useStokFiyat ? kalem.stokOrtMaliyet : kalem.birimFiyat)).toFixed(2)}
+                          </span>
+                        </div>
+                      )}
+                      {/* Stok yeterliliği */}
+                      {kalem.stokId && kalem.kg > 0 && (() => {
+                        const stok = stokList.find(s => s.id === kalem.stokId);
+                        if (!stok) return null;
+                        const mevcutStok = stok.currentStock ?? stok.current_stock ?? stok.stock ?? 0;
+                        const yeterli = mevcutStok >= kalem.kg;
+                        return (
+                          <div className={`flex items-center gap-1 text-[9px] font-medium ${yeterli ? 'text-emerald-400' : 'text-red-400'}`}>
+                            <span>{yeterli ? '✓' : '⚠'}</span>
+                            <span>
+                              {yeterli
+                                ? `Stok yeterli — mevcut: ${mevcutStok.toFixed(1)} kg`
+                                : `Stok yetersiz — mevcut: ${mevcutStok.toFixed(1)} kg, eksik: ${(kalem.kg - mevcutStok).toFixed(1)} kg`}
+                            </span>
+                          </div>
+                        );
+                      })()}
+                    </motion.div>
+                  ))}
+                </div>
+
+                {/* Özet + Kaydet */}
+                {kiymaCalc.toplamKg > 0 && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="mt-4 p-4 rounded-xl bg-gradient-to-br from-red-500/10 to-rose-600/5 border border-red-500/20"
+                  >
+                    {/* Özet istatistikler */}
+                    <div className="grid grid-cols-3 gap-3 mb-4">
+                      {[
+                        { label: 'Toplam', value: `${kiymaCalc.toplamKg.toFixed(1)}`, unit: 'kg', color: 'text-white' },
+                        { label: 'Ort. Maliyet', value: `₺${kiymaCalc.ortMaliyet.toFixed(2)}`, unit: '/kg', color: 'text-red-400' },
+                        { label: 'Toplam Maliyet', value: `₺${kiymaCalc.toplamMaliyet.toFixed(0)}`, unit: '', color: 'text-orange-400' },
+                      ].map((s, i) => (
+                        <div key={i} className="text-center">
+                          <p className={`text-lg md:text-2xl font-bold tech-number ${s.color}`}>
+                            {s.value}<span className="text-[10px] text-muted-foreground/60 ml-0.5">{s.unit}</span>
+                          </p>
+                          <p className="text-[9px] text-muted-foreground/60 uppercase tracking-wider">{s.label}</p>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Gelişmiş metrikler */}
+                    {kiymaCalc.stdSapma > 0 && (
+                      <div className="grid grid-cols-2 gap-2 mb-3 p-2.5 rounded-lg bg-secondary/20 border border-border/20">
+                        <div>
+                          <p className="text-[9px] text-muted-foreground/50 uppercase tracking-wider mb-0.5">Std. Sapma</p>
+                          <p className="text-xs font-bold text-purple-400 tech-number">±₺{kiymaCalc.stdSapma.toFixed(2)}/kg</p>
+                          <p className="text-[9px] text-muted-foreground/40">Fiyat tutarlılığı</p>
+                        </div>
+                        <div>
+                          <p className="text-[9px] text-muted-foreground/50 uppercase tracking-wider mb-0.5">Pot. Tasarruf</p>
+                          <p className="text-xs font-bold text-cyan-400 tech-number">₺{kiymaCalc.potansiyelTasarruf.toFixed(2)}</p>
+                          <p className="text-[9px] text-muted-foreground/40">En pahalıyı ucuzla değiştir</p>
+                        </div>
+                        {kiymaCalc.minKalem && kiymaCalc.maxKalem && kiymaCalc.minKalem.name !== kiymaCalc.maxKalem.name && (
+                          <div className="col-span-2 flex items-center justify-between pt-1.5 border-t border-border/15">
+                            <span className="text-[9px] text-emerald-400">⬇ En ucuz: {kiymaCalc.minKalem.name} (₺{kiymaCalc.minKalem.fiyat.toFixed(2)}/kg)</span>
+                            <span className="text-[9px] text-red-400">⬆ En pahalı: {kiymaCalc.maxKalem.name} (₺{kiymaCalc.maxKalem.fiyat.toFixed(2)}/kg)</span>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Kar marjı senaryoları + özel marj */}
+                    <div className="mb-3 pt-3 border-t border-border/20">
+                      <div className="grid grid-cols-4 gap-2 mb-2">
+                        {[20, 30, 50].map(marj => (
+                          <div key={marj} className="text-center p-2 rounded-lg bg-secondary/30">
+                            <p className="text-xs md:text-sm font-bold text-emerald-400 tech-number">
+                              ₺{(kiymaCalc.ortMaliyet * (1 + marj / 100)).toFixed(2)}
+                            </p>
+                            <p className="text-[9px] text-muted-foreground/60">+%{marj} kâr</p>
+                          </div>
+                        ))}
+                        <div className="text-center p-2 rounded-lg bg-blue-500/10 border border-blue-500/20">
+                          <p className="text-xs md:text-sm font-bold text-blue-400 tech-number">
+                            ₺{(kiymaCalc.ortMaliyet * (1 + kiymaOzelMarj / 100)).toFixed(2)}
+                          </p>
+                          <div className="flex items-center justify-center gap-0.5">
+                            <span className="text-[9px] text-muted-foreground/60">+%</span>
+                            <input
+                              type="number"
+                              value={kiymaOzelMarj}
+                              onChange={e => setKiymaOzelMarj(Math.max(0, Number(e.target.value)))}
+                              min={0} max={500}
+                              className="w-8 text-[9px] text-center bg-transparent border-b border-blue-500/30 text-blue-300 focus:outline-none focus:border-blue-400"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Kaydet */}
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        placeholder="Reçete adı..."
+                        value={kiymaReceteAdi}
+                        onChange={e => setKiymaReceteAdi(e.target.value)}
+                        onKeyDown={e => {
+                          if (e.key === 'Enter') {
+                            const n = kiymaReceteAdi.trim();
+                            if (!n) { toast.warning('Reçete adı girin'); return; }
+                            const yeni: KiymaRecete = {
+                              id: crypto.randomUUID(), name: n,
+                              kalemler: kiymaKalemler.filter(k => k.kg > 0),
+                              createdAt: new Date().toISOString(),
+                            };
+                            const updated = [...kiymaReceteler, yeni];
+                            setKiymaReceteler(updated);
+                            setInStorage(KIYMA_STORAGE_KEY as any, updated);
+                            setKiymaReceteAdi('');
+                            toast.success(`"${n}" reçetesi kaydedildi`);
+                          }
+                        }}
+                        className="flex-1 text-xs bg-secondary/50 border border-border/40 rounded-lg px-2.5 py-2 text-foreground/90 focus:outline-none focus:border-red-500/40 placeholder:text-muted-foreground/40"
+                      />
+                      <button
+                        onClick={() => {
+                          const n = kiymaReceteAdi.trim();
+                          if (!n) { toast.warning('Reçete adı girin'); return; }
+                          const yeni: KiymaRecete = {
+                            id: crypto.randomUUID(), name: n,
+                            kalemler: kiymaKalemler.filter(k => k.kg > 0),
+                            createdAt: new Date().toISOString(),
+                          };
+                          const updated = [...kiymaReceteler, yeni];
+                          setKiymaReceteler(updated);
+                          setInStorage(KIYMA_STORAGE_KEY as any, updated);
+                          setKiymaReceteAdi('');
+                          toast.success(`"${n}" reçetesi kaydedildi`);
+                        }}
+                        className="px-4 py-2 bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 text-white text-xs font-bold rounded-lg shadow-lg shadow-red-500/20 transition-all duration-200 whitespace-nowrap flex items-center gap-1.5"
+                      >
+                        <Save className="w-3.5 h-3.5" />
+                        Kaydet
+                      </button>
+                    </div>
+                  </motion.div>
+                )}
+              </div>
+            </div>
+
+            {/* ─── Sağ: Grafikler ─────────────────────────────────── */}
+            <div className="space-y-4">
+              {kiymaCalc.toplamKg > 0 && kiymaCalc.pieData.length > 0 ? (
+                <>
+                  {/* Pasta grafik - maliyet dağılımı */}
+                  <div className="card-premium card-shine rounded-xl md:rounded-2xl p-4 md:p-6">
+                    <h3 className="text-sm md:text-base font-bold text-white flex items-center gap-2 mb-4">
+                      <DollarSign className="w-4 h-4 text-red-400" />
+                      Maliyet Dağılımı
+                    </h3>
+                    <ResponsiveContainer width="100%" height={210}>
+                      <PieChartRC>
+                        <Pie
+                          data={kiymaCalc.pieData}
+                          cx="50%" cy="50%"
+                          innerRadius={52} outerRadius={80}
+                          dataKey="value"
+                          paddingAngle={3}
+                          label={({ name, percent }) => percent > 0.07 ? `%${(percent * 100).toFixed(0)}` : ''}
+                          labelLine={false}
+                        >
+                          {kiymaCalc.pieData.map((_, i) => (
+                            <Cell key={i} fill={KIYMA_COLORS[i % KIYMA_COLORS.length]} />
+                          ))}
+                        </Pie>
+                        <RCTooltip
+                          contentStyle={{ background: '#2a2a3d', border: '1px solid #45475a', borderRadius: 8, fontSize: 11 }}
+                          formatter={(v: number, n: string) => [`₺${v.toFixed(2)}`, n]}
+                        />
+                      </PieChartRC>
+                    </ResponsiveContainer>
+                    {/* Açıklama listesi */}
+                    <div className="space-y-1.5 mt-1">
+                      {kiymaCalc.pieData.map((item, i) => (
+                        <div key={i} className="flex items-center justify-between text-xs">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: KIYMA_COLORS[i % KIYMA_COLORS.length] }} />
+                            <span className="text-muted-foreground/80 truncate">{item.name}</span>
+                          </div>
+                          <div className="flex items-center gap-2 ml-2 flex-shrink-0">
+                            <span className="text-muted-foreground/60">{item.kg.toFixed(1)} kg</span>
+                            <span className="font-bold text-white">₺{item.value.toFixed(2)}</span>
+                            <div className="w-14 bg-secondary/50 rounded-full h-1.5 overflow-hidden">
+                              <div
+                                className="h-full rounded-full"
+                                style={{
+                                  width: `${kiymaCalc.toplamMaliyet > 0 ? (item.value / kiymaCalc.toplamMaliyet * 100) : 0}%`,
+                                  background: KIYMA_COLORS[i % KIYMA_COLORS.length],
+                                }}
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Bar grafik - ürün birim maliyet karşılaştırması */}
+                  <div className="card-premium card-shine rounded-xl md:rounded-2xl p-4 md:p-6">
+                    <h3 className="text-sm font-bold text-white flex items-center gap-2 mb-4">
+                      <BarChart3 className="w-4 h-4 text-orange-400" />
+                      Ürün Birim Maliyet (₺/kg)
+                    </h3>
+                    <ResponsiveContainer width="100%" height={160}>
+                      <BarChartRC data={kiymaCalc.barData} margin={{ top: 0, right: 0, left: -18, bottom: 0 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" vertical={false} />
+                        <XAxis dataKey="name" tick={{ fill: '#7f849c', fontSize: 10 }} axisLine={false} tickLine={false} />
+                        <YAxis tick={{ fill: '#7f849c', fontSize: 10 }} axisLine={false} tickLine={false} tickFormatter={v => `₺${v}`} />
+                        <ReferenceLine
+                          y={kiymaCalc.ortMaliyet}
+                          stroke="#f38ba8"
+                          strokeDasharray="4 3"
+                          label={{ value: `Ort ₺${kiymaCalc.ortMaliyet.toFixed(0)}`, fill: '#f38ba8', fontSize: 10, position: 'insideTopRight' }}
+                        />
+                        <RCTooltip
+                          contentStyle={{ background: '#2a2a3d', border: '1px solid #45475a', borderRadius: 8, fontSize: 11 }}
+                          formatter={(v: number) => [`₺${v.toFixed(2)}/kg`, 'Birim Maliyet']}
+                        />
+                        <Bar dataKey="birimMaliyet" radius={[4, 4, 0, 0]} name="Birim Maliyet/kg">
+                          {kiymaCalc.barData.map((entry, i) => (
+                            <Cell key={i} fill={entry.aboveAvg ? '#f38ba8' : '#a6e3a1'} />
+                          ))}
+                        </Bar>
+                      </BarChartRC>
+                    </ResponsiveContainer>
+                    <div className="flex items-center justify-center gap-4 mt-2">
+                      <span className="flex items-center gap-1 text-[9px] text-muted-foreground/50">
+                        <span className="w-2 h-2 rounded-sm bg-[#a6e3a1] inline-block" /> Ortalamanın altında
+                      </span>
+                      <span className="flex items-center gap-1 text-[9px] text-muted-foreground/50">
+                        <span className="w-2 h-2 rounded-sm bg-[#f38ba8] inline-block" /> Ortalamanın üstünde
+                      </span>
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <div className="card-premium rounded-xl md:rounded-2xl p-8 text-center">
+                  <div className="w-14 h-14 rounded-2xl bg-red-500/10 border border-red-500/15 flex items-center justify-center mx-auto mb-3">
+                    <ChefHat className="w-7 h-7 text-red-400/40" />
+                  </div>
+                  <p className="text-sm font-medium text-white mb-1">Grafik burada görünecek</p>
+                  <p className="text-xs text-muted-foreground/60">Sol taraftan malzemeleri ekleyip kg ve fiyat girin</p>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* ─── Kayıtlı reçeteler karşılaştırması ──────────────── */}
+          {kiymaReceteler.length > 0 && (
+            <div className="card-premium card-shine rounded-xl md:rounded-2xl p-4 md:p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-sm md:text-base font-bold text-white flex items-center gap-2">
+                  <BarChart3 className="w-4 h-4 text-blue-400" />
+                  Kayıtlı Reçete Karşılaştırması
+                  <span className="ml-1 px-1.5 py-0.5 rounded-md text-[10px] font-bold bg-blue-500/15 text-blue-400">{kiymaReceteler.length}</span>
+                </h3>
+                <button
+                  onClick={() => {
+                    if (window.confirm('Tüm kayıtlı reçeteler silinsin mi?')) {
+                      setKiymaReceteler([]);
+                      setInStorage(KIYMA_STORAGE_KEY as any, []);
+                      toast.success('Reçeteler temizlendi');
+                    }
+                  }}
+                  className="p-1.5 text-red-400/40 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-all"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
+              </div>
+
+              {/* Bar chart - ortalama maliyet karşılaştırması */}
+              <ResponsiveContainer width="100%" height={180}>
+                <BarChartRC
+                  data={kiymaReceteler.map(r => {
+                    const totKg = r.kalemler.reduce((s, k) => s + k.kg, 0);
+                    const totM = r.kalemler.reduce((s, k) => s + k.kg * (k.useStokFiyat ? k.stokOrtMaliyet : k.birimFiyat), 0);
+                    return {
+                      name: r.name.length > 14 ? r.name.slice(0, 14) + '…' : r.name,
+                      ortMaliyet: totKg > 0 ? Math.round((totM / totKg) * 100) / 100 : 0,
+                      toplamKg: totKg,
+                    };
+                  })}
+                  margin={{ top: 10, right: 15, left: -10, bottom: 0 }}
+                >
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" vertical={false} />
+                  <XAxis dataKey="name" tick={{ fill: '#7f849c', fontSize: 10 }} axisLine={false} tickLine={false} />
+                  <YAxis tick={{ fill: '#7f849c', fontSize: 10 }} axisLine={false} tickLine={false} tickFormatter={v => `₺${v}`} />
+                  <RCTooltip
+                    contentStyle={{ background: '#2a2a3d', border: '1px solid #45475a', borderRadius: 8, fontSize: 11 }}
+                    formatter={(v: number, _: string, p: any) => [
+                      `₺${v.toFixed(2)}/kg  (${p.payload.toplamKg.toFixed(1)} kg toplam)`,
+                      'Ort. Maliyet',
+                    ]}
+                  />
+                  <Bar dataKey="ortMaliyet" radius={[5, 5, 0, 0]} name="Ort. Maliyet/kg">
+                    {kiymaReceteler.map((_, i) => (
+                      <Cell key={i} fill={KIYMA_COLORS[i % KIYMA_COLORS.length]} />
+                    ))}
+                  </Bar>
+                </BarChartRC>
+              </ResponsiveContainer>
+
+              {/* Reçete kartları */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mt-4">
+                {kiymaReceteler.map((r, ri) => {
+                  const totKg = r.kalemler.reduce((s, k) => s + k.kg, 0);
+                  const totM = r.kalemler.reduce((s, k) => s + k.kg * (k.useStokFiyat ? k.stokOrtMaliyet : k.birimFiyat), 0);
+                  const ortM = totKg > 0 ? totM / totKg : 0;
+                  return (
+                    <motion.div
+                      key={r.id}
+                      initial={{ opacity: 0, y: 6 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: ri * 0.05 }}
+                      className="relative p-3.5 rounded-xl border border-border/30 glass-light overflow-hidden group"
+                    >
+                      <div className="absolute top-0 left-0 right-0 h-0.5 rounded-t-xl" style={{ background: KIYMA_COLORS[ri % KIYMA_COLORS.length] }} />
+                      <div className="flex items-start justify-between mb-2">
+                        <div>
+                          <p className="text-xs font-bold text-white">{r.name}</p>
+                          <p className="text-[10px] text-muted-foreground/60 mt-0.5">
+                            {r.kalemler.length} malzeme &bull; {totKg.toFixed(1)} kg
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all">
+                          <button
+                            onClick={() => {
+                              const yeniKalemler = r.kalemler.map(k => ({ ...k, id: crypto.randomUUID() }));
+                              setKiymaKalemler(yeniKalemler.length > 0 ? yeniKalemler : [{ id: crypto.randomUUID(), name: '', stokId: '', kg: 0, birimFiyat: 0, useStokFiyat: true, stokOrtMaliyet: 0 }]);
+                              setKiymaReceteAdi(r.name + ' (kopya)');
+                              toast.success(`"${r.name}" hesaplayıcıya yüklendi`);
+                            }}
+                            title="Hesaplayıcıya yükle"
+                            className="p-1 text-muted-foreground/40 hover:text-blue-400 hover:bg-blue-500/10 rounded-lg transition-all"
+                          >
+                            <svg xmlns="http://www.w3.org/2000/svg" className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2v13"/><path d="m5 9 7 7 7-7"/><rect x="3" y="19" width="18" height="2" rx="1"/></svg>
+                          </button>
+                          <button
+                            onClick={() => {
+                              const updated = kiymaReceteler.filter(x => x.id !== r.id);
+                              setKiymaReceteler(updated);
+                              setInStorage(KIYMA_STORAGE_KEY as any, updated);
+                            }}
+                            className="p-1 text-muted-foreground/40 hover:text-red-400 rounded-lg transition-all"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        </div>
+                      </div>
+
+                      <p className="text-xl font-bold tech-number mb-0.5" style={{ color: KIYMA_COLORS[ri % KIYMA_COLORS.length] }}>
+                        ₺{ortM.toFixed(2)}<span className="text-[10px] text-muted-foreground/60 ml-0.5">/kg</span>
+                      </p>
+                      <p className="text-[10px] text-muted-foreground/60 mb-2">Toplam: ₺{totM.toFixed(0)}</p>
+
+                      {/* Kâr senaryoları */}
+                      <div className="flex gap-1 flex-wrap mb-2">
+                        {[20, 30, 50].map(marj => (
+                          <span key={marj} className="text-[9px] px-1.5 py-0.5 rounded-md bg-emerald-500/10 text-emerald-400 font-medium">
+                            +%{marj}: ₺{(ortM * (1 + marj / 100)).toFixed(2)}
+                          </span>
+                        ))}
+                      </div>
+
+                      {/* Mini malzeme listesi */}
+                      <div className="pt-2 border-t border-border/20 space-y-0.5">
+                        {r.kalemler.slice(0, 3).map((k, ki) => (
+                          <div key={ki} className="flex items-center justify-between text-[10px]">
+                            <span className="text-muted-foreground/60 truncate max-w-[110px]">{k.name || 'İsimsiz'}</span>
+                            <span className="text-muted-foreground/70 flex-shrink-0">
+                              {k.kg}kg @ ₺{(k.useStokFiyat ? k.stokOrtMaliyet : k.birimFiyat).toFixed(0)}
+                            </span>
+                          </div>
+                        ))}
+                        {r.kalemler.length > 3 && (
+                          <p className="text-[9px] text-muted-foreground/40">+{r.kalemler.length - 3} malzeme daha</p>
+                        )}
+                      </div>
+                    </motion.div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </motion.div>
       )}
 

@@ -7,6 +7,7 @@ import {
   Sparkles, ArrowRight, ShieldCheck, Store, Truck, CheckCircle2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { staggerContainer, tableRow, gridCard, hover, tap } from '../utils/animations';
 import { useNavigate } from 'react-router';
 import * as Dialog from '@radix-ui/react-dialog';
 import { toast } from 'sonner';
@@ -822,7 +823,7 @@ export function CariPage() {
   };
 
   return (
-    <div className="p-3 sm:p-6 lg:p-8 space-y-4 sm:space-y-6 pb-28 sm:pb-6">
+    <div className="p-3 sm:p-6 lg:p-10 space-y-4 sm:space-y-6 lg:space-y-8 pb-28 sm:pb-6">
       <SyncStatusBar tableName="cari_hesaplar" />
 
       {/* Header */}
@@ -1125,19 +1126,22 @@ export function CariPage() {
                 <th className="px-5 py-3"></th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-border">
+            <motion.tbody
+              className="divide-y divide-border"
+              variants={staggerContainer(0.04, 0.02)}
+              initial="initial"
+              animate="animate"
+            >
               <AnimatePresence>
-                {filteredCari.map((cari, index) => (
+                {filteredCari.map((cari) => (
                   <motion.tr
                     key={cari.id}
                     layout
-                    initial={{ opacity: 0, x: -10 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    exit={{ opacity: 0, x: 10 }}
-                    transition={{ delay: index * 0.05, duration: 0.3 }}
-                    className="hover:bg-blue-600/5 transition-all cursor-pointer group data-row border-b border-border/40 last:border-0 relative"
+                    variants={tableRow}
+                    exit={{ opacity: 0, x: 12, filter: 'blur(6px)', transition: { duration: 0.18 } }}
+                    className="hover:bg-accent/30 transition-colors cursor-pointer group data-row border-b border-border/40 last:border-0 relative"
                     style={{ '--row-accent': cari.type === 'Müşteri' ? '#3b82f6' : '#a855f7' } as React.CSSProperties}
-                    whileHover={{ x: 2, transition: { duration: 0.15 } }}
+                    whileHover={hover.row}
                     onClick={() => { setSelectedCari(cari); setIsDetailModalOpen(true); }}
                   >
                     <td className="px-5 py-4">
@@ -1196,7 +1200,7 @@ export function CariPage() {
                   </motion.tr>
                 ))}
               </AnimatePresence>
-            </tbody>
+            </motion.tbody>
           </table>
           {filteredCari.length === 0 && (
             <div className="text-center py-16 text-muted-foreground">

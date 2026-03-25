@@ -751,48 +751,120 @@ export function CeklerPage() {
         {viewTab === 'bank' ? (
           /* BANKA ÖZETİ */
           <div className="space-y-4">
-            <h2 className="text-lg font-bold text-foreground flex items-center gap-2">
-              <Building className={`w-5 h-5 ${accentText}`} />
-              {isVerilen ? 'Verilen Çekler - Banka Özeti' : t('checks.bankSummary')}
-            </h2>
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-bold text-foreground flex items-center gap-2">
+                <Building className={`w-5 h-5 ${accentText}`} />
+                {isVerilen ? 'Verilen Çekler - Banka Özeti' : t('checks.bankSummary')}
+              </h2>
+              {bankSummary.length > 0 && (
+                <motion.div
+                  initial={{ opacity: 0, x: 12 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: 0.2 }}
+                  className="flex items-center gap-3 text-xs"
+                >
+                  {[
+                    { label: 'Beklemede', color: 'text-yellow-400', total: bankSummary.reduce((s, [, d]) => s + d.pending, 0) },
+                    { label: isVerilen ? 'Ödenen' : 'Tahsil', color: 'text-green-400', total: bankSummary.reduce((s, [, d]) => s + d.collected, 0) },
+                    { label: 'Karşılıksız', color: 'text-red-400', total: bankSummary.reduce((s, [, d]) => s + d.bounced, 0) },
+                  ].filter(x => x.total > 0).map(x => (
+                    <span key={x.label} className={`font-bold ${x.color}`}>
+                      {x.label}: ₺{x.total.toLocaleString()}
+                    </span>
+                  ))}
+                </motion.div>
+              )}
+            </div>
+
             {bankSummary.length === 0 ? (
               <p className="text-muted-foreground text-center py-12">{t('checks.noChecks')}</p>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {bankSummary.map(([bankName, data]) => (
-                  <motion.div key={bankName} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}
-                    className="card-premium rounded-xl p-5 space-y-3">
-                    <div className="flex items-center gap-3">
-                      <div className={`w-10 h-10 rounded-lg ${accentBgLight} flex items-center justify-center border`}>
-                        <Building className={`w-5 h-5 ${accentText}`} />
+                {bankSummary.map(([bankName, data], idx) => {
+                  const collectedPct = data.total > 0 ? (data.collected / data.total) * 100 : 0;
+                  const pendingPct = data.total > 0 ? (data.pending / data.total) * 100 : 0;
+                  const bouncedPct = data.total > 0 ? (data.bounced / data.total) * 100 : 0;
+                  return (
+                    <motion.div
+                      key={bankName}
+                      initial={{ opacity: 0, y: 16, scale: 0.97 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      transition={{ delay: idx * 0.06, type: 'spring', stiffness: 280, damping: 26 }}
+                      whileHover={{ y: -3, transition: { duration: 0.2 } }}
+                      className="card-premium rounded-xl p-5 space-y-4 hover:border-white/15 transition-colors"
+                    >
+                      {/* Header */}
+                      <div className="flex items-center gap-3">
+                        <motion.div
+                          whileHover={{ rotate: [0, -8, 8, 0] }}
+                          transition={{ duration: 0.4 }}
+                          className={`w-10 h-10 rounded-xl ${accentBgLight} flex items-center justify-center border`}
+                        >
+                          <Building className={`w-5 h-5 ${accentText}`} />
+                        </motion.div>
+                        <div className="flex-1 min-w-0">
+                          <p className="font-bold text-foreground truncate">{bankName}</p>
+                          <p className="text-xs text-muted-foreground">{data.count} çek</p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-base sm:text-lg font-black text-foreground">₺{data.total.toLocaleString()}</p>
+                          {collectedPct > 0 && (
+                            <p className="text-[10px] text-green-400 font-bold">%{Math.round(collectedPct)} tahsil</p>
+                          )}
+                        </div>
                       </div>
-                      <div className="flex-1">
-                        <p className="font-bold text-foreground">{bankName}</p>
-                        <p className="text-xs text-muted-foreground">{data.count} çek</p>
+
+                      {/* Stat chips */}
+                      <div className="grid grid-cols-3 gap-2 text-center">
+                        {[
+                          { label: isVerilen ? 'Bekleyen' : t('checks.statusPending'), value: data.pending, color: 'yellow' },
+                          { label: isVerilen ? 'Ödenen' : t('checks.statusCollected'), value: data.collected, color: 'green' },
+                          { label: t('checks.statusBounced'), value: data.bounced, color: 'red' },
+                        ].map(({ label, value, color }) => (
+                          <motion.div
+                            key={label}
+                            initial={{ opacity: 0, scale: 0.8 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            transition={{ delay: idx * 0.06 + 0.15, type: 'spring', stiffness: 400 }}
+                            className={`p-2 rounded-xl bg-${color}-500/10 border border-${color}-500/15`}
+                          >
+                            <p className="text-[9px] sm:text-[10px] text-muted-foreground leading-none mb-1">{label}</p>
+                            <p className={`text-xs sm:text-sm font-black text-${color}-400`}>₺{value.toLocaleString()}</p>
+                          </motion.div>
+                        ))}
                       </div>
-                      <p className="text-lg font-bold text-foreground">₺{data.total.toLocaleString()}</p>
-                    </div>
-                    <div className="grid grid-cols-3 gap-2 text-center">
-                      <div className="p-2 rounded-lg bg-yellow-500/10">
-                        <p className="text-xs text-muted-foreground">{isVerilen ? 'Bekleyen' : t('checks.statusPending')}</p>
-                        <p className="text-sm font-bold text-yellow-400">₺{data.pending.toLocaleString()}</p>
+
+                      {/* Animated stacked progress bar */}
+                      <div className="space-y-1.5">
+                        <div className="h-2.5 bg-muted/20 rounded-full overflow-hidden flex gap-px">
+                          <motion.div
+                            initial={{ width: 0 }}
+                            animate={{ width: `${collectedPct}%` }}
+                            transition={{ duration: 0.8, delay: idx * 0.06 + 0.2, ease: [0.16, 1, 0.3, 1] }}
+                            className="bg-green-500 h-full rounded-l-full"
+                          />
+                          <motion.div
+                            initial={{ width: 0 }}
+                            animate={{ width: `${pendingPct}%` }}
+                            transition={{ duration: 0.8, delay: idx * 0.06 + 0.3, ease: [0.16, 1, 0.3, 1] }}
+                            className="bg-yellow-500 h-full"
+                          />
+                          <motion.div
+                            initial={{ width: 0 }}
+                            animate={{ width: `${bouncedPct}%` }}
+                            transition={{ duration: 0.8, delay: idx * 0.06 + 0.4, ease: [0.16, 1, 0.3, 1] }}
+                            className="bg-red-500 h-full rounded-r-full"
+                          />
+                        </div>
+                        <div className="flex items-center justify-between text-[9px] text-muted-foreground/60">
+                          <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-green-500 inline-block" /> Tahsil</span>
+                          <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-yellow-500 inline-block" /> Beklemede</span>
+                          <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-red-500 inline-block" /> İade</span>
+                        </div>
                       </div>
-                      <div className="p-2 rounded-lg bg-green-500/10">
-                        <p className="text-xs text-muted-foreground">{isVerilen ? 'Ödenen' : t('checks.statusCollected')}</p>
-                        <p className="text-sm font-bold text-green-400">₺{data.collected.toLocaleString()}</p>
-                      </div>
-                      <div className="p-2 rounded-lg bg-red-500/10">
-                        <p className="text-xs text-muted-foreground">{t('checks.statusBounced')}</p>
-                        <p className="text-sm font-bold text-red-400">₺{data.bounced.toLocaleString()}</p>
-                      </div>
-                    </div>
-                    <div className="h-2 bg-muted/30 rounded-full overflow-hidden flex">
-                      {data.collected > 0 && <div className="bg-green-500 h-full" style={{ width: `${(data.collected / data.total) * 100}%` }} />}
-                      {data.pending > 0 && <div className="bg-yellow-500 h-full" style={{ width: `${(data.pending / data.total) * 100}%` }} />}
-                      {data.bounced > 0 && <div className="bg-red-500 h-full" style={{ width: `${(data.bounced / data.total) * 100}%` }} />}
-                    </div>
-                  </motion.div>
-                ))}
+                    </motion.div>
+                  );
+                })}
               </div>
             )}
           </div>

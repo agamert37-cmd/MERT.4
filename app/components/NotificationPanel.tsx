@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Bell, X, Check, AlertTriangle, Info, AlertCircle, CheckCircle, ChevronRight } from 'lucide-react';
+import { Bell, X, Check, AlertTriangle, Info, AlertCircle, CheckCircle, ChevronRight, Sparkles, Trash2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import * as Popover from '@radix-ui/react-popover';
 import { useNotifications } from '../contexts/NotificationContext';
@@ -8,7 +8,7 @@ import { formatDistanceToNow } from 'date-fns';
 import { tr } from 'date-fns/locale';
 
 export function NotificationPanel() {
-  const { notifications, unreadCount, markAsRead, markAllAsRead, removeNotification } = useNotifications();
+  const { notifications, unreadCount, markAsRead, markAllAsRead, removeNotification, clearAll } = useNotifications();
   const [isOpen, setIsOpen] = useState(false);
   const navigate = useNavigate();
 
@@ -20,16 +20,13 @@ export function NotificationPanel() {
     }
   };
 
-  const getNotificationIcon = (type: string) => {
+  const getNotificationIcon = (type: string, category?: string) => {
+    if (category === 'guncelleme') return <Sparkles className="w-5 h-5 text-emerald-400" />;
     switch (type) {
-      case 'error':
-        return <AlertCircle className="w-5 h-5 text-red-400" />;
-      case 'warning':
-        return <AlertTriangle className="w-5 h-5 text-orange-400" />;
-      case 'success':
-        return <CheckCircle className="w-5 h-5 text-green-400" />;
-      default:
-        return <Info className="w-5 h-5 text-blue-400" />;
+      case 'error':   return <AlertCircle className="w-5 h-5 text-red-400" />;
+      case 'warning': return <AlertTriangle className="w-5 h-5 text-orange-400" />;
+      case 'success': return <CheckCircle className="w-5 h-5 text-green-400" />;
+      default:        return <Info className="w-5 h-5 text-blue-400" />;
     }
   };
 
@@ -76,7 +73,7 @@ export function NotificationPanel() {
 
       <Popover.Portal>
         <Popover.Content
-          className="w-[420px] bg-card border border-border rounded-xl shadow-2xl z-50"
+          className="w-[min(420px,calc(100vw-1rem))] bg-card border border-border rounded-xl shadow-2xl z-50"
           sideOffset={5}
           align="end"
         >
@@ -86,29 +83,40 @@ export function NotificationPanel() {
             exit={{ opacity: 0, y: -10 }}
           >
             {/* Header */}
-            <div className="flex items-center justify-between p-4 border-b border-border">
+            <div className="flex items-center justify-between p-3 sm:p-4 border-b border-border">
               <div className="flex items-center gap-2">
-                <Bell className="w-5 h-5 text-blue-400" />
-                <h3 className="text-lg font-bold text-white">Bildirimler</h3>
+                <Bell className="w-4 h-4 text-blue-400" />
+                <h3 className="text-base font-bold text-white">Bildirimler</h3>
                 {unreadCount > 0 && (
-                  <span className="px-2 py-0.5 bg-blue-600 text-white text-xs font-bold rounded-full">
+                  <span className="px-1.5 py-0.5 bg-blue-600 text-white text-xs font-bold rounded-full">
                     {unreadCount}
                   </span>
                 )}
               </div>
-              {unreadCount > 0 && (
-                <button
-                  onClick={markAllAsRead}
-                  className="text-xs text-blue-400 hover:text-blue-300 transition-colors flex items-center gap-1"
-                >
-                  <Check className="w-3 h-3" />
-                  Tümünü Okundu İşaretle
-                </button>
-              )}
+              <div className="flex items-center gap-2">
+                {unreadCount > 0 && (
+                  <button
+                    onClick={markAllAsRead}
+                    className="text-xs text-blue-400 hover:text-blue-300 transition-colors flex items-center gap-1"
+                  >
+                    <Check className="w-3 h-3" />
+                    <span className="hidden sm:inline">Tümünü Okundu</span>
+                  </button>
+                )}
+                {notifications.length > 0 && (
+                  <button
+                    onClick={() => { if (confirm('Tüm bildirimler silinsin mi?')) clearAll(); }}
+                    className="text-xs text-gray-500 hover:text-red-400 transition-colors flex items-center gap-1"
+                    title="Tümünü Sil"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
             </div>
 
             {/* Notifications List */}
-            <div className="max-h-[500px] overflow-y-auto">
+            <div className="max-h-[60vh] sm:max-h-[500px] overflow-y-auto">
               {sortedNotifications.length === 0 ? (
                 <div className="p-8 text-center">
                   <Bell className="w-12 h-12 text-muted-foreground/40 mx-auto mb-3" />
@@ -134,8 +142,12 @@ export function NotificationPanel() {
 
                       <div className="flex gap-3">
                         {/* Icon */}
-                        <div className={`flex-shrink-0 p-2 rounded-lg ${getNotificationBg(notification.type, notification.read)}`}>
-                          {getNotificationIcon(notification.type)}
+                        <div className={`flex-shrink-0 p-2 rounded-lg ${
+                          notification.category === 'guncelleme'
+                            ? 'bg-emerald-600/40'
+                            : getNotificationBg(notification.type, notification.read)
+                        }`}>
+                          {getNotificationIcon(notification.type, notification.category)}
                         </div>
 
                         {/* Content */}
@@ -190,10 +202,15 @@ export function NotificationPanel() {
 
             {/* Footer */}
             {sortedNotifications.length > 0 && (
-              <div className="p-3 border-t border-border text-center">
-                <button className="text-sm text-blue-400 hover:text-blue-300 transition-colors">
-                  Tüm Bildirimleri Görüntüle
+              <div className="p-3 border-t border-border flex items-center justify-between">
+                <button
+                  onClick={() => { navigate('/guncelleme-notlari'); setIsOpen(false); }}
+                  className="text-xs text-emerald-400 hover:text-emerald-300 transition-colors flex items-center gap-1"
+                >
+                  <Sparkles className="w-3 h-3" />
+                  Güncelleme Notları
                 </button>
+                <span className="text-xs text-gray-600">{sortedNotifications.length} bildirim</span>
               </div>
             )}
           </motion.div>

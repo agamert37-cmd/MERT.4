@@ -22,10 +22,11 @@ export function PremiumTooltip({ active, payload, label, formatter, labelFormatt
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 8, scale: 0.96 }}
-      animate={{ opacity: 1, y: 0, scale: 1 }}
-      exit={{ opacity: 0, y: 8, scale: 0.96 }}
-      transition={{ type: 'spring', stiffness: 260, damping: 26 }}
+      initial={{ opacity: 0, y: 10, scale: 0.90, filter: 'blur(8px)' }}
+      animate={{ opacity: 1, y: 0, scale: 1, filter: 'blur(0px)' }}
+      exit={{ opacity: 0, y: 6, scale: 0.94, filter: 'blur(6px)' }}
+      transition={{ type: 'spring', stiffness: 380, damping: 28, mass: 0.7,
+        filter: { duration: 0.2, ease: [0.16, 1, 0.3, 1] } }}
       className="relative"
     >
       <div className="glass-strong rounded-xl p-3.5 shadow-[0_12px_36px_rgba(0,0,0,0.5),0_0_0_1px_rgba(59,130,246,0.08)]">
@@ -102,23 +103,27 @@ export function AnimatedProgress({
         }}
       >
         <motion.div
-          initial={{ width: 0 }}
-          animate={{ width: `${percentage}%` }}
-          transition={{ 
-            duration: 1.2, 
-            delay,
-            ease: [0.16, 1, 0.3, 1] 
+          initial={{ width: 0, opacity: 0.5 }}
+          animate={{ width: `${percentage}%`, opacity: 1 }}
+          transition={{
+            width: { duration: 1.4, delay, ease: [0.16, 1, 0.3, 1] },
+            opacity: { duration: 0.4, delay }
           }}
           className="h-full rounded-full relative overflow-hidden"
           style={{
-            background: gradientFrom && gradientTo 
+            background: gradientFrom && gradientTo
               ? `linear-gradient(90deg, ${gradientFrom}, ${gradientTo})`
               : color || '#3b82f6',
-            boxShadow: `0 0 12px ${(color || gradientTo || '#3b82f6')}30`
+            boxShadow: `0 0 14px ${(color || gradientTo || '#3b82f6')}40, inset 0 1px 0 rgba(255,255,255,0.15)`
           }}
         >
-          {/* Shimmer effect on progress bar */}
-          <div className="absolute inset-0 shimmer opacity-60" />
+          {/* Sürekli hareket eden shimmer */}
+          <motion.div
+            className="absolute inset-0 rounded-full"
+            style={{ background: 'linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.18) 50%, transparent 100%)', backgroundSize: '200% 100%' }}
+            animate={{ backgroundPosition: ['200% 0%', '-200% 0%'] }}
+            transition={{ duration: 2.2, repeat: Infinity, ease: 'linear', delay: delay + 1.4 }}
+          />
         </motion.div>
       </div>
     </div>
@@ -194,16 +199,29 @@ export function Sparkline({ data, color = '#3b82f6', width = 80, height = 28, sh
       />
       
       {showDot && lastPoint && (
-        <motion.circle
-          initial={{ scale: 0, opacity: 0 }}
-          animate={{ scale: 1, opacity: 1 }}
-          transition={{ delay: 1, type: 'spring', stiffness: 200, damping: 22 }}
-          cx={lastPoint.x}
-          cy={lastPoint.y}
-          r={2.5}
-          fill={color}
-          style={{ filter: `drop-shadow(0 0 4px ${color}80)` }}
-        />
+        <>
+          {/* Dış halka — yavaş büyüyüp kaybolan */}
+          <motion.circle
+            cx={lastPoint.x}
+            cy={lastPoint.y}
+            fill={color}
+            r={2.5}
+            opacity={0.35}
+            animate={{ r: [2.5, 7, 2.5], opacity: [0.45, 0, 0.45] }}
+            transition={{ duration: 2.6, repeat: Infinity, ease: 'easeOut', delay: 1.1 }}
+          />
+          {/* İç nokta — spring ile ortaya çıkar, sürekli parlar */}
+          <motion.circle
+            initial={{ scale: 0, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            transition={{ delay: 1, type: 'spring', stiffness: 220, damping: 20 }}
+            cx={lastPoint.x}
+            cy={lastPoint.y}
+            r={2.8}
+            fill={color}
+            style={{ filter: `drop-shadow(0 0 5px ${color})` }}
+          />
+        </>
       )}
     </svg>
   );
@@ -693,14 +711,28 @@ export function MetricBar({ label, value, maxValue, color, suffix = '', delay = 
 // ─── Live Pulse Dot ──────────────────────────────────────────────────────────
 export function LivePulse({ color = '#10b981', size = 8 }: { color?: string; size?: number }) {
   return (
-    <span className="relative inline-flex">
+    <span className="relative inline-flex items-center justify-center" style={{ width: size + 8, height: size + 8 }}>
+      {/* Üçüncü halka — en dışta, çok silik */}
       <motion.span
-        animate={{ scale: [1, 1.8, 1], opacity: [0.5, 0, 0.5] }}
-        transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
-        className="absolute inline-flex rounded-full"
-        style={{ width: size, height: size, backgroundColor: color, opacity: 0.4 }}
+        className="absolute rounded-full"
+        style={{ backgroundColor: color }}
+        animate={{ scale: [1, 3.2, 1], opacity: [0.15, 0, 0.15] }}
+        transition={{ duration: 2.4, repeat: Infinity, ease: 'easeOut', delay: 0.15 }}
+        initial={{ width: size, height: size }}
       />
-      <span className="relative inline-flex rounded-full" style={{ width: size, height: size, backgroundColor: color, boxShadow: `0 0 6px ${color}80` }} />
+      {/* İkinci halka */}
+      <motion.span
+        className="absolute rounded-full"
+        style={{ backgroundColor: color }}
+        animate={{ scale: [1, 2.2, 1], opacity: [0.3, 0, 0.3] }}
+        transition={{ duration: 2.4, repeat: Infinity, ease: 'easeOut' }}
+        initial={{ width: size, height: size }}
+      />
+      {/* Merkez nokta */}
+      <span
+        className="relative rounded-full"
+        style={{ width: size, height: size, backgroundColor: color, boxShadow: `0 0 8px ${color}90, 0 0 2px ${color}` }}
+      />
     </span>
   );
 }
@@ -716,8 +748,9 @@ export function TrendBadge({ value, suffix = '%', showArrow = true }: TrendBadge
   const isPos = value >= 0;
   return (
     <motion.span
-      initial={{ opacity: 0, x: -8 }}
-      animate={{ opacity: 1, x: 0 }}
+      initial={{ opacity: 0, scale: 0.7, y: -4 }}
+      animate={{ opacity: 1, scale: 1, y: 0 }}
+      transition={{ type: 'spring', stiffness: 480, damping: 22, mass: 0.7 }}
       className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-bold ${
         isPos
           ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/20'
@@ -764,13 +797,21 @@ export function HorizontalBarList({ items, maxValue: externalMax }: { items: HBa
   return (
     <div className="space-y-3">
       {items.map((item, i) => (
-        <div key={i} className="flex items-center gap-3">
-          <span className="text-[11px] text-muted-foreground w-24 truncate">{item.label}</span>
-          <div className="flex-1 h-3 rounded-full bg-[#131c30] overflow-hidden">
+        <motion.div
+          key={i}
+          className="flex items-center gap-3 group"
+          initial={{ opacity: 0, x: -8 }}
+          whileInView={{ opacity: 1, x: 0 }}
+          viewport={{ once: true, margin: '-20px' }}
+          transition={{ duration: 0.5, delay: i * 0.06, ease: [0.16, 1, 0.3, 1] }}
+        >
+          <span className="text-[11px] text-muted-foreground w-24 truncate group-hover:text-white transition-colors">{item.label}</span>
+          <div className="flex-1 h-3 rounded-full bg-[#131c30] overflow-hidden relative">
             <motion.div
               initial={{ width: 0 }}
-              animate={{ width: `${(item.value / maxValue) * 100}%` }}
-              transition={{ duration: 1, delay: i * 0.1, ease: [0.16, 1, 0.3, 1] }}
+              whileInView={{ width: `${(item.value / maxValue) * 100}%` }}
+              viewport={{ once: true, margin: '-20px' }}
+              transition={{ duration: 1.1, delay: i * 0.08 + 0.1, ease: [0.16, 1, 0.3, 1] }}
               className="h-full rounded-full"
               style={{
                 background: `linear-gradient(90deg, ${item.color}80, ${item.color})`,
@@ -778,10 +819,10 @@ export function HorizontalBarList({ items, maxValue: externalMax }: { items: HBa
               }}
             />
           </div>
-          <span className="text-[12px] font-bold text-white tabular-nums w-16 text-right">
+          <span className="text-[12px] font-bold text-white tabular-nums w-16 text-right group-hover:text-blue-300 transition-colors">
             ₺{item.value >= 1000 ? `${(item.value / 1000).toFixed(1)}k` : item.value.toLocaleString('tr-TR')}
           </span>
-        </div>
+        </motion.div>
       ))}
     </div>
   );

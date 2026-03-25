@@ -50,7 +50,9 @@ const MAX_LOGS = 1000;
 let _sessionId: string | null = null;
 function getSessionId(): string {
   if (!_sessionId) {
-    _sessionId = `s_${Date.now().toString(36)}_${Math.random().toString(36).substring(2, 8)}`;
+    const arr = new Uint8Array(8);
+    crypto.getRandomValues(arr);
+    _sessionId = `s_${Array.from(arr).map(b => b.toString(16).padStart(2, '0')).join('')}`;
   }
   return _sessionId;
 }

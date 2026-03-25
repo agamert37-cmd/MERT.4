@@ -8,6 +8,7 @@ import {
   Minus, MoreVertical, Warehouse, Scale, Clock, Flame, History, PieChart
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { staggerContainer, staggerItem, hover, tap, rowItem } from '../utils/animations';
 import { toast } from 'sonner';
 import * as Dialog from '@radix-ui/react-dialog';
 import { SyncStatusBar, SyncBadge } from '../components/SyncStatusBar';
@@ -762,7 +763,7 @@ export function StokPage() {
   };
 
   return (
-    <div className="p-3 sm:p-6 lg:p-8 space-y-4 sm:space-y-6 bg-background min-h-screen text-white font-sans pb-28 sm:pb-6">
+    <div className="p-3 sm:p-6 lg:p-10 space-y-4 sm:space-y-6 lg:space-y-8 bg-background min-h-screen text-white font-sans pb-28 sm:pb-6">
       <SyncStatusBar tableName="urunler" />
 
       {/* Module Health Banner */}
@@ -918,7 +919,12 @@ export function StokPage() {
           </div>
 
           {/* Products */}
-          <div className="space-y-3">
+          <motion.div
+            className="space-y-3"
+            variants={staggerContainer(0.04, 0.02)}
+            initial="initial"
+            animate="animate"
+          >
             <AnimatePresence>
               {filteredProducts.map((product, idx) => {
                 const isExp = expandedProducts.has(product.id);
@@ -932,11 +938,10 @@ export function StokPage() {
                   <motion.div
                     key={product.id}
                     layout
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -10 }}
-                    transition={{ delay: idx * 0.02 }}
-                    className={`rounded-2xl border transition-all overflow-hidden backdrop-blur-xl ${
+                    variants={staggerItem}
+                    exit={{ opacity: 0, y: -8, filter: 'blur(4px)', transition: { duration: 0.18 } }}
+                    whileHover={{ y: -2, transition: { duration: 0.15 } }}
+                    className={`rounded-2xl border transition-colors overflow-hidden backdrop-blur-xl ${
                       isNeg ? 'bg-gradient-to-br from-red-500/10 via-card to-card border-red-500/25 hover:border-red-500/40' : isCrit ? 'bg-gradient-to-br from-amber-500/8 via-card to-card border-amber-500/20 hover:border-amber-500/35' : 'card-premium hover:border-blue-500/30'
                     }`}
                   >
@@ -1055,7 +1060,7 @@ export function StokPage() {
                 <p className="text-gray-600 text-sm mt-1">Arama kriterlerinizi degistirin veya yeni urun ekleyin</p>
               </GlassCard>
             )}
-          </div>
+          </motion.div>
         </motion.div>
       )}
 
