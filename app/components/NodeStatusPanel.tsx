@@ -32,7 +32,6 @@ import {
   getWALCount, walClear,
   getAutoSyncConfig, saveAutoSyncConfig, startAutoNodeSync,
 } from '../lib/active-client';
-import { supabase } from '../lib/supabase';
 
 const REAL_TABLES = [
   'fisler', 'urunler', 'cari_hesaplar', 'kasa_islemleri', 'personeller',
@@ -173,7 +172,7 @@ export function NodeStatusPanel() {
     saveAutoSyncConfig({ ...cfg, enabled: newEnabled });
     setAutoSyncEnabled(newEnabled);
     if (newEnabled) {
-      startAutoNodeSync(supabase);
+      startAutoNodeSync(null as any);
       toast.success(`Otomatik senkron aktif — her ${cfg.intervalHours}s`);
     } else {
       toast.info('Otomatik senkron devre dışı');
@@ -264,7 +263,7 @@ export function NodeStatusPanel() {
     setBootstrapProgress(0);
     toast.info(`${node.name} bootstrap başlıyor — ${REAL_TABLES.length} tablo yükleniyor...`);
     try {
-      const result = await bootstrapNode(node, supabase, (pct, tableName) => {
+      const result = await bootstrapNode(node, null as any, (pct, tableName) => {
         setBootstrapProgress(pct);
         if (pct % 20 === 0 && pct > 0) {
           console.log(`[Bootstrap] %${pct} — ${tableName}`);
@@ -289,7 +288,7 @@ export function NodeStatusPanel() {
     setSyncingNodeId(node.id);
     toast.info(`${node.name} → Cloud senkronizasyon başlıyor...`);
     try {
-      const result = await syncNodeToCloud(node, supabase, (pct) => {
+      const result = await syncNodeToCloud(node, null as any, (pct) => {
         if (pct % 25 === 0) console.log(`[NodeToCloud] %${pct}`);
       });
       toast.success(`Node→Cloud tamamlandı: ${result.ok} tablo, ${result.totalRows} kayıt`);

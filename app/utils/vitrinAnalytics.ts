@@ -3,7 +3,7 @@
  * Tüm veriler Pazarlama modülünden izlenebilir.
  */
 import { getFromStorage, setInStorage, StorageKey } from './storage';
-import { kvSet } from '../lib/supabase-kv';
+import { kvSet } from '../lib/pouchdb-kv';
 
 export interface VitrinEvent {
   id: string;
@@ -93,7 +93,7 @@ export async function loadVitrinAnalyticsFromKV(): Promise<void> {
   const local = getFromStorage<VitrinAnalytics>(StorageKey.VITRIN_ANALYTICS);
   if (local && local.events && local.events.length > 0) return;
   try {
-    const { kvGet } = await import('../lib/supabase-kv');
+    const { kvGet } = await import('../lib/pouchdb-kv');
     const kv = await kvGet<VitrinAnalytics>('vitrin_analytics');
     if (kv && kv.events && kv.events.length > 0) {
       setInStorage(StorageKey.VITRIN_ANALYTICS, kv);

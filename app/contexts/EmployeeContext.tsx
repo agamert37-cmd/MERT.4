@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, ReactNode, useEffect, useCallback } from 'react';
 import { StorageKey, getFromStorage, setInStorage } from '../utils/storage';
-import { kvGet, kvSet } from '../lib/supabase-kv';
+import { kvGet, kvSet } from '../lib/pouchdb-kv';
 
 export interface Employee {
   id: string;

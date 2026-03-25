@@ -28,7 +28,7 @@ import {
   PieChart as RePieChart, Pie, Cell, AreaChart, Area
 } from 'recharts';
 import { PremiumTooltip, GlowBar, EmptyChartState } from '../components/ChartComponents';
-import { kvGet, kvSet } from '../lib/supabase-kv';
+import { kvGet, kvSet } from '../lib/pouchdb-kv';
 
 export type MovementType = 'ALIS' | 'SATIS' | 'MUSTERI_IADE' | 'TOPTANCI_IADE' | 'FIRE' | 'URETIM_CIKIS' | 'URETIM_GIRIS' | 'FATURA_ALIS' | 'FATURA_SATIS' | 'FATURA_IPTAL';
 export type ProductCategory = string;

@@ -5,7 +5,7 @@ import { useEmployee } from '../contexts/EmployeeContext';
 import { toast } from 'sonner';
 import { getFromStorage, setInStorage, StorageKey } from '../utils/storage';
 import { hashString } from '../utils/security';
-import { kvSet } from '../lib/supabase-kv';
+import { kvSet } from '../lib/pouchdb-kv';
 
 interface ProfileEditModalProps {
   isOpen: boolean;

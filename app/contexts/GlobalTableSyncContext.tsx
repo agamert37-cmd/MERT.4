@@ -16,11 +16,12 @@
  *   uretim_kayitlari, faturalar, fatura_stok, tahsilatlar, arac_km_logs
  */
 
-import React from 'react';
+import React, { useEffect } from 'react';
 import { useTableSync } from '../hooks/useTableSync';
 import { cariFromDb, cariToDb } from '../pages/CariPage';
 import { productFromDb, productToDb } from '../pages/StokPage';
 import { StorageKey } from '../utils/storage';
+import { startAllSync, stopAllSync } from '../lib/pouchdb';
 
 // ─── Alt bileşenler (her biri bir tablo için useTableSync çalıştırır) ────────
 // Not: Hook kuralları gereği her useTableSync ayrı bir bileşende olmalıdır,
@@ -129,6 +130,12 @@ interface GlobalTableSyncProviderProps {
  * Supabase tablolarından okunur ve storage_update eventi yayınlanır.
  */
 export function GlobalTableSyncProvider({ children }: GlobalTableSyncProviderProps) {
+  // PouchDB ↔ CouchDB continuous sync başlat
+  useEffect(() => {
+    startAllSync();
+    return () => stopAllSync();
+  }, []);
+
   return (
     <>
       {/* Her tablo için ayrı senkronizasyon bileşeni */}

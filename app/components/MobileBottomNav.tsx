@@ -265,12 +265,12 @@ export function MobileBottomNav() {
 
               {/* Scrollable content */}
               <div className="flex-1 overflow-y-auto px-4 pb-6 space-y-4 overscroll-contain">
-                {filteredGroups.length === 0 ? (
+                {filteredGroups.length === 0 && (
                   <div className="flex flex-col items-center justify-center py-10 text-gray-500">
                     <Search className="w-8 h-8 mb-2 opacity-40" />
                     <p className="text-sm">Sonuç bulunamadı</p>
                   </div>
-                ))}
+                )}
 
                 {/* Oturum Kapat */}
                 <div className="pt-3 mt-1 border-t border-white/[0.06]">

@@ -4,9 +4,7 @@ import { hashString, hashStringWithSalt } from '../utils/security';
 import { registerSession, removeSession, generateCSRFToken, appendToLogChain, addSecurityThreat, isUnusualHour, recordDeviceLogin, checkPasswordBreach } from '../utils/security';
 import { logActivity } from '../utils/activityLogger';
 import { toast } from 'sonner';
-import { forceSync } from '../utils/supabase-storage';
-import { supabase } from '../lib/supabase';
-import { kvSet } from '../lib/supabase-kv';
+import { kvGet, kvSet, kvDel } from '../lib/pouchdb-kv';
 
 interface User {
   id: string;
@@ -149,20 +147,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const currentUser = userRef.current;
         if (!currentUser) return;
         try {
-          const { data } = await supabase
-            .from('kv_store_daadfb0c')
-            .select('value')
-            .eq('key', `sync_force_logout_${currentUser.id}`)
-            .maybeSingle();
+          const value = await kvGet<any>(`sync_force_logout_${currentUser.id}`);
 
-          if (data?.value) {
+          if (value) {
             // Anahtarı temizle
-            await supabase
-              .from('kv_store_daadfb0c')
-              .delete()
-              .eq('key', `sync_force_logout_${currentUser.id}`);
+            await kvDel(`sync_force_logout_${currentUser.id}`);
 
-            const reason = data.value?.reason || 'Yönetici tarafından oturumunuz sonlandırıldı.';
+            const reason = value?.reason || 'Yönetici tarafından oturumunuz sonlandırıldı.';
             logActivity('security_alert', 'Uzaktan oturum kapatma', {
               employeeId: currentUser.id,
               employeeName: currentUser.name,
@@ -172,7 +163,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             removeSession();
             appendToLogChain(`force_logout:${currentUser.id}:${currentUser.name}`);
             doLogout();
-            toast.error(`🔒 ${reason}`, { duration: 8000 });
+            toast.error(`${reason}`, { duration: 8000 });
           }
         } catch {}
       }, 60_000); // 60 saniyede bir kontrol
@@ -195,10 +186,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // ── Mobil / Yeni Cihaz: Yerel veri yoksa Supabase'den çek ─────
     // localStorage henüz senkronize edilmemişse (yeni cihaz / ilk açılış)
     // forceSync() ile buluttan personel verisini indir.
+    // PouchDB otomatik senkronize eder — ek forceSync gerekmez
     if (storedPersonnel.length === 0) {
       try {
-        await forceSync();
-        storedPersonnel = getFromStorage<any[]>(StorageKey.PERSONEL_DATA) || [];
+        // PouchDB'den personel verisini kontrol et
+        const kvPersonnel = await kvGet<any[]>('personel_status');
+        if (kvPersonnel && kvPersonnel.length > 0) {
+          setInStorage(StorageKey.PERSONEL_DATA, kvPersonnel);
+          storedPersonnel = kvPersonnel;
+        }
       } catch {
         // Ağ yoksa yine de devam et — acil bypass (admin/1234) çalışmaya devam eder
       }

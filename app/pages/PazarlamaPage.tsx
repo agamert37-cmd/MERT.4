@@ -22,7 +22,7 @@ import {
 import { motion, AnimatePresence } from 'motion/react';
 import { toast } from 'sonner';
 import { getFromStorage, setInStorage, StorageKey } from '../utils/storage';
-import { kvSet } from '../lib/supabase-kv';
+import { kvSet } from '../lib/pouchdb-kv';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useEmployee } from '../contexts/EmployeeContext';
@@ -844,7 +844,7 @@ export function PazarlamaPage() {
       setContent({ ...DEFAULT_CONTENT, ...saved });
     } else {
       // BUG FIX [AJAN-2]: localStorage boşsa KV'den yükle (mobil ilk açılış)
-      import('../lib/supabase-kv').then(({ kvGet }) =>
+      import('../lib/pouchdb-kv').then(({ kvGet }) =>
         kvGet<PazarlamaContent>('pazarlama_content').then(remote => {
           if (remote) {
             setContent({ ...DEFAULT_CONTENT, ...remote });

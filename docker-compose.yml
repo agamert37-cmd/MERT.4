@@ -1,7 +1,24 @@
 services:
+  couchdb:
+    image: couchdb:3.3
+    container_name: mert-couchdb
+    restart: unless-stopped
+    ports:
+      - "5984:5984"
+    environment:
+      COUCHDB_USER: admin
+      COUCHDB_PASSWORD: mert2024
+    volumes:
+      - couchdb_data:/opt/couchdb/data
+
   mert-site:
     build: .
     container_name: mert-site
     ports:
       - "8080:80"
     restart: unless-stopped
+    depends_on:
+      - couchdb
+
+volumes:
+  couchdb_data:

@@ -2,14 +2,14 @@
 import React, { useState, useRef, useEffect } from 'react';
 import OpenAI from 'openai';
 import { Settings, Database, Sparkles, Save, Trash2, Eye, EyeOff, CheckCircle, XCircle, Shield, ExternalLink, Building2, Phone, MapPin, FileText, Hash, Monitor, Upload, Loader2, RefreshCw, X, Plus, History, ShieldCheck, Zap, Wrench, Star } from 'lucide-react';
-import { getOpenAIKey, saveOpenAIKey, clearOpenAIKey, isOpenAIConfigured, getEmbeddedSupabaseConfig } from '../lib/api-config';
+import { getOpenAIKey, saveOpenAIKey, clearOpenAIKey, isOpenAIConfigured } from '../lib/api-config';
 import { reinitializeOpenAI } from '../lib/chatgpt-assistant';
-import { testSupabaseConnection } from '../lib/supabase';
+import { testCouchDbConnection } from '../lib/pouchdb';
 import { getFromStorage, setInStorage, StorageKey } from '../utils/storage';
 import { toast } from 'sonner';
 import { motion, AnimatePresence } from 'motion/react';
 import { staggerContainer, gridCard, hover } from '../utils/animations';
-import { SERVER_BASE_URL, SUPABASE_ANON_KEY as publicAnonKey } from '../lib/supabase-config';
+// supabase-config removed — using CouchDB
 import { runIntegrityCheck, getStorageStats, type IntegrityReport } from '../utils/data-integrity';
 import { useAuth } from '../contexts/AuthContext';
 import { useEmployee } from '../contexts/EmployeeContext';
@@ -18,7 +18,7 @@ import { logActivity } from '../utils/activityLogger';
 import { useModuleBus } from '../hooks/useModuleBus';
 import { getPagePermissions } from '../utils/permissions';
 import { LocalRepoPanel } from '../components/LocalRepoPanel';
-import { kvSet } from '../lib/supabase-kv';
+import { kvSet } from '../lib/pouchdb-kv';
 import { NodeStatusPanel } from '../components/NodeStatusPanel';
 import { getLocalNodeId, getLocalNodeConfig, saveLocalNodeConfig, type NodeInfo } from '../lib/node-registry';
 import { CHANGELOG, type ChangeType } from '../data/changelog';
@@ -100,8 +100,7 @@ export function SettingsPage() {
     logActivity('settings_change', 'Sunucu yapılandırması güncellendi', { employeeName: user?.name, page: 'Ayarlar' });
   };
 
-  const supabaseConfig = getEmbeddedSupabaseConfig();
-  const serverBase = SERVER_BASE_URL;
+  const supabaseConfig = { supabaseUrl: '(CouchDB)', supabaseAnonKey: '(not applicable)' };
 
   const handleSaveOpenAI = () => {
     if (!openaiKey.trim()) { toast.error('OpenAI API Key boş olamaz!'); return; }
@@ -119,11 +118,11 @@ export function SettingsPage() {
   const handleTestAll = async () => {
     setTesting(true); setTestResults({ supabase: null, openai: null });
     try {
-      const result = await testSupabaseConnection();
-      setTestResults(p => ({ ...p, supabase: result.success }));
-      if (result.success) toast.success('Supabase bağlantısı başarılı!');
-      else toast.error(`Supabase: ${result.error || 'Bağlantı hatası'}`);
-    } catch { setTestResults(p => ({ ...p, supabase: false })); toast.error('Supabase bağlantı hatası!'); }
+      const result = await testCouchDbConnection();
+      setTestResults(p => ({ ...p, supabase: result.ok }));
+      if (result.ok) toast.success('CouchDB bağlantısı başarılı!');
+      else toast.error(`CouchDB: ${result.error || 'Bağlantı hatası'}`);
+    } catch { setTestResults(p => ({ ...p, supabase: false })); toast.error('CouchDB bağlantı hatası!'); }
 
     if (openaiKey.trim()) {
       try {
@@ -217,7 +216,7 @@ export function SettingsPage() {
   useEffect(() => {
     const localSettings = getFromStorage<any>(StorageKey.SYSTEM_SETTINGS);
     if (!localSettings?.companyInfo && !localSettings?.loginBranding) {
-      import('../lib/supabase-kv').then(({ kvGet }) =>
+      import('../lib/pouchdb-kv').then(({ kvGet }) =>
         kvGet<any>('system_settings').then(remote => {
           if (remote) {
             setInStorage(StorageKey.SYSTEM_SETTINGS, remote);

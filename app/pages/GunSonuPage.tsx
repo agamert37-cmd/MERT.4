@@ -29,7 +29,7 @@ import { toast } from 'sonner';
 import * as Dialog from '@radix-ui/react-dialog';
 import * as AlertDialog from '@radix-ui/react-alert-dialog';
 import { generateGunSonuPDF, type GunSonuPDFData } from '../utils/reportGenerator';
-import { kvGet, kvSet } from '../lib/supabase-kv';
+import { kvGet, kvSet } from '../lib/pouchdb-kv';
 
 interface Transaction {
   id: string;

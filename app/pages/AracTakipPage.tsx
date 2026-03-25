@@ -37,7 +37,6 @@ import { useLanguage } from '../contexts/LanguageContext';
 import { useModuleBus } from '../hooks/useModuleBus';
 import { getPagePermissions } from '../utils/permissions';
 import { useTableSync } from '../hooks/useTableSync';
-import { supabase } from '../lib/supabase';
 
 // ─── Types ─────────────────────────────────────────────────
 interface Vehicle {

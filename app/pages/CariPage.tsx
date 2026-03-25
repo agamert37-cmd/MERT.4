@@ -20,7 +20,7 @@ import { logActivity } from '../utils/activityLogger';
 import { useModuleBus } from '../hooks/useModuleBus';
 import { getPagePermissions } from '../utils/permissions';
 import { usePageSecurity } from '../hooks/usePageSecurity';
-import { kvGet, kvSet } from '../lib/supabase-kv';
+import { kvGet, kvSet } from '../lib/pouchdb-kv';
 
 // ─── Interfaces ─────────────────────────────────────────────────────────────
 interface Cari {

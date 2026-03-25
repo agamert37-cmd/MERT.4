@@ -5,8 +5,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import * as Dialog from '@radix-ui/react-dialog';
 import { toast } from 'sonner';
 import { getFromStorage, setInStorage, StorageKey } from '../utils/storage';
-import { supabase } from '../lib/supabase';
-import { kvGet, kvSet } from '../lib/supabase-kv';
+import { kvGet, kvSet } from '../lib/pouchdb-kv';
 import { useEmployee } from '../contexts/EmployeeContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useLanguage } from '../contexts/LanguageContext';
@@ -115,21 +114,13 @@ export function FisHistoryPage() {
     orderAsc: false,
   });
 
-  // Stok ve cari güncelleme yardımcıları (Supabase direkt upsert)
-  const upsertStokToSupabase = useCallback(async (updatedStokList: any[]) => {
-    try {
-      await supabase.from('urunler').upsert(updatedStokList, { onConflict: 'id' });
-    } catch (e: any) {
-      console.warn('[FisHistory] Stok Supabase upsert hatası:', e.message);
-    }
+  // Sync handled by useTableSync — no direct Supabase upsert needed
+  const upsertStokToSupabase = useCallback(async (_updatedStokList: any[]) => {
+    // no-op: sync handled by useTableSync
   }, []);
 
-  const upsertCariToSupabase = useCallback(async (updatedCariList: any[]) => {
-    try {
-      await supabase.from('cari_hesaplar').upsert(updatedCariList, { onConflict: 'id' });
-    } catch (e: any) {
-      console.warn('[FisHistory] Cari Supabase upsert hatası:', e.message);
-    }
+  const upsertCariToSupabase = useCallback(async (_updatedCariList: any[]) => {
+    // no-op: sync handled by useTableSync
   }, []);
 
   const [fisler, setFisler] = useState<Fis[]>([]);

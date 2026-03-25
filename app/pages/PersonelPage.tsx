@@ -15,8 +15,7 @@ import { getPagePermissions } from '../utils/permissions';
 import { SyncStatusBar, SyncBadge } from '../components/SyncStatusBar';
 import { getFromStorage, setInStorage, StorageKey } from '../utils/storage';
 import { hashString } from '../utils/security';
-import { supabase } from '../lib/supabase';
-import { kvSet } from '../lib/supabase-kv';
+import { kvSet } from '../lib/pouchdb-kv';
 import { analyzePasswordStrength, getSecurityPolicy, checkRateLimit, generateCSRFToken, validateCSRFToken, addSecurityThreat, detectRapidActions, deepSanitize, detectSQLInjection, appendToLogChain } from '../utils/security';
 import { useSecurityMonitor } from '../hooks/useSecurityMonitor';
 import { PasswordStrengthBar } from '../components/PasswordStrengthBar';
@@ -386,14 +385,11 @@ export function PersonelPage() {
         label: 'Evet, Kapat',
         onClick: async () => {
           try {
-            // Supabase KV'e force_logout sinyali yaz — kullanıcının tarayıcısı 60s içinde algılar
-            await supabase.from('kv_store_daadfb0c').upsert({
-              key: `sync_force_logout_${personId}`,
-              value: {
-                reason: `Yönetici (${user?.name || 'Admin'}) tarafından oturumunuz sonlandırıldı.`,
-                by: user?.name || 'Admin',
-                at: new Date().toISOString(),
-              },
+            // KV'e force_logout sinyali yaz — kullanıcının tarayıcısı 60s içinde algılar
+            await kvSet(`sync_force_logout_${personId}`, {
+              reason: `Yönetici (${user?.name || 'Admin'}) tarafından oturumunuz sonlandırıldı.`,
+              by: user?.name || 'Admin',
+              at: new Date().toISOString(),
             });
             // Personel durumunu offline olarak işaretle — [AJAN-2]: useTableSync üzerinden güncelle
             // setInStorage bypass kaldırıldı — useTableSync hem localStorage hem Supabase'i yönetir

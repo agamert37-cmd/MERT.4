@@ -27,7 +27,7 @@ import {
 } from 'recharts';
 import { toast } from 'sonner';
 import { getFromStorage, setInStorage, StorageKey } from '../utils/storage';
-import { kvGet, kvSet } from '../lib/supabase-kv';
+import { kvGet, kvSet } from '../lib/pouchdb-kv';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useEmployee } from '../contexts/EmployeeContext';
@@ -37,62 +37,17 @@ import { useModuleBus } from '../hooks/useModuleBus';
 import { getPagePermissions } from '../utils/permissions';
 import { usePageSecurity } from '../hooks/usePageSecurity';
 import { productToDb, Product } from './StokPage';
-import { SERVER_BASE_URL, SUPABASE_ANON_KEY as publicAnonKey, projectId } from '../lib/supabase-config';
-import { supabase } from '../lib/supabase';
-
-const KV_SERVER_URL = SERVER_BASE_URL;
 
 // [AJAN-2 | claude/serene-gagarin | 2026-03-24] Son düzenleyen: Claude Sonnet 4.6
 
-/** Değişen stok kalemlerini doğrudan Supabase urunler tablosuna yazar */
-async function syncStokItemsToSupabase(items: any[]) {
-  try {
-    if (items.length === 0) return;
-    const rows = items.map(item => productToDb({
-      id: item.id,
-      name: item.name || '',
-      category: item.category || 'Genel',
-      unit: item.unit || 'KG',
-      sellPrice: item.sellPrice ?? item.sell_price ?? 0,
-      currentStock: item.currentStock ?? item.current_stock ?? item.stock ?? 0,
-      minStock: item.minStock ?? item.min_stock ?? 5,
-      movements: Array.isArray(item.movements) ? item.movements : [],
-    } as any));
-    const { error } = await supabase.from('urunler').upsert(rows, { onConflict: 'id' });
-    if (error) console.warn('[UretimPage] urunler upsert hatası:', error.message);
-    else console.log('[UretimPage] urunler Supabase sync OK:', rows.length, 'kalem');
-  } catch (e: any) {
-    console.warn('[UretimPage] Supabase urunler sync exception:', e.message);
-  }
+/** No-op: sync handled by useTableSync */
+async function syncStokItemsToSupabase(_items: any[]) {
+  // no-op: sync handled by useTableSync
 }
 
-/** Değişen stok kalemlerini Supabase KV'ye senkronize et */
-async function syncStokItemsToKV(items: any[]) {
-  try {
-    if (!projectId || !publicAnonKey) return;
-    const keys = items.map(item => `urunler_${item.id}`);
-    const values = items.map(item => {
-      // productToDb beklenilen Product formatına normalize et
-      const normalized = {
-        id: item.id,
-        name: item.name || '',
-        category: item.category || 'Genel',
-        unit: item.unit || 'KG',
-        sellPrice: item.sellPrice ?? item.sell_price ?? 0,
-        currentStock: item.currentStock ?? item.current_stock ?? item.stock ?? 0,
-        minStock: item.minStock ?? item.min_stock ?? 5,
-        movements: Array.isArray(item.movements) ? item.movements : [],
-      };
-      return productToDb(normalized as any);
-    });
-    await fetch(`${KV_SERVER_URL}/kv/mset`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${publicAnonKey}` },
-      body: JSON.stringify({ keys, values }),
-    });
-  } catch (e) {
-    console.error('[UretimPage] KV sync error:', e);
-  }
+/** No-op: sync handled by useTableSync/PouchDB */
+async function syncStokItemsToKV(_items: any[]) {
+  // no-op: sync handled by PouchDB
 }
 
 // ─── Interfaces ───────────────────────────────────────────────────

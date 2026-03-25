@@ -4,7 +4,7 @@
  */
 
 import { getFromStorage, setInStorage, StorageKey } from './storage';
-import { kvSet } from '../lib/supabase-kv';
+import { kvSet } from '../lib/pouchdb-kv';
 
 export type ActivityType =
   | 'login' | 'logout'
@@ -140,7 +140,7 @@ export async function loadActivityLogsFromKV(): Promise<void> {
   const local = getFromStorage<ActivityLogEntry[]>(StorageKey.USER_ACTIVITY_LOG);
   if (local && local.length > 0) return;
   try {
-    const { kvGet } = await import('../lib/supabase-kv');
+    const { kvGet } = await import('../lib/pouchdb-kv');
     const kv = await kvGet<ActivityLogEntry[]>('activity_logs');
     if (kv && kv.length > 0) {
       setInStorage(StorageKey.USER_ACTIVITY_LOG, kv);

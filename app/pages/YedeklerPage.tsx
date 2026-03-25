@@ -13,8 +13,10 @@ import { toast } from 'sonner';
 import * as Dialog from '@radix-ui/react-dialog';
 import { getFromStorage, setInStorage, StorageKey } from '../utils/storage';
 import { generateDetailedExcelBackup, generatePDFBackup } from '../utils/exportGenerator';
-import { kvGet, kvGetByPrefixWithKeys, kvSet, TABLE_PREFIXES } from '../lib/supabase-kv';
-import { SERVER_BASE_URL, SUPABASE_ANON_KEY } from '../lib/supabase-config';
+import { kvGet, kvGetByPrefixWithKeys, kvSet, TABLE_PREFIXES } from '../lib/pouchdb-kv';
+// supabase-config removed — using CouchDB
+const SERVER_BASE_URL = '';
+const SUPABASE_ANON_KEY = '';
 import { useAuth } from '../contexts/AuthContext';
 import { useEmployee } from '../contexts/EmployeeContext';
 import { useLanguage } from '../contexts/LanguageContext';
@@ -332,22 +334,10 @@ export function YedeklerPage() {
     try {
       const localResult = collectLocalStorageData();
 
-      // Supabase tablolarını da çek
-      setCreateProgress('Supabase tablolarından veriler okunuyor...');
-      const { supabase } = await import('../lib/supabase');
-      const REAL_TABLES_LIST = [
-        'fisler', 'urunler', 'cari_hesaplar', 'kasa_islemleri', 'personeller',
-        'bankalar', 'cekler', 'araclar', 'arac_shifts', 'arac_km_logs',
-        'uretim_profilleri', 'uretim_kayitlari', 'faturalar', 'fatura_stok', 'tahsilatlar',
-      ];
+      // PouchDB tables — read from localStorage (sync handled by PouchDB)
+      setCreateProgress('Yerel veriler toplanıyor...');
       const tables: Record<string, any[]> = {};
       let totalTableRows = 0;
-      for (const table of REAL_TABLES_LIST) {
-        try {
-          const { data } = await supabase.from(table).select('*');
-          if (data && data.length > 0) { tables[table] = data; totalTableRows += data.length; }
-        } catch {}
-      }
 
       setCreateProgress('JSON hazırlanıyor...');
       const entry: BackupEntry = {
@@ -407,39 +397,18 @@ export function YedeklerPage() {
         localStorage.setItem(`${STORAGE_PREFIX}${key}`, typeof value === 'string' ? value : JSON.stringify(value));
       });
 
-      // [AJAN-2]: Eğer dosya tablo formatındaysa (format: 'supabase_tables') Supabase tablolarına yaz
+      // Table format restore — write to localStorage only (PouchDB sync handles the rest)
       const fileBackup = restoreFileContent;
       if (fileBackup.format === 'supabase_tables' && fileBackup.tables) {
-        setRestoreProgress('Supabase tablolarına geri yükleniyor...');
-        // Geçici backup ID oluştur ve restoreFromTableBackup'ı çağır için önce KV'e yaz
-        const result = await (async () => {
-          let ok = 0, fail = 0;
-          const { supabase } = await import('../lib/supabase');
-          const BATCH = 100;
-          for (const [tableName, rows] of Object.entries(fileBackup.tables as Record<string, any[]>)) {
-            if (!Array.isArray(rows) || rows.length === 0) continue;
-            for (let i = 0; i < rows.length; i += BATCH) {
-              const chunk = rows.slice(i, i + BATCH);
-              const { error } = await supabase.from(tableName).upsert(chunk, { onConflict: 'id' });
-              if (error) fail += chunk.length; else ok += chunk.length;
-            }
-          }
-          return { ok, fail };
-        })();
-        setRestoreProgress(`${result.ok} satır yüklendi${result.fail > 0 ? `, ${result.fail} hata` : ''}. Sayfa yenileniyor...`);
-      } else if (data._supabase_kv) {
-        // Eski KV format
-        setRestoreProgress('Supabase KV veriler geri yükleniyor...');
-        const tables = Object.keys(data._supabase_kv).filter(k => !k.startsWith('_kv_'));
-        for (const tableName of tables) {
-          const items = data._supabase_kv[tableName];
-          if (!Array.isArray(items)) continue;
-          const prefix = (TABLE_PREFIXES as any)[tableName];
-          if (!prefix) continue;
-          const validItems = items.filter((i: any) => i?.id);
-          if (validItems.length === 0) continue;
-          await apiPost('/kv/mset', { keys: validItems.map((i: any) => `${prefix}${i.id}`), values: validItems });
+        setRestoreProgress('Tablo verileri localStorage\'a geri yükleniyor...');
+        let ok = 0;
+        for (const [tableName, rows] of Object.entries(fileBackup.tables as Record<string, any[]>)) {
+          if (!Array.isArray(rows) || rows.length === 0) continue;
+          const storageKey = `isleyen_et_${tableName}`;
+          localStorage.setItem(storageKey, JSON.stringify(rows));
+          ok += rows.length;
         }
+        setRestoreProgress(`${ok} satır yüklendi. Sayfa yenileniyor...`);
       }
       toast.success('Geri yükleme tamamlandı! Sayfa yenileniyor...', { duration: 3000 });
       setTimeout(() => window.location.reload(), 2000);

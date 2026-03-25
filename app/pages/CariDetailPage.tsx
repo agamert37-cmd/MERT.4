@@ -23,7 +23,6 @@ import { useTableSync } from '../hooks/useTableSync';
 import { useModuleBus } from '../hooks/useModuleBus';
 import { cariToDb, cariFromDb } from './CariPage';
 import { getCompanyInfo } from './SettingsPage';
-import { supabase } from '../lib/supabase';
 
 interface RealDailyExtract {
   date: string;
@@ -400,13 +399,7 @@ export function CariDetailPage() {
     setInStorage(StorageKey.FISLER, updated);
     window.dispatchEvent(new Event('storage_update'));
     setRefreshCounter(c => c + 1);
-    // [AJAN-2]: Supabase fisler tablosunu da güncelle
-    if (updatedFis) {
-      const updatedRow = updater(updatedFis);
-      supabase.from('fisler').update(updatedRow).eq('id', fisId)
-        .then(({ error }) => { if (error) console.warn('[CariDetail] Supabase fis update hatası:', error.message); })
-        .catch(e => console.warn('[CariDetail] Supabase exception:', e));
-    }
+    // Sync handled by useTableSync
   };
 
   const handleAddInvoice = (fisId: string) => {

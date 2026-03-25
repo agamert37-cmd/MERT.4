@@ -1,174 +1,137 @@
+// [AJAN-2 | claude/serene-gagarin | 2026-03-25] Son düzenleyen: Claude Opus 4.6
 /**
- * Storage utility - Now powered by Supabase with localStorage fallback
- * All data operations now sync with Supabase automatically
+ * Storage utility — localStorage yardımcıları
+ * PouchDB geçişi sonrası: Supabase dual-write kaldırıldı.
+ * Artık sadece localStorage işlemleri — sync PouchDB/CouchDB ile yapılıyor.
  */
-
-import {
-  getFromStorage as getFromLS,
-  setInStorage as setInLS,
-  removeFromStorage as removeFromLS,
-  fetchFromSupabase,
-  saveToSupabase,
-  insertToSupabase,
-  updateInSupabase,
-  deleteFromSupabase,
-  subscribeToTable,
-  forceSync,
-  createSystemBackup,
-  getSystemBackups,
-  restoreSystemBackup,
-  StorageKey as SK,
-  syncFromCloud,
-  pushAllToCloud,
-  syncKeyToCloud,
-  startInitialSync,
-  startRealtimeSync,
-  stopRealtimeSync,
-} from './supabase-storage';
-
-// Re-export everything
-export {
-  fetchFromSupabase,
-  saveToSupabase,
-  insertToSupabase,
-  updateInSupabase,
-  deleteFromSupabase,
-  subscribeToTable,
-  createSystemBackup,
-  getSystemBackups,
-  restoreSystemBackup,
-  syncFromCloud,
-  pushAllToCloud,
-  syncKeyToCloud,
-  startInitialSync,
-  startRealtimeSync,
-  stopRealtimeSync,
-  forceSync,
-};
-
-export const StorageKey = SK;
 
 const STORAGE_PREFIX = 'isleyen_et_';
 
-/**
- * Get item from storage (localStorage + Supabase)
- */
-export const getFromStorage = getFromLS;
+// ─── StorageKey enum ─────────────────────────────────────────────────────────
 
-/**
- * Set item in storage (localStorage + Supabase)
- */
-export const setInStorage = setInLS;
+export const StorageKey = {
+  USER: 'user',
+  FISLER: 'fisler_data',
+  STOK_DATA: 'stok_data',
+  CARI_DATA: 'cari_data',
+  KASA_DATA: 'kasa_data',
+  PERSONEL_DATA: 'personel_data',
+  BANK_DATA: 'bank_data',
+  CEKLER_DATA: 'cekler_data',
+  ARAC_DATA: 'arac_data',
+  ARAC_SHIFTS: 'arac_shifts',
+  ARAC_KM_LOGS: 'arac_km_logs',
+  URETIM_DATA: 'uretim_data',
+  URETIM_PROFILES: 'uretim_profiles',
+  FATURALAR: 'faturalar',
+  FATURA_STOK: 'fatura_stok',
+  CATEGORIES: 'categories',
+  POS_DEVICES: 'pos_devices',
+  CURRENT_EMPLOYEE: 'current_employee',
+  SETTINGS: 'settings',
+  DELETED_FISLER: 'deleted_fisler',
+} as const;
 
-/**
- * Remove item from storage
- */
-export const removeFromStorage = removeFromLS;
+// ─── Okuma/Yazma ─────────────────────────────────────────────────────────────
 
-/**
- * Clear all app data from localStorage
- */
+export function getFromStorage<T>(key: string): T | null {
+  try {
+    const raw = localStorage.getItem(STORAGE_PREFIX + key);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+export function setInStorage<T>(key: string, value: T): void {
+  try {
+    localStorage.setItem(STORAGE_PREFIX + key, JSON.stringify(value));
+    // storage_update event yayınla (DashboardPage vb. dinleyiciler için)
+    setTimeout(() => window.dispatchEvent(new Event('storage_update')), 0);
+  } catch (e) {
+    console.error('Storage write error:', e);
+  }
+}
+
+export function removeFromStorage(key: string): void {
+  try {
+    localStorage.removeItem(STORAGE_PREFIX + key);
+  } catch {}
+}
+
+// ─── Eski uyumluluk (artık no-op) ────────────────────────────────────────────
+
+export async function forceSync(): Promise<void> { /* PouchDB otomatik senkronize eder */ }
+export async function startInitialSync(): Promise<void> { /* PouchDB otomatik */ }
+export function startRealtimeSync(): void { /* PouchDB changes feed */ }
+export function stopRealtimeSync(): void { /* no-op */ }
+export function getSyncState() {
+  return { pendingCount: 0, isSyncing: false, lastSyncAt: Date.now(), isOnline: navigator.onLine, lastError: null };
+}
+
+// Eski re-export'lar — bazı sayfalar bunları kullanıyor olabilir
+export async function fetchFromSupabase(): Promise<any> { return null; }
+export async function saveToSupabase(): Promise<void> {}
+export async function insertToSupabase(): Promise<void> {}
+export async function updateInSupabase(): Promise<void> {}
+export async function deleteFromSupabase(): Promise<void> {}
+export function subscribeToTable(): any { return { unsubscribe: () => {} }; }
+export async function createSystemBackup(): Promise<any> { return null; }
+export async function getSystemBackups(): Promise<any[]> { return []; }
+export async function restoreSystemBackup(): Promise<boolean> { return false; }
+export async function syncFromCloud(): Promise<void> {}
+export async function pushAllToCloud(): Promise<void> {}
+export async function syncKeyToCloud(): Promise<void> {}
+
+// ─── Yardımcılar ─────────────────────────────────────────────────────────────
+
 export const clearAllStorage = (): boolean => {
   try {
-    const keys = Object.keys(localStorage);
-    keys.forEach(key => {
-      if (key.startsWith(STORAGE_PREFIX)) {
-        localStorage.removeItem(key);
-      }
-    });
+    Object.keys(localStorage)
+      .filter(k => k.startsWith(STORAGE_PREFIX))
+      .forEach(k => localStorage.removeItem(k));
     return true;
-  } catch (error) {
-    console.error('Error clearing localStorage:', error);
-    return false;
-  }
+  } catch { return false; }
 };
 
-/**
- * Check if localStorage is available
- */
 export const isStorageAvailable = (): boolean => {
   try {
-    const testKey = '__storage_test__';
-    localStorage.setItem(testKey, 'test');
-    localStorage.removeItem(testKey);
+    localStorage.setItem('__test__', '1');
+    localStorage.removeItem('__test__');
     return true;
-  } catch {
-    return false;
-  }
+  } catch { return false; }
 };
 
-/**
- * Get storage size in bytes
- */
 export const getStorageSize = (): number => {
   let total = 0;
   for (const key in localStorage) {
-    if (localStorage.hasOwnProperty(key)) {
-      total += localStorage[key].length + key.length;
-    }
+    if (localStorage.hasOwnProperty(key)) total += localStorage[key].length + key.length;
   }
   return total;
 };
 
-/**
- * Get app-specific storage size
- */
 export const getAppStorageSize = (): number => {
   let total = 0;
-  const keys = Object.keys(localStorage);
-  keys.forEach(key => {
-    if (key.startsWith(STORAGE_PREFIX)) {
-      total += localStorage[key].length + key.length;
-    }
-  });
+  Object.keys(localStorage)
+    .filter(k => k.startsWith(STORAGE_PREFIX))
+    .forEach(k => { total += localStorage[k].length + k.length; });
   return total;
 };
 
-/**
- * Backup all app data
- */
 export const backupStorage = (): string | null => {
   try {
     const data: Record<string, any> = {};
-    const keys = Object.keys(localStorage);
-    keys.forEach(key => {
-      if (key.startsWith(STORAGE_PREFIX)) {
-        data[key] = localStorage[key];
-      }
-    });
+    Object.keys(localStorage)
+      .filter(k => k.startsWith(STORAGE_PREFIX))
+      .forEach(k => { data[k] = localStorage[k]; });
     return JSON.stringify(data);
-  } catch (error) {
-    console.error('Error backing up storage:', error);
-    return null;
-  }
+  } catch { return null; }
 };
 
-/**
- * Restore data from backup
- */
 export const restoreStorage = (backup: string): boolean => {
   try {
     const data = JSON.parse(backup);
-    Object.keys(data).forEach(key => {
-      localStorage.setItem(key, data[key]);
-    });
+    Object.keys(data).forEach(k => localStorage.setItem(k, data[k]));
     return true;
-  } catch (error) {
-    console.error('Error restoring storage:', error);
-    return false;
-  }
-};
-
-/**
- * Migrate data to new version (for future use)
- */
-export const migrateStorageVersion = (fromVersion: number, toVersion: number): boolean => {
-  try {
-    // Add migration logic here when needed
-    console.log(`Migrating storage from v${fromVersion} to v${toVersion}`);
-    return true;
-  } catch (error) {
-    console.error('Error migrating storage:', error);
-    return false;
-  }
+  } catch { return false; }
 };

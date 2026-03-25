@@ -15,7 +15,6 @@ import {
   Wifi,
   WifiOff,
   Upload,
-  ExternalLink,
   Loader2,
   Zap,
   HardDrive,
@@ -24,9 +23,7 @@ import {
   Activity,
 } from 'lucide-react';
 import { useSyncContext } from '../contexts/SyncContext';
-import { getSupabaseTableEditorUrl } from '../lib/auto-setup';
 import { toast } from 'sonner';
-import { supabase } from '../lib/supabase';
 
 interface SyncStatusBarProps {
   tableName?: string;
@@ -66,54 +63,11 @@ const TABLE_CONFIG: Record<string, { storageKey: string; toDb?: (item: any) => a
 };
 
 async function pushAllLocalToSupabase(
-  tableName: string,
-  onProgress?: (msg: string) => void
+  _tableName: string,
+  _onProgress?: (msg: string) => void
 ): Promise<{ ok: number; fail: number }> {
-  const STORAGE_PREFIX = 'isleyen_et_';
-  const config = TABLE_CONFIG[tableName];
-  if (!config) return { ok: 0, fail: 0 };
-
-  const raw = localStorage.getItem(STORAGE_PREFIX + config.storageKey);
-  if (!raw) return { ok: 0, fail: 0 };
-
-  let items: any[] = [];
-  try { items = JSON.parse(raw); } catch { return { ok: 0, fail: 0 }; }
-  if (!Array.isArray(items) || items.length === 0) return { ok: 0, fail: 0 };
-
-  onProgress?.(`${items.length} kayıt gönderiliyor...`);
-
-  let ok = 0;
-  let fail = 0;
-  const chunkSize = 100;
-
-  for (let i = 0; i < items.length; i += chunkSize) {
-    const chunk = items.slice(i, i + chunkSize).filter((item: any) => item && item.id);
-    if (chunk.length === 0) continue;
-
-    // toDb dönüşümü uygula (camelCase → snake_case, JSON stringify vb.)
-    const dbRows = config.toDb ? chunk.map(item => {
-      try { return config.toDb!(item); } catch { return item; }
-    }) : chunk;
-
-    try {
-      const { error } = await supabase
-        .from(tableName)
-        .upsert(dbRows, { onConflict: 'id' });
-
-      if (error) {
-        console.warn(`[SyncStatusBar] ${tableName} upsert hatası:`, error.message);
-        fail += chunk.length;
-      } else {
-        ok += chunk.length;
-        onProgress?.(`${ok}/${items.length} kayıt gönderildi...`);
-      }
-    } catch (e: any) {
-      console.warn(`[SyncStatusBar] ${tableName} gönderim hatası:`, e.message);
-      fail += chunk.length;
-    }
-  }
-
-  return { ok, fail };
+  // no-op: sync handled by PouchDB/useTableSync
+  return { ok: 0, fail: 0 };
 }
 
 export function SyncStatusBar({ tableName }: SyncStatusBarProps) {
@@ -455,17 +409,7 @@ export function SyncStatusBar({ tableName }: SyncStatusBarProps) {
                     </>
                   )}
                 </div>
-                {isConnected && (
-                  <a
-                    href={getSupabaseTableEditorUrl()}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center gap-1.5 px-3 py-1.5 bg-white/5 hover:bg-white/10 border border-white/10 text-white/50 hover:text-white/80 text-[10px] font-medium rounded-lg transition-all"
-                  >
-                    <ExternalLink className="w-3 h-3" />
-                    Tablo Editörü
-                  </a>
-                )}
+                {/* Table editor link removed — using CouchDB */}
               </div>
             </div>
           </motion.div>

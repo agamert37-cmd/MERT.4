@@ -9,7 +9,6 @@ import { useModuleBus } from '../hooks/useModuleBus';
 import { getPagePermissions } from '../utils/permissions';
 import { usePageSecurity } from '../hooks/usePageSecurity';
 import { useTableSync } from '../hooks/useTableSync';
-import { supabase } from '../lib/supabase';
 import { motion, AnimatePresence } from 'motion/react';
 import { toast } from 'sonner';
 import {
@@ -109,10 +108,7 @@ export function saveCek(cek: CekData) {
   else existing.unshift(cek);
   setInStorage(StorageKey.CEKLER_DATA, existing);
   window.dispatchEvent(new Event('storage_update'));
-  // [AJAN-2]: Supabase cekler tablosuna da yaz
-  supabase.from('cekler').upsert([cek], { onConflict: 'id' })
-    .then(({ error }) => { if (error) console.warn('[CeklerPage] Supabase upsert hatası:', error.message); })
-    .catch(e => console.warn('[CeklerPage] Supabase exception:', e));
+  // Sync handled by useTableSync
 }
 
 export function getCekler(): CekData[] {

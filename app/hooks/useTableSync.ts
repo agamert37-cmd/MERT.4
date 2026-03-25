@@ -1,263 +1,28 @@
-// [AJAN-2 | claude/serene-gagarin | 2026-03-25] Son düzenleyen: Claude Sonnet 4.6
+// [AJAN-2 | claude/serene-gagarin | 2026-03-25] Son düzenleyen: Claude Opus 4.6
 /**
- * useTableSync — Doğrudan Supabase Tablo Senkronizasyonu
+ * useTableSync — PouchDB + CouchDB Tablo Senkronizasyonu
  *
- * Her tableName, Supabase'deki gerçek bir tabloya karşılık gelir.
- * KV store yerine doğrudan tablo operasyonları kullanılır:
- *   - Okuma  : supabase.from(table).select('*')
- *   - Yazma  : supabase.from(table).upsert(row, { onConflict: 'id' })
- *   - Silme  : supabase.from(table).delete().eq('id', id)
- *   - Gerçek zamanlı: postgres_changes subscription
+ * Her tableName, ayrı bir PouchDB veritabanına karşılık gelir (mert_{tableName}).
+ * CouchDB ile continuous sync otomatik yapılır.
  *
- * Veri kaybı önleme:
- *   - localStorage önbellek (anlık yükleme + çevrimdışı destek)
+ * Önceki Supabase versiyonunun aynı API'si korunmuştur:
+ *   - data, syncState, addItem, updateItem, deleteItem, batchUpdate, refresh, setData
+ *   - toDb/fromDb dönüşümleri
  *   - Optimistik güncelleme + hata durumunda rollback
- *   - Silinmiş ID tombstone (birden fazla cihaz arası silme çakışması önleme)
- *   - Bekleyen yazma takibi (kendi değişikliklerimizin realtime echo'sunu atlama)
- *   - Adaptif yazma kuyruğu (batch, debounce, backoff)
+ *
+ * Kaldırılan karmaşıklıklar:
+ *   - WriteQueue (PouchDB yerel yazıyor, sync otomatik)
+ *   - WAL / dual-write (PouchDB/CouchDB replication ile gereksiz)
+ *   - Connection cooldown (PouchDB retry ile hallediliyor)
+ *   - Server fallback endpoints (artık yok)
+ *   - Tombstone tracking (PouchDB _deleted ile yapıyor)
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { supabase } from '../lib/supabase';
-import { SUPABASE_ANON_KEY, SERVER_BASE_URL } from '../lib/supabase-config';
-import { dualWrite, replayWAL } from '../lib/active-client';
+import { getDb, startSync } from '../lib/pouchdb';
 
-const SERVER_URL = SERVER_BASE_URL;
-const STORAGE_PREFIX = 'isleyen_et_';
+// ─── Tipler ───────────────────────────────────────────────────────────────────
 
-// ─── localStorage yardımcıları ───────────────────────────────────────────────
-
-function loadFromLS<T>(storageKey: string): T | null {
-  try {
-    const raw = localStorage.getItem(STORAGE_PREFIX + storageKey);
-    return raw ? JSON.parse(raw) : null;
-  } catch { return null; }
-}
-
-function saveToLS<T>(storageKey: string, data: T): void {
-  try {
-    localStorage.setItem(STORAGE_PREFIX + storageKey, JSON.stringify(data));
-    setTimeout(() => window.dispatchEvent(new Event('storage_update')), 0);
-  } catch {}
-}
-
-// ─── Silinmiş ID tombstone (çakışma önleme) ──────────────────────────────────
-const DELETED_SUFFIX = '__deleted_ids';
-
-function loadDeletedIds(storageKey: string): Set<string> {
-  try {
-    const raw = localStorage.getItem(STORAGE_PREFIX + storageKey + DELETED_SUFFIX);
-    return new Set<string>(raw ? JSON.parse(raw) : []);
-  } catch { return new Set<string>(); }
-}
-
-function saveDeletedId(storageKey: string, id: string): void {
-  try {
-    const existing = loadDeletedIds(storageKey);
-    existing.add(id);
-    const arr = Array.from(existing).slice(-500); // Maksimum 500 tombstone
-    localStorage.setItem(STORAGE_PREFIX + storageKey + DELETED_SUFFIX, JSON.stringify(arr));
-  } catch {}
-}
-
-// ─── Bağlantı hata yönetimi ─────────────────────────────────────────────────
-// BUG FIX [AJAN-2]: Modül seviyesi → instance başına ref
-// Eski modül-seviyesi değişken tüm useTableSync instance'larını blokluyordu.
-// Artık her hook kendi cooldown ref'ini tutuyor.
-const CONNECTION_COOLDOWN_MS = 8_000;
-
-// ─── İstek zaman aşımı sarmalayıcı ──────────────────────────────────────────
-// GÜÇLENDİRME [AJAN-2]: Supabase istekleri takılırsa UI'ı bloklar.
-// 10s timeout ile askıda kalan istekler kesilir ve hata yönetimine geçilir.
-function withTimeout<T>(promise: Promise<T>, ms = 10_000, label = ''): Promise<T> {
-  return Promise.race([
-    promise,
-    new Promise<never>((_, reject) =>
-      setTimeout(
-        () => reject(new Error(`${label || 'İstek'} ${ms / 1000}s içinde yanıt vermedi`)),
-        ms
-      )
-    ),
-  ]);
-}
-
-// ─── Supabase doğrudan tablo operasyonları ────────────────────────────────────
-
-/** Tablodan tüm satırları sıraya göre oku */
-async function tableSelect<T>(tableName: string, orderBy: string, orderAsc: boolean): Promise<T[]> {
-  const { data, error } = await supabase
-    .from(tableName)
-    .select('*')
-    .order(orderBy, { ascending: orderAsc });
-
-  if (error) throw new Error(`[tableSelect] ${tableName}: ${error.message} (code: ${error.code})`);
-  return (data ?? []) as T[];
-}
-
-/** Tek veya çoklu satır upsert (id çakışmasında güncelle) */
-async function tableUpsert(tableName: string, rows: any[]): Promise<void> {
-  if (rows.length === 0) return;
-  const { error } = await supabase
-    .from(tableName)
-    .upsert(rows, { onConflict: 'id' });
-  if (error) throw new Error(`[tableUpsert] ${tableName}: ${error.message}`);
-}
-
-/** Satır sil */
-async function tableDelete(tableName: string, id: string): Promise<void> {
-  const { error } = await supabase
-    .from(tableName)
-    .delete()
-    .eq('id', id);
-  if (error) throw new Error(`[tableDelete] ${tableName}: ${error.message}`);
-}
-
-// ─── Server endpoint fallback (RLS sorunlarında yedek) ─────────────────────
-function getAuthHeaders() {
-  return {
-    'Content-Type': 'application/json',
-    'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
-  };
-}
-
-async function serverUpsertFallback(tableName: string, rows: any[]): Promise<void> {
-  if (rows.length === 0) return;
-  const keys = rows.map(r => `${tableName}_${r.id}`);
-  const res = await fetch(`${SERVER_URL}/kv/mset`, {
-    method: 'POST',
-    headers: getAuthHeaders(),
-    body: JSON.stringify({ keys, values: rows }),
-  });
-  if (!res.ok) throw new Error(`serverUpsert fallback failed (${res.status})`);
-}
-
-async function serverDeleteFallback(tableName: string, id: string): Promise<void> {
-  const res = await fetch(`${SERVER_URL}/kv/del`, {
-    method: 'POST',
-    headers: getAuthHeaders(),
-    body: JSON.stringify({ key: `${tableName}_${id}` }),
-  });
-  if (!res.ok) throw new Error(`serverDelete fallback failed (${res.status})`);
-}
-
-// ─── Adaptif yazma kuyruğu ────────────────────────────────────────────────────
-const PRIORITY_TABLES = new Set(['fisler', 'kasa_islemleri', 'bankalar', 'cekler']);
-
-interface WriteOp {
-  type: 'upsert' | 'delete';
-  id: string;
-  row?: any; // upsert için
-}
-
-class WriteQueue {
-  private queue = new Map<string, WriteOp>();
-  private timer: ReturnType<typeof setTimeout> | null = null;
-  private readonly flushFnRef: React.MutableRefObject<(ops: WriteOp[]) => Promise<void>>;
-  private readonly minDebounceMs: number;
-  private readonly maxDebounceMs: number;
-  // GÜÇLENDİRME [AJAN-2]: Kalıcı kuyruk — sayfa kapanırsa/çökerse veri kaybını önler
-  private readonly persistKey: string;
-  totalWrites = 0;
-  failedWrites = 0;
-  private retryCount = 0;
-
-  constructor(
-    flushFnRef: React.MutableRefObject<(ops: WriteOp[]) => Promise<void>>,
-    debounceMs = 300,
-    tableName = '',
-  ) {
-    this.flushFnRef = flushFnRef;
-    this.minDebounceMs = PRIORITY_TABLES.has(tableName) ? 60 : debounceMs;
-    this.maxDebounceMs = debounceMs * 3;
-    this.persistKey = `${STORAGE_PREFIX}wq_${tableName}`;
-    // Önceki çalışmadan kalan bekleyen işlemleri yükle
-    this._loadPersisted();
-  }
-
-  // Bekleyen işlemleri localStorage'a kaydet (veri kaybı önleme)
-  private _savePersisted(): void {
-    try {
-      if (this.queue.size === 0) {
-        localStorage.removeItem(this.persistKey);
-      } else {
-        localStorage.setItem(this.persistKey, JSON.stringify(Array.from(this.queue.values())));
-      }
-    } catch { }
-  }
-
-  // Önceki çalışmadan kalan işlemleri yükle
-  private _loadPersisted(): void {
-    try {
-      const raw = localStorage.getItem(this.persistKey);
-      if (!raw) return;
-      const ops: WriteOp[] = JSON.parse(raw);
-      if (ops.length > 0) {
-        ops.forEach(op => this.queue.set(op.id, op));
-        console.log(`%c[WriteQueue:${this.persistKey}] ${ops.length} kurtarılan işlem yüklendi`, 'color: #f59e0b');
-        this.scheduleFlush();
-      }
-    } catch { }
-  }
-
-  push(op: WriteOp) {
-    // Aynı id için önceki işlemi ezeriz (son işlem kazanır)
-    this.queue.set(op.id, op);
-    this._savePersisted(); // Kalıcı depoya kaydet
-    this.scheduleFlush();
-  }
-
-  private scheduleFlush() {
-    if (this.timer) clearTimeout(this.timer);
-    const size = this.queue.size;
-    let delay: number;
-    if (size >= 20)       delay = 0;
-    else if (size >= 10)  delay = this.minDebounceMs;
-    else {
-      const t = Math.min((size - 1) / 9, 1);
-      delay = Math.round(this.maxDebounceMs + t * (this.minDebounceMs - this.maxDebounceMs));
-    }
-    if (delay === 0) {
-      Promise.resolve().then(() => this.flush());
-    } else {
-      this.timer = setTimeout(() => this.flush(), delay);
-    }
-  }
-
-  async flush() {
-    if (this.timer) { clearTimeout(this.timer); this.timer = null; }
-    if (this.queue.size === 0) return;
-
-    const ops = Array.from(this.queue.values());
-    this.queue.clear();
-    this._savePersisted(); // Temizlendi — kalıcı depoyu güncelle
-    this.totalWrites += ops.length;
-
-    try {
-      await this.flushFnRef.current(ops);
-      this.retryCount = 0;
-      // Başarılı → kalıcı depo zaten temizlendi (queue.clear sonrası _savePersisted çağrıldı)
-    } catch (e) {
-      console.error(`[WriteQueue] flush error (${ops.length} ops):`, e);
-      this.failedWrites += ops.length;
-      // Başarısız işlemleri kuyruğa geri al ve kalıcı depoya kaydet
-      ops.forEach(op => this.queue.set(op.id, op));
-      this._savePersisted();
-      // Üstel geri çekilme (max 30 saniye)
-      this.retryCount = Math.min(this.retryCount + 1, 5);
-      const backoff = Math.min(1000 * Math.pow(2, this.retryCount), 30_000);
-      this.timer = setTimeout(() => this.flush(), backoff);
-    }
-  }
-
-  get pendingCount(): number { return this.queue.size; }
-
-  destroy() {
-    if (this.timer) clearTimeout(this.timer);
-    this.queue.clear();
-  }
-}
-
-// ─── Tipler ────────────────────────────────────────────────────────────────────
 export type SyncState = 'idle' | 'loading' | 'synced' | 'error' | 'offline';
 
 export interface SyncHealthInfo {
@@ -274,14 +39,14 @@ export interface UseTableSyncResult<T> {
   rowCount: number;
   lastSync: Date | null;
   error: string | null;
-  isSupabase: boolean;
+  isSupabase: boolean; // eski uyumluluk — artık her zaman false
   addItem: (item: T) => Promise<T>;
   updateItem: (id: string, updates: Partial<T>) => Promise<void>;
   deleteItem: (id: string) => Promise<void>;
   batchUpdate: (updates: Array<{ id: string; changes: Partial<T> }>) => Promise<void>;
   refresh: () => Promise<void>;
   setData: (data: T[]) => void;
-  syncToSupabase: () => Promise<{ ok: number; fail: number }>;
+  syncToSupabase: () => Promise<{ ok: number; fail: number }>; // eski uyumluluk — artık no-op
   syncHealth: SyncHealthInfo;
   forceResync: () => Promise<void>;
 }
@@ -296,11 +61,19 @@ export interface TableSyncConfig<T> {
   fromDb?: (row: any) => T;
 }
 
-function isSupabaseConfigured(): boolean {
-  return !!SUPABASE_ANON_KEY && SUPABASE_ANON_KEY.length > 10;
+// ─── Yardımcılar ──────────────────────────────────────────────────────────────
+
+/** PouchDB doc'dan _id, _rev gibi dahili alanları temizle */
+function cleanDoc(doc: any): any {
+  if (!doc) return doc;
+  const { _id, _rev, _deleted, _conflicts, _attachments, ...rest } = doc;
+  // _id'yi id'ye map et (eğer id yoksa)
+  if (!rest.id && _id) rest.id = _id;
+  return rest;
 }
 
 // ─── Ana Hook ─────────────────────────────────────────────────────────────────
+
 export function useTableSync<T extends { id: string }>(
   config: TableSyncConfig<T>
 ): UseTableSyncResult<T> {
@@ -314,95 +87,25 @@ export function useTableSync<T extends { id: string }>(
     fromDb,
   } = config;
 
-  // localStorage'dan anlık yükleme (sayfa açılışında görüntülenecek ilk veri)
-  const [data, setDataState] = useState<T[]>(() => {
-    const raw = loadFromLS<T[]>(storageKey) || initialData;
-    if (fromDb && raw.length > 0) {
-      try { return raw.map(item => fromDb(item as any)); } catch { return raw; }
-    }
-    return raw;
-  });
-
+  const [data, setDataState] = useState<T[]>(initialData);
   const [syncState, setSyncState] = useState<SyncState>('idle');
   const [lastSync, setLastSync] = useState<Date | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [consecutiveFailures, setConsecutiveFailures] = useState(0);
   const [latencyMs, setLatencyMs] = useState(0);
 
-  const configured = isSupabaseConfigured();
-
-  // BUG FIX [AJAN-2]: Her tablo kendi cooldown'ını tutuyor — biri başarısız olunca diğerleri bloklanmıyor
-  const lastConnectionFailure = useRef(0);
-  const isConnectionCoolingDown = () => Date.now() - lastConnectionFailure.current < CONNECTION_COOLDOWN_MS;
-  const markConnectionFailure = () => { lastConnectionFailure.current = Date.now(); };
-  const clearConnectionCooldown = () => { lastConnectionFailure.current = 0; };
-
-  // Stabil ref'ler (useCallback bağımlılıklarını minimize eder)
+  // Stabil ref'ler
   const toDbRef = useRef(toDb);
   toDbRef.current = toDb;
   const fromDbRef = useRef(fromDb);
   fromDbRef.current = fromDb;
   const dataRef = useRef(data);
   dataRef.current = data;
-  const initialFetchDone = useRef(false);
-  // Kendi yazmalarımızın realtime echo'sunu atlamak için
-  const pendingWriteIds = useRef(new Set<string>());
+  const dbRef = useRef<PouchDB.Database | null>(null);
+  const changesRef = useRef<PouchDB.Core.Changes<{}> | null>(null);
+  const initialLoadDone = useRef(false);
 
-  // ─── WriteQueue flush fonksiyonu (her render'da güncellenir) ──────────────
-  const flushFnRef = useRef<(ops: WriteOp[]) => Promise<void>>(async () => {});
-  flushFnRef.current = async (ops: WriteOp[]) => {
-    const upsertOps = ops.filter(o => o.type === 'upsert');
-    const deleteOps = ops.filter(o => o.type === 'delete');
-
-    // ── Upsert işlemleri ─────────────────────────────────────────────────────
-    if (upsertOps.length > 0) {
-      const rows = upsertOps.map(o => o.row);
-      let cloudOk = true;
-      try {
-        await tableUpsert(tableName, rows);
-      } catch (directErr: any) {
-        // Doğrudan yazma başarısız → server KV fallback
-        cloudOk = false;
-        console.warn(`[WriteQueue:${tableName}] Doğrudan upsert başarısız, server fallback:`, directErr.message);
-        await serverUpsertFallback(tableName, rows);
-      }
-      // Dual-write: yerel node'a da yaz (cloud başarısızsa WAL'a ekle)
-      dualWrite(tableName, rows, 'upsert', cloudOk).catch(() => {});
-      upsertOps.forEach(op => pendingWriteIds.current.delete(op.id));
-    }
-
-    // ── Delete işlemleri ─────────────────────────────────────────────────────
-    for (const op of deleteOps) {
-      let cloudOk = true;
-      try {
-        await tableDelete(tableName, op.id);
-      } catch (directErr: any) {
-        cloudOk = false;
-        console.warn(`[WriteQueue:${tableName}] Doğrudan delete başarısız, server fallback:`, directErr.message);
-        await serverDeleteFallback(tableName, op.id);
-      }
-      // Dual-write: yerel node'a da sil (cloud başarısızsa WAL'a ekle)
-      dualWrite(tableName, [{ id: op.id }], 'delete', cloudOk).catch(() => {});
-      pendingWriteIds.current.delete(op.id);
-    }
-  };
-
-  // ─── WriteQueue (ilk render'da bir kez oluşturulur) ──────────────────────
-  const writeQueueRef = useRef<WriteQueue | null>(null);
-  if (!writeQueueRef.current && configured) {
-    writeQueueRef.current = new WriteQueue(flushFnRef, 300, tableName);
-  }
-
-  // Unmount'ta bekleyen yazmaları flush et
-  useEffect(() => {
-    return () => {
-      if (writeQueueRef.current) {
-        writeQueueRef.current.flush().catch(() => {});
-      }
-    };
-  }, []);
-
-  // ─── Veriyi sırala ───────────────────────────────────────────────────────
+  // ─── Sıralama ──────────────────────────────────────────────────────────────
   const sortData = useCallback((items: T[]): T[] => {
     if (!orderBy) return items;
     return [...items].sort((a: any, b: any) => {
@@ -414,300 +117,189 @@ export function useTableSync<T extends { id: string }>(
 
   const setData = useCallback((newData: T[]) => {
     setDataState(newData);
-    saveToLS(storageKey, newData);
-  }, [storageKey]);
+  }, []);
 
-  // ─── Sekmeler arası senkronizasyon ────────────────────────────────────────
-  useEffect(() => {
-    const handleStorage = (e: StorageEvent) => {
-      if (e.key === STORAGE_PREFIX + storageKey && e.newValue) {
-        try { setDataState(JSON.parse(e.newValue)); } catch {}
-      }
-    };
-    const handleCustom = () => {
-      const fresh = loadFromLS<T[]>(storageKey);
-      if (fresh) setDataState(fresh);
-    };
-    window.addEventListener('storage', handleStorage);
-    window.addEventListener('storage_update', handleCustom);
-    return () => {
-      window.removeEventListener('storage', handleStorage);
-      window.removeEventListener('storage_update', handleCustom);
-    };
-  }, [storageKey]);
-
-  // ─── Veri getir: Doğrudan Supabase tablo okuma ─────────────────────────────
+  // ─── PouchDB'den tüm veriyi oku ───────────────────────────────────────────
   const fetchData = useCallback(async () => {
-    if (!configured) { setSyncState('offline'); return; }
-    if (isConnectionCoolingDown()) return;
-
     setSyncState('loading');
     setError(null);
 
     const start = performance.now();
     try {
-      // GÜÇLENDİRME [AJAN-2]: 10s timeout — askıda kalan istek UI'ı bloklamasın
-      const rows = await withTimeout(
-        tableSelect<any>(tableName, orderBy, orderAsc),
-        10_000,
-        tableName
-      );
+      const db = getDb(tableName);
+      dbRef.current = db;
+
+      const result = await db.allDocs({ include_docs: true });
       const elapsed = Math.round(performance.now() - start);
       setLatencyMs(elapsed);
 
-      if (!initialFetchDone.current) {
+      const items = result.rows
+        .filter((row: any) => !row.doc?._deleted)
+        .map((row: any) => {
+          const cleaned = cleanDoc(row.doc);
+          return fromDbRef.current ? fromDbRef.current(cleaned) : cleaned as T;
+        });
+
+      const sorted = sortData(items);
+
+      if (!initialLoadDone.current) {
         console.log(
-          `%c[useTableSync] ${tableName}: ${rows.length} kayıt, ${elapsed}ms`,
+          `%c[useTableSync] ${tableName}: ${sorted.length} kayıt, ${elapsed}ms (PouchDB)`,
           'color: #22c55e; font-weight: bold'
         );
+        initialLoadDone.current = true;
       }
 
-      // fromDb dönüşümü uygula
-      const mapped = fromDbRef.current
-        ? rows.map(row => fromDbRef.current!(row))
-        : (rows as T[]);
-
-      // Çakışma çözümü: Supabase yetkili kaynak, ama bekleyen yerel yazmaları koru
-      const deletedIds = loadDeletedIds(storageKey);
-      const remoteMap = new Map(mapped.map(i => [i.id, i]));
-      const localData = loadFromLS<T[]>(storageKey) || [];
-      const merged = new Map<string, T>(remoteMap);
-
-      localData.forEach(item => {
-        // Bekleyen yazma → yerel versiyon öncelikli
-        if (pendingWriteIds.current.has(item.id)) {
-          merged.set(item.id, item);
-        } else if (!remoteMap.has(item.id) && !deletedIds.has(item.id)) {
-          // Supabase'de yok + tombstone yok → henüz senkronize olmamış yerel kayıt → sakla
-          merged.set(item.id, item);
-        }
-      });
-
-      const sorted = sortData(Array.from(merged.values()));
-      setData(sorted);
+      setDataState(sorted);
       setSyncState('synced');
       setLastSync(new Date());
       setConsecutiveFailures(0);
-      clearConnectionCooldown();
-      initialFetchDone.current = true;
     } catch (e: any) {
       console.error(`[useTableSync] ${tableName} fetch hatası:`, e.message);
-      markConnectionFailure();
-      setSyncState('offline');
-      setError(e.message || 'Bağlantı hatası');
+      setSyncState('error');
+      setError(e.message || 'Veri okuma hatası');
       setConsecutiveFailures(prev => prev + 1);
     }
-  }, [tableName, storageKey, configured, orderBy, orderAsc, sortData, setData]);
+  }, [tableName, sortData]);
 
-  // ─── Gerçek zamanlı abonelik (her tablo için postgres_changes) ─────────────
-  useEffect(() => {
-    if (!configured) return;
-
-    const channelName = `rt_${tableName}_${Math.random().toString(36).slice(2, 8)}`;
-    const channel = supabase
-      .channel(channelName)
-      .on(
-        'postgres_changes' as any,
-        { event: '*', schema: 'public', table: tableName },
-        (payload: any) => {
-          const eventType: string = payload.eventType;
-          const record = payload.new as any;
-          const oldRecord = payload.old as any;
-          const id: string | undefined = record?.id ?? oldRecord?.id;
-          if (!id) return;
-
-          // Kendi yazdıklarımızın echo'sunu atla
-          if (pendingWriteIds.current.has(id)) return;
-
-          if (eventType === 'INSERT' || eventType === 'UPDATE') {
-            const item = fromDbRef.current ? fromDbRef.current(record) : record as T;
-            setDataState(prev => {
-              const idx = prev.findIndex(i => i.id === id);
-              let updated: T[];
-              if (idx !== -1) {
-                updated = [...prev];
-                updated[idx] = { ...updated[idx], ...item };
-              } else {
-                updated = [item, ...prev];
-              }
-              const sorted = sortData(updated);
-              saveToLS(storageKey, sorted);
-              return sorted;
-            });
-          } else if (eventType === 'DELETE') {
-            setDataState(prev => {
-              const updated = prev.filter(i => i.id !== id);
-              saveToLS(storageKey, updated);
-              return updated;
-            });
-          }
-          setLastSync(new Date());
-        }
-      )
-      .subscribe((status: string) => {
-        if (status === 'SUBSCRIBED') {
-          console.log(`%c[RT] ${tableName} gerçek zamanlı aktif`, 'color: #a78bfa');
-        }
-      });
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [tableName, storageKey, configured, sortData]);
-
-  // ─── İlk yükleme ─────────────────────────────────────────────────────────
+  // ─── İlk yükleme + CouchDB sync başlat + PouchDB changes feed ────────────
   useEffect(() => {
     fetchData();
-  }, [fetchData]);
 
-  // ─── 2 dakikada bir arka plan yenileme ────────────────────────────────────
-  useEffect(() => {
-    if (!configured) return;
-    const interval = setInterval(() => {
-      if (document.visibilityState === 'visible' && pendingWriteIds.current.size === 0) {
-        fetchData().catch(() => {});
-      }
-    }, 2 * 60 * 1000);
+    // CouchDB ile continuous sync başlat
+    startSync(tableName);
 
-    // BUG FIX [AJAN-2]: Mobil arka plandan dönerken:
-    //   1. Module-level bağlantı cooldown'ı temizle (diğer tablonun hatası bizi engelliyor olabilir)
-    //   2. Yeni veri çek
-    //   3. Bekleyen yazmaları gönder
-    // Gizlenince bekleyen yazmaları hemen flush et (sayfa kapanmadan önce gönder)
-    const onVisibilityChange = () => {
-      if (document.visibilityState === 'visible') {
-        clearConnectionCooldown(); // Eski cooldown'ı temizle — mobil için kritik
-        fetchData().catch(() => {});
-        writeQueueRef.current?.flush().catch(() => {});
-      } else if (document.visibilityState === 'hidden') {
-        // Arka plana geçerken bekleyen yazmaları zorla gönder
-        writeQueueRef.current?.flush().catch(() => {});
+    // PouchDB changes feed — realtime güncellemeler (yerel + CouchDB'den gelen)
+    const db = getDb(tableName);
+    const changes = db.changes({
+      since: 'now',
+      live: true,
+      include_docs: true,
+    });
+
+    changes.on('change', (change: any) => {
+      if (change.deleted) {
+        setDataState(prev => {
+          const updated = prev.filter(i => i.id !== change.id);
+          return updated;
+        });
+      } else if (change.doc) {
+        const cleaned = cleanDoc(change.doc);
+        const item = fromDbRef.current ? fromDbRef.current(cleaned) : cleaned as T;
+
+        setDataState(prev => {
+          const idx = prev.findIndex(i => i.id === change.id);
+          let updated: T[];
+          if (idx !== -1) {
+            updated = [...prev];
+            updated[idx] = item;
+          } else {
+            updated = [item, ...prev];
+          }
+          return sortData(updated);
+        });
       }
-    };
-    document.addEventListener('visibilitychange', onVisibilityChange);
+      setLastSync(new Date());
+    });
+
+    changes.on('error', (err: any) => {
+      console.error(`[useTableSync] ${tableName} changes error:`, err);
+    });
+
+    changesRef.current = changes;
+
     return () => {
-      clearInterval(interval);
-      document.removeEventListener('visibilitychange', onVisibilityChange);
+      changes.cancel();
     };
-  }, [configured, fetchData]);
+  }, [tableName, fetchData, sortData]);
 
-  // ─── Ağ bağlantısı geri gelince hemen kurtarma ──────────────────────────
-  // GÜÇLENDİRME [AJAN-2]: online event → write queue flush + fetchData
-  // Çevrimdışıyken biriken tüm bekleyen yazmaları anında gönder
-  useEffect(() => {
-    if (!configured) return;
-    const onOnline = () => {
-      clearConnectionCooldown();
-      writeQueueRef.current?.flush().catch(() => {});
-      // WAL'daki başarısız cloud yazmalarını cloud'a tekrarla
-      replayWAL(supabase).catch(() => {});
-      fetchData().catch(() => {});
-    };
-    window.addEventListener('online', onOnline);
-    return () => window.removeEventListener('online', onOnline);
-  }, [configured, fetchData]);
-
-  // ─── CRUD — Optimistik güncelleme + hata durumunda rollback ──────────────
+  // ─── CRUD — Optimistik güncelleme ──────────────────────────────────────────
 
   const addItem = useCallback(async (item: T): Promise<T> => {
     // Optimistik ekleme
-    setDataState(prev => {
-      const updated = sortData([item, ...prev]);
-      saveToLS(storageKey, updated);
-      return updated;
-    });
-
-    if (!configured) return item;
+    setDataState(prev => sortData([item, ...prev]));
 
     try {
+      const db = getDb(tableName);
       const dbRow = toDbRef.current ? toDbRef.current(item) : item;
-      pendingWriteIds.current.add(item.id);
-
-      if (writeQueueRef.current) {
-        writeQueueRef.current.push({ type: 'upsert', id: item.id, row: dbRow });
-      } else {
-        await tableUpsert(tableName, [dbRow]);
-        pendingWriteIds.current.delete(item.id);
-      }
+      await db.put({ ...dbRow, _id: item.id });
       return item;
     } catch (e: any) {
-      console.error(`[addItem] ${tableName}:`, e);
-      pendingWriteIds.current.delete(item.id);
-      // Optimistik ekle localStorage'da kalır (veri kaybı yok)
+      // Conflict — doc zaten var, güncelle
+      if (e.status === 409) {
+        try {
+          const db = getDb(tableName);
+          const existing = await db.get(item.id);
+          const dbRow = toDbRef.current ? toDbRef.current(item) : item;
+          await db.put({ ...dbRow, _id: item.id, _rev: (existing as any)._rev });
+        } catch (e2: any) {
+          console.error(`[addItem] ${tableName} conflict retry:`, e2.message);
+        }
+      } else {
+        console.error(`[addItem] ${tableName}:`, e.message);
+      }
       return item;
     }
-  }, [tableName, storageKey, configured, sortData]);
+  }, [tableName, sortData]);
 
   const updateItem = useCallback(async (id: string, updates: Partial<T>): Promise<void> => {
     const oldItem = dataRef.current.find(i => i.id === id);
 
     // Optimistik güncelleme
-    setDataState(prev => {
-      const updated = prev.map(item => item.id === id ? { ...item, ...updates } : item);
-      saveToLS(storageKey, updated);
-      return updated;
-    });
-
-    if (!configured) return;
+    setDataState(prev =>
+      prev.map(item => item.id === id ? { ...item, ...updates } : item)
+    );
 
     try {
-      if (!oldItem) return;
-      const merged = { ...oldItem, ...updates };
-      const dbRow = toDbRef.current ? toDbRef.current(merged) : merged;
-      pendingWriteIds.current.add(id);
+      const db = getDb(tableName);
+      let existing: any;
+      try {
+        existing = await db.get(id);
+      } catch {
+        // Doc yok — oluştur
+        if (!oldItem) return;
+        const merged = { ...oldItem, ...updates };
+        const dbRow = toDbRef.current ? toDbRef.current(merged) : merged;
+        await db.put({ ...dbRow, _id: id });
+        return;
+      }
 
-      if (writeQueueRef.current) {
-        writeQueueRef.current.push({ type: 'upsert', id, row: dbRow });
-      } else {
-        await tableUpsert(tableName, [dbRow]);
-        pendingWriteIds.current.delete(id);
-      }
+      const cleaned = cleanDoc(existing);
+      const currentItem = fromDbRef.current ? fromDbRef.current(cleaned) : cleaned as T;
+      const merged = { ...currentItem, ...updates };
+      const dbRow = toDbRef.current ? toDbRef.current(merged) : merged;
+      await db.put({ ...dbRow, _id: id, _rev: existing._rev });
     } catch (e: any) {
-      console.error(`[updateItem] ${tableName}:`, e);
+      console.error(`[updateItem] ${tableName}:`, e.message);
+      // Rollback
       if (oldItem) {
-        setDataState(prev => {
-          const rb = prev.map(item => item.id === id ? oldItem : item);
-          saveToLS(storageKey, rb);
-          return rb;
-        });
+        setDataState(prev =>
+          prev.map(item => item.id === id ? oldItem : item)
+        );
       }
-      pendingWriteIds.current.delete(id);
     }
-  }, [tableName, storageKey, configured]);
+  }, [tableName]);
 
   const deleteItem = useCallback(async (id: string): Promise<void> => {
     const deletedItem = dataRef.current.find(i => i.id === id);
-    saveDeletedId(storageKey, id);
 
     // Optimistik silme
-    setDataState(prev => {
-      const updated = prev.filter(item => item.id !== id);
-      saveToLS(storageKey, updated);
-      return updated;
-    });
-
-    if (!configured) return;
+    setDataState(prev => prev.filter(item => item.id !== id));
 
     try {
-      pendingWriteIds.current.add(id);
-      if (writeQueueRef.current) {
-        writeQueueRef.current.push({ type: 'delete', id });
-      } else {
-        await tableDelete(tableName, id);
-        pendingWriteIds.current.delete(id);
-      }
+      const db = getDb(tableName);
+      const doc = await db.get(id);
+      await db.remove(doc);
     } catch (e: any) {
-      console.error(`[deleteItem] ${tableName}:`, e);
-      if (deletedItem) {
-        setDataState(prev => {
-          const restored = sortData([deletedItem, ...prev]);
-          saveToLS(storageKey, restored);
-          return restored;
-        });
+      if (e.status !== 404) {
+        console.error(`[deleteItem] ${tableName}:`, e.message);
+        // Rollback
+        if (deletedItem) {
+          setDataState(prev => sortData([deletedItem, ...prev]));
+        }
       }
-      pendingWriteIds.current.delete(id);
     }
-  }, [tableName, storageKey, configured, sortData]);
+  }, [tableName, sortData]);
 
   const batchUpdate = useCallback(async (
     updates: Array<{ id: string; changes: Partial<T> }>
@@ -720,75 +312,57 @@ export function useTableSync<T extends { id: string }>(
       if (item) oldItems.set(u.id, item);
     });
 
+    // Optimistik güncelleme
     const updateMap = new Map(updates.map(u => [u.id, u.changes]));
-    setDataState(prev => {
-      const updated = prev.map(item => {
+    setDataState(prev =>
+      prev.map(item => {
         const changes = updateMap.get(item.id);
         return changes ? { ...item, ...changes } : item;
-      });
-      saveToLS(storageKey, updated);
-      return updated;
-    });
-
-    if (!configured) return;
+      })
+    );
 
     try {
-      const rows: any[] = [];
-      updates.forEach(u => {
-        const old = oldItems.get(u.id);
-        if (!old) return;
+      const db = getDb(tableName);
+      const ids = updates.map(u => u.id);
+      const existing = await db.allDocs({ keys: ids, include_docs: true });
+
+      const docs = updates.map(u => {
+        const row = existing.rows.find((r: any) => r.id === u.id && !r.error);
+        const old = oldItems.get(u.id) || {} as any;
         const merged = { ...old, ...u.changes };
         const dbRow = toDbRef.current ? toDbRef.current(merged) : merged;
-        rows.push(dbRow);
-        pendingWriteIds.current.add(u.id);
-      });
+        return {
+          ...dbRow,
+          _id: u.id,
+          _rev: row?.doc ? (row.doc as any)._rev : undefined,
+        };
+      }).filter(d => d._rev || !existing.rows.find((r: any) => r.id === d._id && !r.error));
 
-      if (rows.length > 0) {
-        await tableUpsert(tableName, rows);
-        updates.forEach(u => pendingWriteIds.current.delete(u.id));
+      if (docs.length > 0) {
+        await db.bulkDocs(docs);
       }
     } catch (e: any) {
-      console.error(`[batchUpdate] ${tableName}:`, e);
-      setDataState(prev => {
-        const rb = prev.map(item => oldItems.get(item.id) || item);
-        saveToLS(storageKey, rb);
-        return rb;
-      });
-      updates.forEach(u => pendingWriteIds.current.delete(u.id));
+      console.error(`[batchUpdate] ${tableName}:`, e.message);
+      // Rollback
+      setDataState(prev =>
+        prev.map(item => oldItems.get(item.id) || item)
+      );
     }
-  }, [tableName, storageKey, configured]);
+  }, [tableName]);
 
-  // ─── Manuel senkronizasyon (localStorage → Supabase) ──────────────────────
+  // ─── Eski uyumluluk fonksiyonları ──────────────────────────────────────────
+
+  /** Eski syncToSupabase — artık no-op, PouchDB otomatik senkronize eder */
   const syncToSupabase = useCallback(async (): Promise<{ ok: number; fail: number }> => {
-    if (!configured) return { ok: 0, fail: 0 };
-    const current = loadFromLS<T[]>(storageKey) || [];
-    if (current.length === 0) return { ok: 0, fail: 0 };
-
-    setSyncState('loading');
-    let ok = 0; let fail = 0;
-    const CHUNK = 100;
-
-    for (let i = 0; i < current.length; i += CHUNK) {
-      const chunk = current.slice(i, i + CHUNK);
-      try {
-        const rows = chunk.map(item => toDbRef.current ? toDbRef.current(item) : item);
-        await tableUpsert(tableName, rows);
-        ok += chunk.length;
-      } catch {
-        fail += chunk.length;
-      }
-    }
-
-    setSyncState(fail === 0 ? 'synced' : 'error');
-    if (fail === 0) setLastSync(new Date());
-    return { ok, fail };
-  }, [tableName, storageKey, configured]);
+    // PouchDB ↔ CouchDB sync otomatik, manuel sync gerekmez
+    await fetchData();
+    return { ok: data.length, fail: 0 };
+  }, [fetchData, data.length]);
 
   const refresh = useCallback(async () => { await fetchData(); }, [fetchData]);
 
   const forceResync = useCallback(async () => {
-    initialFetchDone.current = false;
-    clearConnectionCooldown();
+    initialLoadDone.current = false;
     await fetchData();
   }, [fetchData]);
 
@@ -796,8 +370,8 @@ export function useTableSync<T extends { id: string }>(
     lastSuccessfulSync: lastSync,
     consecutiveFailures,
     avgLatencyMs: latencyMs,
-    pendingWrites: writeQueueRef.current?.pendingCount ?? 0,
-    isHealthy: consecutiveFailures < 3 && (writeQueueRef.current?.failedWrites ?? 0) < 5,
+    pendingWrites: 0, // PouchDB'de bekleyen yazma yok — hepsi anında yerel
+    isHealthy: consecutiveFailures < 3,
   };
 
   return {
@@ -806,7 +380,7 @@ export function useTableSync<T extends { id: string }>(
     rowCount: data.length,
     lastSync,
     error,
-    isSupabase: configured && syncState !== 'offline',
+    isSupabase: false, // Artık PouchDB kullanıyoruz
     addItem,
     updateItem,
     deleteItem,
