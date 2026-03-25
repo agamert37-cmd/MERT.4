@@ -393,13 +393,9 @@ export function PersonelPage() {
                 at: new Date().toISOString(),
               },
             });
-            // Personel durumunu offline olarak işaretle — [AJAN-2]: updateItem Supabase'i de günceller
-            const personnel = getFromStorage<any[]>(StorageKey.PERSONEL_DATA) || [];
-            const updated = personnel.map(p =>
-              p.id === personId ? { ...p, status: 'offline' } : p
-            );
-            setInStorage(StorageKey.PERSONEL_DATA, updated);
-            updateItem(personId, { status: 'offline' }).catch(e => console.warn('[PersonelPage] status update hatası:', e));
+            // Personel durumunu offline olarak işaretle — [AJAN-2]: useTableSync üzerinden güncelle
+            // setInStorage bypass kaldırıldı — useTableSync hem localStorage hem Supabase'i yönetir
+            updateItem(personId, { status: 'offline' } as any).catch(e => console.warn('[PersonelPage] status update hatası:', e));
             logActivity('security_alert', 'Uzaktan oturum kapatma tetiklendi', {
               employeeName: user?.name,
               level: 'high',

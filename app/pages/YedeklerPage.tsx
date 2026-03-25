@@ -13,7 +13,7 @@ import { toast } from 'sonner';
 import * as Dialog from '@radix-ui/react-dialog';
 import { getFromStorage, setInStorage, StorageKey } from '../utils/storage';
 import { generateDetailedExcelBackup, generatePDFBackup } from '../utils/exportGenerator';
-import { kvGetByPrefixWithKeys, kvSet, TABLE_PREFIXES } from '../lib/supabase-kv';
+import { kvGet, kvGetByPrefixWithKeys, kvSet, TABLE_PREFIXES } from '../lib/supabase-kv';
 import { SERVER_BASE_URL, SUPABASE_ANON_KEY } from '../lib/supabase-config';
 import { useAuth } from '../contexts/AuthContext';
 import { useEmployee } from '../contexts/EmployeeContext';
@@ -196,6 +196,16 @@ export function YedeklerPage() {
     fetchLocalBackups();
     fetchBackupStats();
     fetchSyncHealth();
+    // [AJAN-2] KV fallback — localStorage boşsa yedek listesini KV'den yükle
+    const local = getFromStorage<BackupEntry[]>(StorageKey.BACKUPS);
+    if (!local || local.length === 0) {
+      kvGet<BackupEntry[]>('backups').then(kv => {
+        if (kv && kv.length > 0) {
+          setInStorage(StorageKey.BACKUPS, kv);
+          fetchLocalBackups(); // Yeniden yükle
+        }
+      }).catch(() => {});
+    }
   }, [fetchCloudBackups, fetchLocalBackups, fetchBackupStats, fetchSyncHealth]);
 
   // ─── Create cloud backup ─────────────────────────────────────────────────

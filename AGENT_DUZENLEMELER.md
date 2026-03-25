@@ -76,6 +76,15 @@ Her düzenlenen dosyanın **en üstüne** şu yorum satırı eklenir:
 | 45 | `app/pages/UretimPage.tsx` | 2026-03-25 | FIX: `URETIM_DEFAULTS` sonrası `kvSet('uretim_defaults')` eklendi — üretim varsayılan maliyetleri senkron. |
 | 46 | `app/pages/YedeklerPage.tsx` | 2026-03-25 | FIX: Yedek oluşturma ve silme sonrası `kvSet('backups')` eklendi — yedek listesi senkron. |
 | 47 | `app/components/ProfileEditModal.tsx` | 2026-03-25 | FIX: Profil güncellemesi sonrası `kvSet('personel_status')` eklendi — profil değişiklikleri senkron. |
+| 48 | `app/pages/FisHistoryPage.tsx` | 2026-03-25 | FIX: `setInStorage(StorageKey.FISLER)` bypass kaldırıldı — fiş geri yükleme ve düzenleme artık useTableSync üzerinden (addItem/updateItem). Mount-time `kvGet('deleted_fisler')` fallback eklendi. |
+| 49 | `app/pages/PersonelPage.tsx` | 2026-03-25 | FIX: Uzaktan oturum kapatmada `setInStorage(StorageKey.PERSONEL_DATA)` bypass kaldırıldı — artık yalnızca `updateItem()` ile useTableSync üzerinden güncelleniyor. |
+| 50 | `app/components/RoleRequestModal.tsx` | 2026-03-25 | FIX: Yetki talebi oluşturma sonrası `kvSet('role_requests')` eklendi — talepler tüm cihazlarda senkron. |
+| 51 | `app/pages/UretimPage.tsx` | 2026-03-25 | FIX: Mount-time `kvGet('uretim_defaults')` fallback eklendi — yeni cihazda varsayılan maliyetler KV'den yükleniyor. |
+| 52 | `app/pages/YedeklerPage.tsx` | 2026-03-25 | FIX: Mount-time `kvGet('backups')` fallback eklendi — yedek listesi yeni cihazda KV'den yükleniyor. |
+| 53 | `app/contexts/EmployeeContext.tsx` | 2026-03-25 | FIX: Mount-time `kvGet('current_employee')` fallback eklendi — yeni cihazda aktif çalışan KV'den yükleniyor. |
+| 54 | `app/utils/activityLogger.ts` | 2026-03-25 | FIX: `loadActivityLogsFromKV()` async helper eklendi — localStorage boşsa denetim logları KV'den yüklenir. App.tsx'de başlangıçta çağrılır. |
+| 55 | `app/utils/vitrinAnalytics.ts` | 2026-03-25 | FIX: `loadVitrinAnalyticsFromKV()` async helper eklendi — localStorage boşsa vitrin analitik KV'den yüklenir. App.tsx'de başlangıçta çağrılır. |
+| 56 | `app/App.tsx` | 2026-03-25 | FIX: Başlangıçta `loadActivityLogsFromKV()` ve `loadVitrinAnalyticsFromKV()` çağrısı eklendi — KV fallback aktif. |
 
 ---
 

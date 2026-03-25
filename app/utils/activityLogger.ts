@@ -131,6 +131,22 @@ export function getActivityLogs(): ActivityLogEntry[] {
 }
 
 /**
+ * [AJAN-2] KV fallback — localStorage boşsa denetim loglarını KV'den yükle
+ * Mount-time çağrılır (async, sonucu localStorage'a yazar)
+ */
+export async function loadActivityLogsFromKV(): Promise<void> {
+  const local = getFromStorage<ActivityLogEntry[]>(StorageKey.USER_ACTIVITY_LOG);
+  if (local && local.length > 0) return;
+  try {
+    const { kvGet } = await import('../lib/supabase-kv');
+    const kv = await kvGet<ActivityLogEntry[]>('activity_logs');
+    if (kv && kv.length > 0) {
+      setInStorage(StorageKey.USER_ACTIVITY_LOG, kv);
+    }
+  } catch {}
+}
+
+/**
  * Kategoriye gore filtrele
  */
 export function getLogsByCategory(category: ActivityCategory): ActivityLogEntry[] {

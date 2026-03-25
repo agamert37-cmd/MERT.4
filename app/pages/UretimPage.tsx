@@ -22,7 +22,7 @@ import {
 import { motion, AnimatePresence } from 'motion/react';
 import { toast } from 'sonner';
 import { getFromStorage, setInStorage, StorageKey } from '../utils/storage';
-import { kvSet } from '../lib/supabase-kv';
+import { kvGet, kvSet } from '../lib/supabase-kv';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useEmployee } from '../contexts/EmployeeContext';
@@ -1033,7 +1033,17 @@ export function UretimPage() {
   // Load defaults and initial stock
   useEffect(() => {
     const savedDefaults = getFromStorage<UretimDefaults>(StorageKey.URETIM_DEFAULTS);
-    if (savedDefaults) setDefaults(savedDefaults);
+    if (savedDefaults) {
+      setDefaults(savedDefaults);
+    } else {
+      // [AJAN-2] KV fallback — localStorage boşsa varsayılanları KV'den yükle
+      kvGet<UretimDefaults>('uretim_defaults').then(kv => {
+        if (kv) {
+          setDefaults(kv);
+          setInStorage(StorageKey.URETIM_DEFAULTS, kv);
+        }
+      }).catch(() => {});
+    }
     refreshStok();
   }, []);
 

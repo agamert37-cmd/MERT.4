@@ -86,6 +86,21 @@ export function getVitrinAnalytics(): VitrinAnalytics {
   return getAnalytics();
 }
 
+/**
+ * [AJAN-2] KV fallback — localStorage boşsa vitrin analitik verilerini KV'den yükle
+ */
+export async function loadVitrinAnalyticsFromKV(): Promise<void> {
+  const local = getFromStorage<VitrinAnalytics>(StorageKey.VITRIN_ANALYTICS);
+  if (local && local.events && local.events.length > 0) return;
+  try {
+    const { kvGet } = await import('../lib/supabase-kv');
+    const kv = await kvGet<VitrinAnalytics>('vitrin_analytics');
+    if (kv && kv.events && kv.events.length > 0) {
+      setInStorage(StorageKey.VITRIN_ANALYTICS, kv);
+    }
+  } catch {}
+}
+
 export function getVitrinEventsByType(type: VitrinEvent['type']): VitrinEvent[] {
   const analytics = getAnalytics();
   return analytics.events.filter(e => e.type === type);

@@ -22,6 +22,8 @@ import { SERVER_BASE_URL, SUPABASE_ANON_KEY } from './lib/supabase-config';
 import { startNodeHeartbeat } from './lib/node-registry';
 import { startAutoNodeSync, replayWAL } from './lib/active-client';
 import { supabase as cloudSupabase } from './lib/supabase';
+import { loadActivityLogsFromKV } from './utils/activityLogger';
+import { loadVitrinAnalyticsFromKV } from './utils/vitrinAnalytics';
 
 // ─── Bulut Otomatik Yedekleme ─────────────────────────────────────────────────
 // YedeklerPage'deki ayarları okur ve periyodik olarak bulut yedeği alır.
@@ -137,6 +139,10 @@ export default function App() {
 
     // 4e. Başlangıçta WAL'ı replay et (önceki oturumdan kalan yazmalar)
     replayWAL(cloudSupabase).catch(() => {});
+
+    // 4f. KV fallback — localStorage boşsa denetim logları ve vitrin analitiklerini KV'den yükle
+    loadActivityLogsFromKV();
+    loadVitrinAnalyticsFromKV();
 
     // 5. Uygulama arka plandan döndüğünde zorla yeniden sync
     //    BUG FIX [AJAN-2]: startRealtimeSync, _realtimeUnsubscribe set ise erken çıkıyordu.

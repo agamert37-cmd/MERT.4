@@ -6,7 +6,7 @@ import * as Dialog from '@radix-ui/react-dialog';
 import { toast } from 'sonner';
 import { getFromStorage, setInStorage, StorageKey } from '../utils/storage';
 import { supabase } from '../lib/supabase';
-import { kvSet } from '../lib/supabase-kv';
+import { kvGet, kvSet } from '../lib/supabase-kv';
 import { useEmployee } from '../contexts/EmployeeContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useLanguage } from '../contexts/LanguageContext';
@@ -178,6 +178,16 @@ export function FisHistoryPage() {
     };
     const loadDeleted = () => setDeletedFisler(getFromStorage<any[]>(StorageKey.DELETED_FISLER) || []);
     loadDeleted();
+    // [AJAN-2] KV fallback — localStorage boşsa silinen fiş geçmişini KV'den yükle
+    const local = getFromStorage<any[]>(StorageKey.DELETED_FISLER);
+    if (!local || local.length === 0) {
+      kvGet<any[]>('deleted_fisler').then(kv => {
+        if (kv && kv.length > 0) {
+          setDeletedFisler(kv);
+          setInStorage(StorageKey.DELETED_FISLER, kv);
+        }
+      }).catch(() => {});
+    }
     window.addEventListener('storage_update', loadFisler);
     window.addEventListener('storage', loadFisler);
     return () => {
@@ -346,10 +356,7 @@ export function FisHistoryPage() {
 
     // deletedAt ve deletedBy alanlarını kaldır
     const { deletedAt, deletedBy, ...cleanFis } = fisToRestore;
-    const updatedFisler = [cleanFis, ...fisler];
-    setFisler(updatedFisler);
-    setInStorage(StorageKey.FISLER, updatedFisler);
-    // BUG FIX [AJAN-2]: Supabase tablosuna da geri ekle
+    // BUG FIX [AJAN-2]: useTableSync üzerinden ekle — hem localStorage hem Supabase hem dual-write
     addFisToSupabase(cleanFis as Fis).catch(e => console.warn('[FisHistory] Supabase restore hatası:', e));
 
     const updatedDeleted = deletedFisler.filter(f => f.id !== id);
@@ -564,10 +571,7 @@ export function FisHistoryPage() {
       } : {}),
     };
 
-    const updated = fisler.map(f => f.id === selectedFis.id ? updatedFis : f);
-    setFisler(updated);
-    setInStorage(StorageKey.FISLER, updated);
-    // BUG FIX [AJAN-2]: Supabase tablosunu da güncelle
+    // BUG FIX [AJAN-2]: useTableSync üzerinden güncelle — setInStorage bypass kaldırıldı
     updateFisInSupabase(updatedFis.id, updatedFis).catch(e => console.warn('[FisHistory] Supabase update hatası:', e));
     logActivity('custom', 'Fiş güncellendi', { employeeName: user?.name, page: 'FisHistory' });
     toast.success('Fis basariyla guncellendi');

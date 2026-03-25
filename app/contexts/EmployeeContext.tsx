@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, ReactNode, useEffect, useCallback } from 'react';
 import { StorageKey, getFromStorage, setInStorage } from '../utils/storage';
-import { kvSet } from '../lib/supabase-kv';
+import { kvGet, kvSet } from '../lib/supabase-kv';
 
 export interface Employee {
   id: string;
@@ -94,6 +94,19 @@ export function EmployeeProvider({ children }: { children: ReactNode }) {
   const [currentEmployee, setCurrentEmployeeState] = useState<Employee | null>(() => {
     return getFromStorage<Employee>(StorageKey.CURRENT_EMPLOYEE) || null;
   });
+
+  // [AJAN-2] KV fallback — localStorage boşsa aktif çalışanı KV'den yükle
+  useEffect(() => {
+    const local = getFromStorage<Employee>(StorageKey.CURRENT_EMPLOYEE);
+    if (!local) {
+      kvGet<Employee>('current_employee').then(kv => {
+        if (kv) {
+          setInStorage(StorageKey.CURRENT_EMPLOYEE, kv);
+          setCurrentEmployeeState(kv);
+        }
+      }).catch(() => {});
+    }
+  }, []);
 
   // Storage'dan currentEmployee değişikliklerini dinle (login sonrası güncelleme için)
   useEffect(() => {
