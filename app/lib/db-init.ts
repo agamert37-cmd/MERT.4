@@ -1,21 +1,15 @@
+// [AJAN-2 | claude/serene-gagarin | 2026-03-26] Son düzenleyen: Claude Opus 4.6
 /**
- * Veritabanı Otomatik Kurulum ve Başlatma
+ * Veritabanı Başlatma — PouchDB + CouchDB
  *
- * Uygulama ilk açıldığında Supabase'deki gerekli tabloların varlığını
- * kontrol eder. Eksik tablolar varsa otomatik olarak oluşturur.
- *
- * Tablolar:
- *   - kv_store_daadfb0c  : Ana KV depo (tüm uygulama verisi)
- *   - personeller        : Personel kayıtları
- *   - cari_hesaplar      : Müşteri / toptancı hesapları
- *   - araclar            : Araç kayıtları
- *   - kasa_islemleri     : Kasa işlemleri
- *   - fisler             : Satış / gider fişleri
- *   - urunler            : Ürün / stok kayıtları
- *   - bankalar           : Banka hesapları
+ * PouchDB yerel veritabanları otomatik oluşur, CouchDB tarafı
+ * couchdb-setup.sh ile oluşturulur. Bu dosya artık sadece
+ * uyumluluk için tip/fonksiyon export eder.
  */
 
-import { SERVER_BASE_URL, SUPABASE_ANON_KEY } from './supabase-config';
+import { testCouchDbConnection } from './pouchdb';
+import { getDb } from './pouchdb';
+import { TABLE_NAMES } from './db-config';
 
 // ─── Tipler ───────────────────────────────────────────────────────────────────
 
@@ -41,168 +35,75 @@ export interface DbInitResult {
   error?: string;
 }
 
-// ─── Yardımcı ─────────────────────────────────────────────────────────────────
-
-function getHeaders() {
-  return {
-    'Content-Type': 'application/json',
-    'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
-  };
-}
-
-// Uygulama açılışında yalnızca bir kez kurulum denensin
+// Uygulama açılışında yalnızca bir kez kontrol
 let _initAttempted = false;
 let _initResult: DbInitResult | null = null;
 
-// ─── Tablo Kontrol ────────────────────────────────────────────────────────────
-
 /**
- * Supabase'deki gerekli tabloların var olup olmadığını kontrol eder.
+ * PouchDB tablolarının durumunu kontrol et
  */
 export async function checkDatabaseStatus(): Promise<DbInitResult> {
   try {
-    const res = await fetch(`${SERVER_BASE_URL}/check-tables`, {
-      headers: getHeaders(),
-    });
-
-    if (!res.ok) {
-      return {
-        status: 'error',
-        message: `Sunucu yanıt vermedi (HTTP ${res.status})`,
-        allReady: false,
-      };
+    const tables: Record<string, boolean> = {};
+    for (const table of TABLE_NAMES) {
+      try {
+        const db = getDb(table);
+        await db.info();
+        tables[table] = true;
+      } catch {
+        tables[table] = false;
+      }
     }
 
-    const data = await res.json();
-
-    if (data.allReady) {
-      return {
-        status: 'ready',
-        message: 'Tüm tablolar hazır',
-        tables: data.tables,
-        allReady: true,
-      };
-    }
-
+    const allReady = Object.values(tables).every(Boolean);
     return {
-      status: 'setup_needed',
-      message: 'Eksik tablolar var, kurulum gerekli',
-      tables: data.tables,
-      allReady: false,
+      status: allReady ? 'ready' : 'setup_needed',
+      message: allReady ? 'Tüm tablolar hazır' : 'Bazı tablolar oluşturulamadı',
+      tables,
+      allReady,
     };
   } catch (e: any) {
-    return {
-      status: 'error',
-      message: `Bağlantı hatası: ${e.message}`,
-      allReady: false,
-    };
+    return { status: 'error', message: `Kontrol hatası: ${e.message}`, allReady: false };
   }
 }
 
-// ─── Tablo Kurulumu ───────────────────────────────────────────────────────────
-
 /**
- * Eksik tabloları Supabase'de oluşturur (edge function üzerinden).
+ * PouchDB tabloları otomatik oluşur — bu fonksiyon CouchDB bağlantısını kontrol eder
  */
 export async function setupDatabase(): Promise<DbInitResult> {
-  try {
-    const res = await fetch(`${SERVER_BASE_URL}/setup-db`, {
-      method: 'POST',
-      headers: getHeaders(),
-    });
-
-    if (!res.ok) {
-      return {
-        status: 'error',
-        message: `Kurulum isteği başarısız (HTTP ${res.status})`,
-        allReady: false,
-      };
-    }
-
-    const data = await res.json();
-
-    if (data.success) {
-      return {
-        status: 'ready',
-        message: data.message || 'Tablolar başarıyla oluşturuldu',
-        steps: data.steps,
-        allReady: true,
-      };
-    }
-
-    // Kısmi başarı — bazı tablolar oluşmuş olabilir
+  const conn = await testCouchDbConnection();
+  if (!conn.ok) {
     return {
       status: 'error',
-      message: data.error || data.message || 'Kurulum tamamlanamadı',
-      steps: data.steps,
-      allReady: false,
-    };
-  } catch (e: any) {
-    return {
-      status: 'error',
-      message: `Kurulum bağlantı hatası: ${e.message}`,
+      message: `CouchDB bağlantısı kurulamadı: ${conn.error}`,
       allReady: false,
     };
   }
+  return { status: 'ready', message: 'PouchDB tabloları hazır, CouchDB bağlı', allReady: true };
 }
 
-// ─── Otomatik Başlatma ────────────────────────────────────────────────────────
-
 /**
- * Veritabanını başlatır:
- *   1. Tabloları kontrol eder
- *   2. Eksik tablolar varsa otomatik olarak oluşturur
- *
- * Yalnızca ilk çağrıda gerçek işlem yapar; sonraki çağrılar önbellekten döner.
+ * Veritabanını başlat
  */
 export async function initializeDatabase(forceReinit = false): Promise<DbInitResult> {
-  if (!forceReinit && _initAttempted && _initResult) {
-    return _initResult;
-  }
+  if (!forceReinit && _initAttempted && _initResult) return _initResult;
 
   _initAttempted = true;
-
-  // 1. Mevcut durumu kontrol et
   const checkResult = await checkDatabaseStatus();
+  _initResult = checkResult;
 
   if (checkResult.status === 'ready') {
-    _initResult = checkResult;
-    console.log('%c[DB Init] Tüm tablolar hazır ✓', 'color: #22c55e; font-weight: bold');
-    return _initResult;
-  }
-
-  if (checkResult.status === 'error') {
-    _initResult = checkResult;
-    console.warn('[DB Init] Kontrol başarısız:', checkResult.message);
-    return _initResult;
-  }
-
-  // 2. Eksik tablolar varsa kur
-  console.log('%c[DB Init] Tablolar eksik, otomatik kurulum başlıyor...', 'color: #f59e0b; font-weight: bold');
-  const setupResult = await setupDatabase();
-  // Cache'e yaz (setup sonucu 'ready' veya 'error' olur)
-  _initResult = { ...setupResult, status: setupResult.status };
-
-  if (setupResult.status === 'ready') {
-    console.log('%c[DB Init] Kurulum tamamlandı ✓', 'color: #22c55e; font-weight: bold');
-  } else {
-    console.error('[DB Init] Kurulum başarısız:', setupResult.message);
+    console.log('%c[DB Init] PouchDB tabloları hazır', 'color: #22c55e; font-weight: bold');
   }
 
   return _initResult;
 }
 
-/**
- * Önbelleği temizler (test veya zorla yeniden kurulum için).
- */
 export function resetDbInitCache() {
   _initAttempted = false;
   _initResult = null;
 }
 
-/**
- * Son kurulum sonucunu döner (yoksa null).
- */
 export function getLastDbInitResult(): DbInitResult | null {
   return _initResult;
 }

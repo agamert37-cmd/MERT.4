@@ -557,7 +557,8 @@ export function RaporlarPage() {
             { id: 'financial', label: 'Finans', icon: DollarSign },
             { id: 'stock', label: 'Stok', icon: Package },
             { id: 'personel', label: 'Personel', icon: UserCheck },
-            { id: 'security', label: 'Güvenlik', icon: Shield }
+            { id: 'security', label: 'Güvenlik', icon: Shield },
+            { id: 'kar', label: 'Kâr Analizi', icon: Target },
           ].map(tab => (
             <Tabs.Trigger key={tab.id} value={tab.id} className={`flex items-center gap-1.5 sm:gap-2 px-3 sm:px-6 py-2.5 sm:py-3 rounded-lg sm:rounded-xl font-bold transition-all whitespace-nowrap text-xs sm:text-sm active:scale-95 ${selectedTab === tab.id ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'text-gray-400 hover:text-white hover:bg-white/5'}`}>
               <tab.icon className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> {tab.label}
@@ -1042,6 +1043,155 @@ export function RaporlarPage() {
               />
             </div>
           </div>
+        </Tabs.Content>
+
+        {/* ═══════════════════════════════════════════════════ KÂR ANALİZİ ═══════════════════════════════════════════════════ */}
+        <Tabs.Content value="kar">
+          {(() => {
+            // Her ürün için ağırlıklı ortalama alış fiyatı hesapla
+            const karData = rawStok.map((product: any) => {
+              const movements: any[] = product.movements || [];
+              // Alış hareketlerini filtrele
+              const alisMov = movements.filter((m: any) =>
+                ['ALIS', 'FATURA_ALIS', 'URETIM_GIRIS', 'alis'].includes(m.type)
+              );
+              const totalQtyAlis = alisMov.reduce((s: number, m: any) => s + Math.abs(m.quantity || 0), 0);
+              const totalCostAlis = alisMov.reduce((s: number, m: any) => s + Math.abs((m.price || 0) * (m.quantity || 0)), 0);
+              const avgBuyPrice = totalQtyAlis > 0 ? totalCostAlis / totalQtyAlis : 0;
+
+              const sellPrice = product.sellPrice || 0;
+              const margin = sellPrice > 0 && avgBuyPrice > 0 ? ((sellPrice - avgBuyPrice) / sellPrice) * 100 : null;
+              const profitPerUnit = sellPrice - avgBuyPrice;
+
+              // Satış hareketleri
+              const satisMov = movements.filter((m: any) => ['SATIS', 'satis'].includes(m.type));
+              const totalQtySold = satisMov.reduce((s: number, m: any) => s + Math.abs(m.quantity || 0), 0);
+              const totalProfit = totalQtySold * profitPerUnit;
+
+              return {
+                id: product.id,
+                name: product.name || 'Bilinmiyor',
+                category: product.category || '-',
+                unit: product.unit || 'KG',
+                sellPrice,
+                avgBuyPrice,
+                margin,
+                profitPerUnit,
+                totalQtySold,
+                totalProfit,
+                currentStock: product.currentStock || 0,
+              };
+            }).filter((p: any) => p.sellPrice > 0 || p.avgBuyPrice > 0);
+
+            const sorted = [...karData].sort((a: any, b: any) => (b.totalProfit || 0) - (a.totalProfit || 0));
+            const totalEstProfit = karData.reduce((s: any, p: any) => s + (p.totalProfit || 0), 0);
+            const avgMargin = karData.filter((p: any) => p.margin !== null).length > 0
+              ? karData.filter((p: any) => p.margin !== null).reduce((s: any, p: any) => s + p.margin, 0) / karData.filter((p: any) => p.margin !== null).length
+              : 0;
+
+            return (
+              <div className="space-y-4 sm:space-y-6">
+                {/* Özet kartlar */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  {[
+                    { label: 'Tahmini Toplam Kâr', value: `₺${totalEstProfit.toLocaleString('tr-TR', { maximumFractionDigits: 0 })}`, color: '#10b981' },
+                    { label: 'Ort. Kâr Marjı', value: `%${avgMargin.toFixed(1)}`, color: '#3b82f6' },
+                    { label: 'Analiz Edilen Ürün', value: `${karData.length}`, color: '#8b5cf6' },
+                    { label: 'Kârsız Ürün', value: `${karData.filter((p: any) => p.margin !== null && p.margin <= 0).length}`, color: '#ef4444' },
+                  ].map((s, i) => (
+                    <div key={i} className="p-3 rounded-xl bg-black/30 border border-white/5">
+                      <p className="text-[10px] text-gray-500 font-bold uppercase tracking-wider">{s.label}</p>
+                      <p className="text-lg font-black mt-1" style={{ color: s.color }}>{s.value}</p>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="p-4 sm:p-6 rounded-2xl sm:rounded-3xl bg-[#111] border border-white/5">
+                  <div className="flex items-center gap-3 mb-5">
+                    <div className="p-2.5 rounded-xl bg-emerald-500/10"><Target className="w-5 h-5 text-emerald-400" /></div>
+                    <div>
+                      <h2 className="font-bold text-lg">Ürün Bazlı Kâr Marjı</h2>
+                      <p className="text-[10px] text-gray-500">Ağırlıklı ortalama alış fiyatı × satış fiyatı karşılaştırması</p>
+                    </div>
+                  </div>
+
+                  {sorted.length === 0 ? (
+                    <div className="py-12 text-center">
+                      <Target className="w-10 h-10 text-gray-600 mx-auto mb-3" />
+                      <p className="text-sm text-gray-500">Kâr analizi için stok hareketi gerekli</p>
+                      <p className="text-xs text-gray-600 mt-1">Alış ve satış işlemleri yapıldıkça bu grafik dolacaktır</p>
+                    </div>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="border-b border-white/5">
+                            {['Ürün', 'Kategori', 'Ort. Alış', 'Satış Fiyatı', 'Birim Kâr', 'Marj %', 'Sat. Miktar', 'Tahmini Kâr'].map(h => (
+                              <th key={h} className="text-left py-2 px-3 text-[10px] font-bold text-gray-500 uppercase tracking-wider whitespace-nowrap">{h}</th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-white/5">
+                          {sorted.map((p: any, i: number) => {
+                            const hasMargin = p.margin !== null;
+                            const good = hasMargin && p.margin >= 15;
+                            const warn = hasMargin && p.margin >= 0 && p.margin < 15;
+                            const bad = hasMargin && p.margin < 0;
+                            return (
+                              <tr key={p.id} className="hover:bg-white/3 transition-colors">
+                                <td className="py-2.5 px-3">
+                                  <p className="font-bold text-white text-sm">{p.name}</p>
+                                  <p className="text-[10px] text-gray-600">{p.unit}</p>
+                                </td>
+                                <td className="py-2.5 px-3 text-xs text-gray-400">{p.category}</td>
+                                <td className="py-2.5 px-3 text-xs font-mono text-amber-400">
+                                  {p.avgBuyPrice > 0 ? `₺${p.avgBuyPrice.toFixed(2)}` : <span className="text-gray-600">—</span>}
+                                </td>
+                                <td className="py-2.5 px-3 text-xs font-mono text-white">
+                                  {p.sellPrice > 0 ? `₺${p.sellPrice.toFixed(2)}` : <span className="text-gray-600">—</span>}
+                                </td>
+                                <td className="py-2.5 px-3 text-xs font-mono font-bold">
+                                  {p.avgBuyPrice > 0 && p.sellPrice > 0
+                                    ? <span className={p.profitPerUnit >= 0 ? 'text-emerald-400' : 'text-red-400'}>₺{p.profitPerUnit.toFixed(2)}</span>
+                                    : <span className="text-gray-600">—</span>}
+                                </td>
+                                <td className="py-2.5 px-3">
+                                  {hasMargin ? (
+                                    <div className="flex items-center gap-2">
+                                      <span className={`text-xs font-black tabular-nums ${good ? 'text-emerald-400' : warn ? 'text-amber-400' : 'text-red-400'}`}>
+                                        %{p.margin.toFixed(1)}
+                                      </span>
+                                      <div className="w-16 h-1.5 bg-white/5 rounded-full overflow-hidden">
+                                        <div className={`h-full rounded-full transition-all ${good ? 'bg-emerald-500' : warn ? 'bg-amber-500' : 'bg-red-500'}`}
+                                          style={{ width: `${Math.min(Math.max(p.margin, 0), 100)}%` }} />
+                                      </div>
+                                    </div>
+                                  ) : <span className="text-[10px] text-gray-600">Alış yok</span>}
+                                </td>
+                                <td className="py-2.5 px-3 text-xs font-mono text-gray-300">
+                                  {p.totalQtySold > 0 ? `${p.totalQtySold.toFixed(1)} ${p.unit}` : <span className="text-gray-600">0</span>}
+                                </td>
+                                <td className="py-2.5 px-3 text-xs font-black tabular-nums">
+                                  {p.totalProfit !== 0
+                                    ? <span className={p.totalProfit >= 0 ? 'text-emerald-400' : 'text-red-400'}>₺{Math.abs(p.totalProfit).toLocaleString('tr-TR', { maximumFractionDigits: 0 })}</span>
+                                    : <span className="text-gray-600">—</span>}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+
+                  <p className="text-[10px] text-gray-600 mt-4 pl-1">
+                    * Kâr hesabı: ağırlıklı ortalama alış fiyatı (ALIS hareketlerinden) vs. güncel satış fiyatı karşılaştırmasıdır.
+                    Tahmini kâr = birim kâr × toplam satılan miktar. Gerçek kâr faturalar ve KDV dahil hesaplama gerektirir.
+                  </p>
+                </div>
+              </div>
+            );
+          })()}
         </Tabs.Content>
 
       </Tabs.Root>

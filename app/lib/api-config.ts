@@ -3,7 +3,9 @@
  * Supabase bilgileri gomulu (supabase-config), sadece OpenAI key localStorage'da saklanir
  */
 
-import { SUPABASE_URL, SUPABASE_ANON_KEY } from './supabase-config';
+// supabase-config removed — hardcoded placeholders for legacy compatibility
+const SUPABASE_URL = '';
+const SUPABASE_ANON_KEY = '';
 
 const OPENAI_KEY_STORAGE = 'isleyen_et_openai_key';
 // Legacy key for migration

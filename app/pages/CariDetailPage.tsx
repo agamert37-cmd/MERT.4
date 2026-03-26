@@ -1,3 +1,4 @@
+// [AJAN-2 | claude/serene-gagarin | 2026-03-25] Son düzenleyen: Claude Sonnet 4.6
 import React, { useState, useMemo, useEffect } from 'react';
 import { useEmployee } from '../contexts/EmployeeContext';
 import { useNavigate, useParams } from 'react-router';
@@ -393,10 +394,12 @@ export function CariDetailPage() {
 
   const updateFisInStorage = (fisId: string, updater: (fis: any) => any) => {
     const allFis = getFromStorage<any[]>(StorageKey.FISLER) || [];
+    const updatedFis = allFis.find(f => f.id === fisId);
     const updated = allFis.map(f => f.id === fisId ? updater(f) : f);
     setInStorage(StorageKey.FISLER, updated);
     window.dispatchEvent(new Event('storage_update'));
     setRefreshCounter(c => c + 1);
+    // Sync handled by useTableSync
   };
 
   const handleAddInvoice = (fisId: string) => {

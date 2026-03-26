@@ -1,3 +1,4 @@
+// [2026-03-26] Son düzenleyen: Claude Sonnet 4.6
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
@@ -12,8 +13,7 @@ import { toast } from 'sonner';
 import * as Dialog from '@radix-ui/react-dialog';
 import { getFromStorage, setInStorage, StorageKey } from '../utils/storage';
 import { generateDetailedExcelBackup, generatePDFBackup } from '../utils/exportGenerator';
-import { kvGetByPrefixWithKeys, TABLE_PREFIXES } from '../lib/supabase-kv';
-import { SERVER_BASE_URL, SUPABASE_ANON_KEY } from '../lib/supabase-config';
+import { kvGet, kvSet } from '../lib/pouchdb-kv';
 import { useAuth } from '../contexts/AuthContext';
 import { useEmployee } from '../contexts/EmployeeContext';
 import { useLanguage } from '../contexts/LanguageContext';
@@ -21,55 +21,16 @@ import { logActivity } from '../utils/activityLogger';
 import { useModuleBus } from '../hooks/useModuleBus';
 import { getPagePermissions } from '../utils/permissions';
 import {
-  getLocalRepoConfig, getLocalBackupList, createLocalBackup,
-  deleteLocalBackup, restoreFromLocalBackup, isLocalHealthy,
-  type BackupSnapshot,
-} from '../lib/dual-supabase';
+  createPouchBackup, downloadBackup, restorePouchBackup,
+  restoreSelectedTables, getBackupMetaList, saveBackupMeta,
+  deleteBackupMeta, getBackupSystemStats, startAutoBackupScheduler,
+  stopAutoBackupScheduler, getAutoBackupConfig, saveAutoBackupConfig,
+  type BackupMeta, type PouchBackupData,
+} from '../lib/pouchdb-backup';
 
 const STORAGE_PREFIX = 'isleyen_et_';
 
-// ─── Types ─────────────────────────────────────────────────────────────────
-interface CloudBackupMeta {
-  id: string;
-  timestamp: string;
-  type: 'manual' | 'auto';
-  label?: string;
-  totalKeys: number;
-  dataSizeBytes: number;
-  checksum: string;
-  tableStats: Record<string, number>;
-}
-
-interface BackupEntry {
-  id: string;
-  timestamp: string;
-  type: 'manual' | 'auto';
-  dataSize: number;
-  keysCount: number;
-  source: 'local' | 'supabase' | 'merged';
-  supabaseKeysCount?: number;
-  localKeysCount?: number;
-  data: Record<string, string>;
-}
-
 type ActiveTab = 'cloud' | 'local' | 'schedule' | 'sync';
-
-// ─── API helpers ───────────────────────────────────────────────────────────
-const headers = () => ({
-  'Content-Type': 'application/json',
-  'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
-});
-
-async function apiPost(path: string, body?: any) {
-  const res = await fetch(`${SERVER_BASE_URL}${path}`, {
-    method: 'POST', headers: headers(), body: body ? JSON.stringify(body) : undefined,
-  });
-  return res.json();
-}
-async function apiGet(path: string) {
-  const res = await fetch(`${SERVER_BASE_URL}${path}`, { headers: headers() });
-  return res.json();
-}
 
 // ─── localStorage collector ────────────────────────────────────────────────
 function collectLocalStorageData(): { data: Record<string, string>; totalSize: number; keysCount: number } {
@@ -103,139 +64,142 @@ export function YedeklerPage() {
   const { emit } = useModuleBus();
   const { canManage: canBackup } = getPagePermissions(user, currentEmployee, 'yedekler');
 
-  const [activeTab, setActiveTab] = useState<ActiveTab>('cloud');
-  const [cloudBackups, setCloudBackups] = useState<CloudBackupMeta[]>([]);
-  const [localBackups, setLocalBackups] = useState<BackupEntry[]>([]);
+  const [activeTab, setActiveTab] = useState<ActiveTab>('local');
+  const [localBackups, setLocalBackups] = useState<BackupMeta[]>([]);
   const [loading, setLoading] = useState(false);
   const [creating, setCreating] = useState(false);
   const [createProgress, setCreateProgress] = useState('');
   const [restoringId, setRestoringId] = useState<string | null>(null);
   const [restoreProgress, setRestoreProgress] = useState('');
-  const [verifyingId, setVerifyingId] = useState<string | null>(null);
-  const [verifyResult, setVerifyResult] = useState<{ id: string; verified: boolean; reason: string } | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
-  const [syncHealth, setSyncHealth] = useState<any>(null);
-  const [syncHealthLoading, setSyncHealthLoading] = useState(false);
-  const [backupStats, setBackupStats] = useState<{ totalKeys: number; backupCount: number; lastBackup: any } | null>(null);
+  const [backupStats, setBackupStats] = useState<{ totalLocalBackups: number; lastBackupAt: string | null; totalDocsInPouchDB: number; tableStats: Record<string, number> } | null>(null);
 
-  // Selective restore
+  // Selective restore modal
   const [selectiveModal, setSelectiveModal] = useState<{ backupId: string; tableStats: Record<string, number> } | null>(null);
   const [selectedTables, setSelectedTables] = useState<Set<string>>(new Set());
   const [selectiveRestoring, setSelectiveRestoring] = useState(false);
 
   // File restore
   const [isFileModalOpen, setIsFileModalOpen] = useState(false);
-  const [restoreFileContent, setRestoreFileContent] = useState<any>(null);
+  const [restoreFileContent, setRestoreFileContent] = useState<PouchBackupData | null>(null);
   const [restoreFileName, setRestoreFileName] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // ─── Auto-backup schedule state ──────────────────────────────────────────
-  const [autoBackupEnabled, setAutoBackupEnabled] = useState(() => {
-    try { return JSON.parse(localStorage.getItem('isleyen_et_auto_backup_config') || '{}').enabled || false; } catch { return false; }
-  });
-  const [autoBackupInterval, setAutoBackupInterval] = useState(() => {
-    try { return JSON.parse(localStorage.getItem('isleyen_et_auto_backup_config') || '{}').intervalHours || 24; } catch { return 24; }
-  });
-  const [lastAutoBackup, setLastAutoBackup] = useState(() => {
-    try { return JSON.parse(localStorage.getItem('isleyen_et_auto_backup_config') || '{}').lastRun || null; } catch { return null; }
-  });
-
-  // ─── Fetch cloud backups ─────────────────────────────────────────────────
-  const fetchCloudBackups = useCallback(async () => {
-    setLoading(true);
-    try {
-      const res = await apiGet('/backup/list-full');
-      if (res.success) setCloudBackups(res.backups || []);
-    } catch (e) {
-      console.error('Cloud backup list error:', e);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  // Auto-backup schedule state
+  const [autoBackupEnabled, setAutoBackupEnabled] = useState(() => getAutoBackupConfig().enabled || false);
+  const [autoBackupInterval, setAutoBackupInterval] = useState(() => getAutoBackupConfig().intervalHours || 24);
+  const [lastAutoBackup, setLastAutoBackup] = useState(() => getAutoBackupConfig().lastRun || null);
 
   const fetchLocalBackups = useCallback(() => {
-    const saved = getFromStorage<BackupEntry[]>(StorageKey.BACKUPS) || [];
-    setLocalBackups(saved);
-  }, []);
-
-  const fetchSyncHealth = useCallback(async () => {
-    setSyncHealthLoading(true);
-    try {
-      const res = await apiGet('/sync/health');
-      if (res.success) setSyncHealth(res);
-    } catch {} finally { setSyncHealthLoading(false); }
+    setLocalBackups(getBackupMetaList());
   }, []);
 
   const fetchBackupStats = useCallback(async () => {
     try {
-      const res = await apiGet('/backup/stats');
-      if (res.success) setBackupStats(res);
+      const stats = await getBackupSystemStats();
+      setBackupStats(stats);
     } catch {}
   }, []);
 
   useEffect(() => {
-    fetchCloudBackups();
     fetchLocalBackups();
     fetchBackupStats();
-    fetchSyncHealth();
-  }, [fetchCloudBackups, fetchLocalBackups, fetchBackupStats, fetchSyncHealth]);
+    // Auto-backup zamanlayıcısını başlat
+    startAutoBackupScheduler((meta) => {
+      fetchLocalBackups();
+      setLastAutoBackup(meta.timestamp);
+    });
+    return () => stopAutoBackupScheduler();
+  }, [fetchLocalBackups, fetchBackupStats]);
 
-  // ─── Create cloud backup ─────────────────────────────────────────────────
-  const handleCreateCloudBackup = async () => {
+  // ─── Yedek Oluştur (PouchDB) ─────────────────────────────────────────────
+  const handleCreateBackup = async () => {
     if (!canBackup) { toast.error('Yedekleme yetkiniz bulunmamaktadır.'); return; }
     setCreating(true);
-    setCreateProgress('Sunucu tarafında tam yedek oluşturuluyor...');
+    setCreateProgress('PouchDB veritabanları okunuyor...');
     try {
-      const res = await apiPost('/backup/create-full', { type: 'manual' });
-      if (res.success) {
-        toast.success(`Bulut yedeği oluşturuldu! ${res.backup.totalKeys} kayıt, SHA-256 doğrulamalı`, { duration: 5000 });
-        logActivity('backup_create', 'Bulut yedeği oluşturuldu', { employeeName: user?.name, page: 'Yedekler', description: `${res.backup.totalKeys} kayıt, ${(res.backup.dataSizeBytes / 1024).toFixed(0)} KB, ${res.backup.durationMs}ms` });
-        fetchCloudBackups();
-        fetchBackupStats();
-      } else {
-        toast.error(`Yedek oluşturulamadı: ${res.error}`);
+      const result = await createPouchBackup();
+      if (!result.ok || !result.backup) {
+        toast.error('Yedek oluşturulamadı: ' + (result.error || 'Bilinmeyen hata'));
+        return;
       }
+
+      setCreateProgress('Yedek dosyası oluşturuluyor...');
+      const meta: BackupMeta = {
+        id: `backup_${Date.now()}`,
+        timestamp: result.backup.createdAt,
+        type: 'manual',
+        totalDocs: result.totalDocs,
+        sizeKB: result.sizeKB,
+        tableStats: result.backup.meta.tableStats,
+      };
+      saveBackupMeta(meta);
+
+      // Yedek verisini localStorage'a kaydet (geri yükleme için)
+      try {
+        localStorage.setItem(`pouchdb_backup_data_${meta.id}`, JSON.stringify(result.backup));
+      } catch { /* Büyük veri sığmayabilir — sadece indirme yapılır */ }
+
+      setCreateProgress('İndirme başlatılıyor...');
+      downloadBackup(result.backup);
+
+      toast.success(`Yedek oluşturuldu! ${result.totalDocs} kayıt, ${result.sizeKB} KB`, { duration: 5000 });
+      logActivity('backup_create', 'PouchDB yedeği oluşturuldu', {
+        employeeName: user?.name, page: 'Yedekler',
+        description: `${result.totalDocs} kayıt, ${result.sizeKB} KB`,
+      });
+      fetchLocalBackups();
+      fetchBackupStats();
     } catch (e: any) {
-      toast.error('Sunucu bağlantı hatası');
+      toast.error('Yedekleme hatası: ' + (e.message || 'Bilinmeyen hata'));
     } finally {
       setCreating(false);
       setCreateProgress('');
     }
   };
 
-  // ─── Download cloud backup ───────────────────────────────────────────────
-  const handleDownloadCloudBackup = async (backup: CloudBackupMeta) => {
-    toast.info('Yedek indiriliyor...');
+  // ─── Yerel yedek sil ─────────────────────────────────────────────────────
+  const handleDeleteLocalBackup = (id: string) => {
+    if (!window.confirm('Bu yedeği kalıcı olarak silmek istediğinize emin misiniz?')) return;
+    deleteBackupMeta(id);
+    try { localStorage.removeItem(`pouchdb_backup_data_${id}`); } catch {}
+    fetchLocalBackups();
+    fetchBackupStats();
+    toast.success('Yedek silindi');
+  };
+
+  // ─── Yerel yedekten geri yükle ───────────────────────────────────────────
+  const handleRestoreLocalBackup = async (backupId: string) => {
+    if (!canBackup) { toast.error('Geri yükleme yetkiniz yok.'); return; }
+    if (!window.confirm('Bu yedekten geri yüklenecek. Mevcut veriler üzerine yazılacak. Devam edilsin mi?')) return;
+    setRestoringId(backupId);
+    setRestoreProgress('Yedek verisi okunuyor...');
     try {
-      const res = await apiPost('/backup/download-full', { backupId: backup.id });
-      if (res.success && res.backup) {
-        const dateStr = new Date(backup.timestamp).toLocaleDateString('tr-TR').replace(/\./g, '-');
-        const timeStr = new Date(backup.timestamp).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' }).replace(':', '-');
-        downloadJSON(res.backup, `IsleyenET_CloudBackup_${dateStr}_${timeStr}.json`);
-        toast.success('Yedek dosyası indirildi');
+      const raw = localStorage.getItem(`pouchdb_backup_data_${backupId}`);
+      if (!raw) {
+        toast.error('Yedek verisi bulunamadı. Lütfen dosyadan geri yükleyin.');
+        return;
+      }
+      const backup: PouchBackupData = JSON.parse(raw);
+      setRestoreProgress('PouchDB tablolarına yazılıyor...');
+      const result = await restorePouchBackup(backup);
+      if (result.ok > 0) {
+        toast.success(`Geri yükleme tamamlandı: ${result.ok} kayıt, ${result.tables.length} tablo`, { duration: 5000 });
+        logActivity('backup_restore', 'Yerel yedekten geri yüklendi', { employeeName: user?.name, page: 'Yedekler', description: `${result.ok} kayıt` });
+        setTimeout(() => window.location.reload(), 2000);
       } else {
-        toast.error('İndirme başarısız');
+        toast.error('Geri yükleme başarısız. Dosyadan geri yüklemeyi deneyin.');
       }
-    } catch { toast.error('Sunucu hatası'); }
+    } catch (e: any) {
+      toast.error('Geri yükleme hatası: ' + e.message);
+    } finally {
+      setRestoringId(null);
+      setRestoreProgress('');
+    }
   };
 
-  // ─── Verify backup integrity ─────────────────────────────────────────────
-  const handleVerifyBackup = async (backupId: string) => {
-    setVerifyingId(backupId);
-    setVerifyResult(null);
-    try {
-      const res = await apiPost('/backup/verify', { backupId });
-      if (res.success) {
-        setVerifyResult({ id: backupId, verified: res.verified, reason: res.reason });
-        if (res.verified) toast.success('Bütünlük doğrulandı (SHA-256)');
-        else toast.warning(res.reason);
-      }
-    } catch { toast.error('Doğrulama hatası'); }
-    finally { setVerifyingId(null); }
-  };
-
-  // ─── Selective restore ───────────────────────────────────────────────────
-  const openSelectiveRestore = (backup: CloudBackupMeta) => {
+  // ─── Seçici geri yükleme ─────────────────────────────────────────────────
+  const openSelectiveRestore = (backup: BackupMeta) => {
     setSelectiveModal({ backupId: backup.id, tableStats: backup.tableStats || {} });
     setSelectedTables(new Set(Object.keys(backup.tableStats || {})));
   };
@@ -245,59 +209,18 @@ export function YedeklerPage() {
     if (!window.confirm(`${selectedTables.size} tablo geri yüklenecek. Devam edilsin mi?`)) return;
     setSelectiveRestoring(true);
     try {
-      const res = await apiPost('/backup/restore-selective', {
-        backupId: selectiveModal.backupId,
-        tables: Array.from(selectedTables),
-      });
-      if (res.success !== false) {
-        toast.success(`Geri yükleme tamamlandı: ${res.totalRestored} kayıt başarılı${res.totalFailed > 0 ? `, ${res.totalFailed} başarısız` : ''}`, { duration: 5000 });
-        logActivity('backup_restore', 'Seçici geri yükleme', { employeeName: user?.name, description: `${res.totalRestored} kayıt, ${selectedTables.size} tablo` });
-      } else {
-        toast.error(`Geri yükleme hatası: ${res.error}`);
-      }
-    } catch { toast.error('Sunucu hatası'); }
+      const raw = localStorage.getItem(`pouchdb_backup_data_${selectiveModal.backupId}`);
+      if (!raw) { toast.error('Yedek verisi bulunamadı'); return; }
+      const backup: PouchBackupData = JSON.parse(raw);
+      const result = await restoreSelectedTables(backup, Array.from(selectedTables));
+      toast.success(`${result.ok} kayıt geri yüklendi (${result.tables.length} tablo)`, { duration: 5000 });
+      logActivity('backup_restore', 'Seçici geri yükleme', { employeeName: user?.name, description: `${result.ok} kayıt, ${result.tables.join(', ')}` });
+      setTimeout(() => window.location.reload(), 2000);
+    } catch { toast.error('Geri yükleme hatası'); }
     finally { setSelectiveRestoring(false); setSelectiveModal(null); }
   };
 
-  // ─── Delete cloud backup ─────────────────────────────────────────────────
-  const handleDeleteCloudBackup = async (backupId: string) => {
-    if (!window.confirm('Bu bulut yedeğini kalıcı olarak silmek istediğinize emin misiniz?')) return;
-    try {
-      const res = await apiPost('/backup/delete-full', { backupId });
-      if (res.success) { toast.success('Yedek silindi'); fetchCloudBackups(); fetchBackupStats(); }
-      else toast.error('Silinemedi');
-    } catch { toast.error('Silme hatası'); }
-  };
-
-  // ─── Legacy: local backup + download ─────────────────────────────────────
-  const handleLegacyBackup = async () => {
-    if (!canBackup) { toast.error('Yedekleme yetkiniz yok.'); return; }
-    setCreating(true);
-    setCreateProgress('localStorage + Supabase verisi toplanıyor...');
-    try {
-      const localResult = collectLocalStorageData();
-      setCreateProgress('JSON hazırlanıyor...');
-
-      const entry: BackupEntry = {
-        id: `backup-${Date.now()}`, timestamp: new Date().toISOString(), type: 'manual',
-        dataSize: localResult.totalSize, keysCount: localResult.keysCount,
-        source: 'local', localKeysCount: localResult.keysCount, data: localResult.data,
-      };
-
-      const existing = getFromStorage<BackupEntry[]>(StorageKey.BACKUPS) || [];
-      const metaOnly = { ...entry, data: {} as Record<string, string> };
-      const updated = [metaOnly, ...existing].slice(0, 20);
-      setInStorage(StorageKey.BACKUPS, updated);
-      setLocalBackups(updated);
-
-      const dateStr = new Date().toLocaleDateString('tr-TR').replace(/\./g, '-');
-      downloadJSON({ appName: 'ISLEYEN ET ERP', version: '5.0', ...entry }, `IsleyenET_LocalBackup_${dateStr}.json`);
-      toast.success(`Yerel yedek indirildi: ${localResult.keysCount} kayıt`);
-    } catch { toast.error('Yedekleme hatası'); }
-    finally { setCreating(false); setCreateProgress(''); }
-  };
-
-  // ─── File restore ────────────────────────────────────────────────────────
+  // ─── Dosyadan geri yükleme ───────────────────────────────────────────────
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -307,7 +230,8 @@ export function YedeklerPage() {
     reader.onload = (ev) => {
       try {
         const parsed = JSON.parse(ev.target?.result as string);
-        if (!parsed.data) { toast.error('Geçersiz yedek dosyası'); return; }
+        // Hem pouchdb_full hem eski supabase_tables formatını kabul et
+        if (!parsed.tables) { toast.error('Geçersiz yedek dosyası — "tables" alanı bulunamadı'); return; }
         setRestoreFileContent(parsed);
         setIsFileModalOpen(true);
       } catch { toast.error('JSON formatı bozuk'); }
@@ -318,42 +242,27 @@ export function YedeklerPage() {
 
   const handleRestoreFromFile = async () => {
     if (!canBackup) { toast.error('Yetkiniz yok'); return; }
-    if (!restoreFileContent?.data) return;
-    if (!window.confirm('Dosyadan geri yükleme: Mevcut veriler üzerine yazılacak!')) return;
+    if (!restoreFileContent) return;
+    if (!window.confirm('Dosyadan geri yükleme: Mevcut PouchDB verileri üzerine yazılacak!')) return;
     setIsFileModalOpen(false);
     setRestoringId('file');
-    setRestoreProgress('Geri yükleme başlatılıyor...');
+    setRestoreProgress('PouchDB tablolarına yazılıyor...');
     try {
-      const data = restoreFileContent.data;
-      // Restore localStorage
-      Object.entries(data).forEach(([key, value]) => {
-        if (key === 'backups' || key === '_supabase_kv') return;
-        localStorage.setItem(`${STORAGE_PREFIX}${key}`, typeof value === 'string' ? value : JSON.stringify(value));
-      });
-      // Restore to Supabase if _supabase_kv exists
-      if (data._supabase_kv) {
-        setRestoreProgress('Supabase KV veriler geri yükleniyor...');
-        const tables = Object.keys(data._supabase_kv).filter(k => !k.startsWith('_kv_'));
-        for (const tableName of tables) {
-          const items = data._supabase_kv[tableName];
-          if (!Array.isArray(items)) continue;
-          const prefix = (TABLE_PREFIXES as any)[tableName];
-          if (!prefix) continue;
-          const validItems = items.filter((i: any) => i?.id);
-          if (validItems.length === 0) continue;
-          await apiPost('/kv/mset', { keys: validItems.map((i: any) => `${prefix}${i.id}`), values: validItems });
-        }
-      }
-      toast.success('Geri yükleme tamamlandı! Sayfa yenileniyor...', { duration: 3000 });
+      const result = await restorePouchBackup(restoreFileContent);
+      setRestoreProgress(`${result.ok} kayıt yüklendi. Sayfa yenileniyor...`);
+      toast.success(`Geri yükleme tamamlandı! ${result.ok} kayıt, ${result.tables.length} tablo`, { duration: 3000 });
+      logActivity('backup_restore', 'Dosyadan geri yüklendi', { employeeName: user?.name, description: `${result.ok} kayıt` });
       setTimeout(() => window.location.reload(), 2000);
-    } catch { toast.error('Geri yükleme hatası'); }
+    } catch (e: any) { toast.error('Geri yükleme hatası: ' + e.message); }
     finally { setRestoringId(null); setRestoreProgress(''); }
   };
 
   // ─── Auto-backup schedule save ───────────────────────────────────────────
-  const saveAutoBackupConfig = () => {
+  const saveAutoBackupConfigHandler = () => {
     const config = { enabled: autoBackupEnabled, intervalHours: autoBackupInterval, lastRun: lastAutoBackup };
-    localStorage.setItem('isleyen_et_auto_backup_config', JSON.stringify(config));
+    saveAutoBackupConfig(config);
+    stopAutoBackupScheduler();
+    if (config.enabled) startAutoBackupScheduler((meta) => { fetchLocalBackups(); setLastAutoBackup(meta.timestamp); });
     toast.success('Otomatik yedekleme ayarları kaydedildi');
   };
 
@@ -372,15 +281,14 @@ export function YedeklerPage() {
     return (total / 1024).toFixed(1);
   })();
 
-  const filteredCloudBackups = cloudBackups.filter(b => {
+  const filteredLocalBackups = localBackups.filter(b => {
     if (!searchTerm) return true;
     const q = searchTerm.toLowerCase();
     const dateStr = new Date(b.timestamp).toLocaleDateString('tr-TR');
-    return dateStr.includes(q) || (b.label || '').toLowerCase().includes(q) || b.type.includes(q);
+    return dateStr.includes(q) || b.type.includes(q);
   });
 
   const tabs: { key: ActiveTab; label: string; icon: React.ReactNode }[] = [
-    { key: 'cloud', label: 'Bulut Yedekleri', icon: <Cloud className="w-4 h-4" /> },
     { key: 'local', label: 'Yerel Yedekler', icon: <HardDrive className="w-4 h-4" /> },
     { key: 'schedule', label: 'Zamanlanmış', icon: <Timer className="w-4 h-4" /> },
     { key: 'sync', label: 'Senkronizasyon', icon: <Activity className="w-4 h-4" /> },
@@ -415,10 +323,10 @@ export function YedeklerPage() {
             <FileUp className="w-3.5 h-3.5" /> Dosyadan Yükle
           </button>
           <input ref={fileInputRef} type="file" accept=".json" onChange={handleFileSelect} className="hidden" />
-          <button onClick={handleCreateCloudBackup} disabled={creating}
+          <button onClick={handleCreateBackup} disabled={creating}
             className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-500 hover:to-cyan-500 text-white shadow-lg shadow-blue-600/20 transition-all active:scale-[0.97] disabled:opacity-50">
-            {creating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CloudDownload className="w-3.5 h-3.5" />}
-            {creating ? 'Oluşturuluyor...' : 'Bulut Yedeği Al'}
+            {creating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
+            {creating ? 'Oluşturuluyor...' : 'Yedek Al'}
           </button>
         </div>
       </div>
@@ -444,10 +352,10 @@ export function YedeklerPage() {
       {/* ── Stats Grid ────────────────────────────────────────── */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         {[
-          { label: 'Bulut Yedekleri', value: backupStats?.backupCount ?? cloudBackups.length, icon: Cloud, color: 'blue' },
-          { label: 'Toplam Kayıt', value: backupStats?.totalKeys ?? '...', icon: Server, color: 'emerald' },
-          { label: 'localStorage', value: `${storageSizeKB} KB`, icon: HardDrive, color: 'purple' },
-          { label: 'Son Yedek', value: backupStats?.lastBackup ? new Date(backupStats.lastBackup.timestamp).toLocaleDateString('tr-TR') : cloudBackups[0] ? new Date(cloudBackups[0].timestamp).toLocaleDateString('tr-TR') : 'Yok', icon: Clock, color: 'cyan' },
+          { label: 'Yerel Yedekler', value: backupStats?.totalLocalBackups ?? localBackups.length, icon: HardDrive, color: 'blue' },
+          { label: 'PouchDB Kayıtları', value: backupStats?.totalDocsInPouchDB ?? '...', icon: Server, color: 'emerald' },
+          { label: 'localStorage', value: `${storageSizeKB} KB`, icon: Database, color: 'purple' },
+          { label: 'Son Yedek', value: backupStats?.lastBackupAt ? new Date(backupStats.lastBackupAt).toLocaleDateString('tr-TR') : localBackups[0] ? new Date(localBackups[0].timestamp).toLocaleDateString('tr-TR') : 'Yok', icon: Clock, color: 'cyan' },
         ].map((stat, i) => (
           <motion.div key={i} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }}
             className="card-premium rounded-xl p-4 relative overflow-hidden group">
@@ -614,21 +522,38 @@ export function YedeklerPage() {
             </div>
           ) : (
             <div className="space-y-2">
-              {localBackups.map((b, i) => (
-                <div key={b.id} className="card-premium rounded-xl p-3 flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <Clock className="w-4 h-4 text-muted-foreground/40" />
-                    <div>
-                      <p className="text-sm font-medium text-white">{new Date(b.timestamp).toLocaleDateString('tr-TR')} {new Date(b.timestamp).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}</p>
-                      <p className="text-[10px] text-muted-foreground/50">{b.keysCount} kayıt • {b.dataSize ? `${(b.dataSize / 1024).toFixed(0)} KB` : '-'}</p>
+              {localBackups.map((b) => {
+                const isTableBackup = b.id.startsWith('tbl_') || b.id.startsWith('cloud_');
+                return (
+                  <div key={b.id} className="card-premium rounded-xl p-3 flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <Clock className="w-4 h-4 text-muted-foreground/40" />
+                      <div>
+                        <p className="text-sm font-medium text-white">
+                          {new Date(b.timestamp).toLocaleDateString('tr-TR')} {new Date(b.timestamp).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}
+                          {isTableBackup && <span className="ml-2 text-[9px] px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-400 border border-emerald-500/20">Tablo Yedeği</span>}
+                        </p>
+                        <p className="text-[10px] text-muted-foreground/50">{b.keysCount} satır • {b.dataSize ? `${(b.dataSize / 1024).toFixed(0)} KB` : '-'} • {b.type}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {isTableBackup && (
+                        <button
+                          onClick={() => handleRestoreTableBackup(b.id)}
+                          disabled={!!restoringId}
+                          className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[10px] font-medium bg-blue-500/15 hover:bg-blue-500/25 text-blue-400 border border-blue-500/20 transition-all active:scale-95 disabled:opacity-50">
+                          {restoringId === b.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <RotateCcw className="w-3 h-3" />}
+                          Geri Yükle
+                        </button>
+                      )}
+                      <button onClick={() => { const updated = localBackups.filter(x => x.id !== b.id); setInStorage(StorageKey.BACKUPS, updated); kvSet('backups', updated).catch(() => {}); setLocalBackups(updated); toast.success('Silindi'); }}
+                        className="p-2 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 transition-all active:scale-95">
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
                     </div>
                   </div>
-                  <button onClick={() => { const updated = localBackups.filter(x => x.id !== b.id); setInStorage(StorageKey.BACKUPS, updated); setLocalBackups(updated); toast.success('Silindi'); }}
-                    className="p-2 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 transition-all active:scale-95">
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </motion.div>

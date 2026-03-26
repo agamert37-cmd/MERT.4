@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-MERT.4 Proje Güncelleme Aracı  v3.1
-Windows GUI uygulaması - Git & Docker işlemleri
+MERT.4 Proje Güncelleme Aracı  v4.0
+Windows GUI uygulaması - Git & Docker & CouchDB işlemleri
 """
 
 import tkinter as tk
@@ -21,7 +21,7 @@ import urllib.request
 # ─── Ayarlar ────────────────────────────────────────────────────────────────
 REPO_DIR              = os.path.dirname(os.path.abspath(__file__))
 REMOTE                = "origin"
-BRANCH                = "claude/multi-db-sync-setup-3DmYn"
+BRANCH                = "main"
 APP_URL               = "http://localhost:8080"
 STATUS_REFRESH_MS     = 30_000   # 30 saniye
 CONSOLE_MAX_LINES     = 1_200    # bu limitin üstünde eski satırlar silinir
@@ -30,6 +30,16 @@ BACKUP_INDEX          = os.path.join(BACKUP_DIR, "index.json")
 DOCKER_IMAGE_NAME     = "mert4-mert-site"   # docker image adı
 MAX_BACKUPS           = 10                  # en fazla kaç yedek saklanır
 SUMMARY_FILE          = os.path.join(REPO_DIR, ".mert4_backups", "summary.json")
+COUCHDB_URL           = "http://localhost:5984"
+COUCHDB_SETUP_SCRIPT  = os.path.join(REPO_DIR, "couchdb-setup.sh")
+COUCHDB_CONTAINER     = "mert-couchdb"
+COUCHDB_DBS           = [
+    "mert_fisler", "mert_urunler", "mert_cari_hesaplar", "mert_kasa_islemleri",
+    "mert_personeller", "mert_bankalar", "mert_cekler", "mert_araclar",
+    "mert_arac_shifts", "mert_arac_km_logs", "mert_uretim_profilleri",
+    "mert_uretim_kayitlari", "mert_faturalar", "mert_fatura_stok",
+    "mert_tahsilatlar", "mert_kv",
+]
 
 # ─── Renkler (Catppuccin Mocha) ──────────────────────────────────────────────
 BG_DARK   = "#1e1e2e"
@@ -50,6 +60,8 @@ PURPLE    = "#cba6f7"
 PURPLE_H  = "#b48ef0"
 TEAL      = "#94e2d5"
 TEAL_H    = "#78cfc2"
+PEACH     = "#fab387"
+PEACH_H   = "#e89a72"
 NEUTRAL_H = "#6a7090"
 BORDER    = "#45475a"
 
@@ -633,8 +645,8 @@ class MertUpdater(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title("MERT.4 — Güncelleme Merkezi")
-        self.geometry("900x780")
-        self.minsize(720, 580)
+        self.geometry("960x900")
+        self.minsize(780, 640)
         self.configure(bg=BG_DARK)
         self.resizable(True, True)
         try:
@@ -664,6 +676,14 @@ class MertUpdater(tk.Tk):
         self._health_up_since:  float | None = None  # uptime başlangıç epoch
         self._health_last_toast = 0.0  # son toast zamanı (spam önleme)
 
+        # CouchDB monitörü
+        self._couch_ok          = False
+        self._couch_ms          = 0
+        self._couch_history:    list[float] = []
+        self._couch_doc_counts: dict[str, int] = {}
+        self._couch_total_docs  = 0
+        self._couch_up_since:   float | None = None
+
         # Otomatik güncelleme zamanlayıcısı
         self._auto_timer_active     = False
         self._auto_timer_remaining  = 0    # saniye
@@ -691,13 +711,13 @@ class MertUpdater(tk.Tk):
         header.pack(fill="x", padx=20, pady=(16, 4))
 
         self.title_lbl = tk.Label(
-            header, text="⚙  MERT.4  Güncelleme Merkezi",
+            header, text="⚙  MERT.4  Güncelleme Merkezi  v4.0",
             font=("Segoe UI", 17, "bold"), fg=FG_TITLE, bg=BG_DARK
         )
         self.title_lbl.pack(side="left")
 
         tk.Label(
-            header, text=f"dal: {BRANCH}  •  compose: {self._compose_cmd}",
+            header, text=f"dal: {BRANCH}  •  compose: {self._compose_cmd}  •  CouchDB: :5984",
             font=("Segoe UI", 8), fg=FG_DIM, bg=BG_DARK
         ).pack(side="right", pady=(6, 0))
 
@@ -727,6 +747,17 @@ class MertUpdater(tk.Tk):
             font=("Segoe UI", 9), fg=FG_DIM, bg=BG_CARD
         )
         self.health_lbl.pack(side="left", padx=(3, 0))
+
+        # CouchDB sağlık göstergesi
+        self.couch_dot = tk.Label(
+            sinner, text="●", font=("Segoe UI", 11), fg=FG_DIM, bg=BG_CARD
+        )
+        self.couch_dot.pack(side="left", padx=(12, 0))
+        self.couch_lbl = tk.Label(
+            sinner, text="CouchDB kontrol ediliyor…",
+            font=("Segoe UI", 9), fg=FG_DIM, bg=BG_CARD
+        )
+        self.couch_lbl.pack(side="left", padx=(3, 0))
 
         # Sağ taraf: commit bilgisi + "behind" badge + aç butonu
         right = tk.Frame(sinner, bg=BG_CARD)
@@ -958,6 +989,141 @@ class MertUpdater(tk.Tk):
 
         self.after(300, self._refresh_backups)
 
+        # ── CouchDB Veritabanı Paneli ──────────────────────────────────────────
+        couch_bar = tk.Frame(self, bg=BG_DARK)
+        couch_bar.pack(fill="x", padx=20, pady=(8, 0))
+
+        tk.Label(
+            couch_bar, text="CouchDB Veritabanları",
+            font=("Segoe UI", 9, "bold"), fg=FG_DIM, bg=BG_DARK
+        ).pack(side="left")
+
+        # CouchDB Kurulum butonu
+        couch_setup_btn = tk.Button(
+            couch_bar, text="🔧 CouchDB Kurulum",
+            command=self._do_couchdb_setup,
+            font=("Segoe UI", 8), fg=BG_DARK, bg=PEACH,
+            relief="flat", cursor="hand2", bd=0, padx=8, pady=2
+        )
+        couch_setup_btn.pack(side="left", padx=(8, 0))
+        _bind_hover(couch_setup_btn, PEACH, PEACH_H)
+
+        # CouchDB Compact butonu
+        couch_compact_btn = tk.Button(
+            couch_bar, text="📦 Compact",
+            command=self._do_couchdb_compact,
+            font=("Segoe UI", 8), fg=BG_DARK, bg=TEAL,
+            relief="flat", cursor="hand2", bd=0, padx=8, pady=2
+        )
+        couch_compact_btn.pack(side="left", padx=(4, 0))
+        _bind_hover(couch_compact_btn, TEAL, TEAL_H)
+
+        # Refresh butonu
+        tk.Button(
+            couch_bar, text="↺", command=lambda: self._poll_couchdb(),
+            font=("Segoe UI", 9), fg=FG_DIM, bg=BG_DARK,
+            relief="flat", cursor="hand2", bd=0, padx=4
+        ).pack(side="left", padx=(4, 0))
+
+        # CouchDB istatistik çerçevesi
+        self._couch_stats_frame = tk.Frame(
+            self, bg=BG_CARD,
+            highlightbackground=BORDER, highlightthickness=1
+        )
+        self._couch_stats_frame.pack(fill="x", padx=20, pady=(3, 0))
+
+        self._couch_stats_inner = tk.Frame(self._couch_stats_frame, bg=BG_CARD)
+        self._couch_stats_inner.pack(fill="x", padx=4, pady=4)
+
+        tk.Label(
+            self._couch_stats_inner, text="CouchDB kontrol ediliyor...",
+            font=("Segoe UI", 9), fg=FG_DIM, bg=BG_CARD, pady=6
+        ).pack()
+
+        # ── CouchDB Yapılandırma Paneli ───────────────────────────────────────
+        cfg_bar = tk.Frame(self, bg=BG_DARK)
+        cfg_bar.pack(fill="x", padx=20, pady=(8, 0))
+
+        tk.Label(
+            cfg_bar, text="CouchDB Yapılandırma",
+            font=("Segoe UI", 9, "bold"), fg=FG_DIM, bg=BG_DARK
+        ).pack(side="left")
+
+        cfg_card = tk.Frame(self, bg=BG_CARD, highlightbackground=BORDER, highlightthickness=1)
+        cfg_card.pack(fill="x", padx=20, pady=(3, 0))
+        cfg_inner = tk.Frame(cfg_card, bg=BG_CARD)
+        cfg_inner.pack(fill="x", padx=14, pady=8)
+
+        # Satır 1: Veritabanı URL
+        row1 = tk.Frame(cfg_inner, bg=BG_CARD)
+        row1.pack(fill="x", pady=(0, 4))
+        tk.Label(
+            row1, text="📦 Veritabanı URL",
+            font=("Segoe UI", 9, "bold"), fg=ACCENT, bg=BG_CARD, width=18, anchor="w"
+        ).pack(side="left")
+        tk.Label(
+            row1, text="(Veri çekilecek CouchDB adresi, örnek: http://localhost:5984)",
+            font=("Segoe UI", 8), fg=FG_DIM, bg=BG_CARD
+        ).pack(side="left", padx=(4, 0))
+
+        row1b = tk.Frame(cfg_inner, bg=BG_CARD)
+        row1b.pack(fill="x", pady=(0, 6))
+        self._cfg_db_url_var = tk.StringVar()
+        tk.Entry(
+            row1b, textvariable=self._cfg_db_url_var,
+            font=("Consolas", 10), fg=FG_TEXT, bg=BG_INPUT,
+            insertbackground=FG_TEXT, relief="flat",
+            highlightthickness=1, highlightbackground=BORDER, highlightcolor=ACCENT
+        ).pack(side="left", fill="x", expand=True, ipady=5, padx=(0, 6))
+
+        # Satır 2: Sunucu Kullanıcı Adı & Şifre
+        row2 = tk.Frame(cfg_inner, bg=BG_CARD)
+        row2.pack(fill="x", pady=(0, 4))
+        tk.Label(
+            row2, text="🔐 Sunucu Bağlantısı",
+            font=("Segoe UI", 9, "bold"), fg=PURPLE, bg=BG_CARD, width=18, anchor="w"
+        ).pack(side="left")
+        tk.Label(
+            row2, text="(CouchDB kullanıcı adı ve şifresi — site bu bilgilerle senkronize olur)",
+            font=("Segoe UI", 8), fg=FG_DIM, bg=BG_CARD
+        ).pack(side="left", padx=(4, 0))
+
+        row2b = tk.Frame(cfg_inner, bg=BG_CARD)
+        row2b.pack(fill="x", pady=(0, 6))
+        tk.Label(row2b, text="Kullanıcı:", font=("Segoe UI", 9), fg=FG_DIM, bg=BG_CARD).pack(side="left", padx=(0, 4))
+        self._cfg_user_var = tk.StringVar()
+        tk.Entry(
+            row2b, textvariable=self._cfg_user_var,
+            font=("Consolas", 10), fg=FG_TEXT, bg=BG_INPUT,
+            insertbackground=FG_TEXT, relief="flat", width=14,
+            highlightthickness=1, highlightbackground=BORDER, highlightcolor=ACCENT
+        ).pack(side="left", ipady=5, padx=(0, 10))
+        tk.Label(row2b, text="Şifre:", font=("Segoe UI", 9), fg=FG_DIM, bg=BG_CARD).pack(side="left", padx=(0, 4))
+        self._cfg_pass_var = tk.StringVar()
+        tk.Entry(
+            row2b, textvariable=self._cfg_pass_var,
+            font=("Consolas", 10), fg=FG_TEXT, bg=BG_INPUT,
+            insertbackground=FG_TEXT, relief="flat", width=16, show="•",
+            highlightthickness=1, highlightbackground=BORDER, highlightcolor=ACCENT
+        ).pack(side="left", ipady=5, padx=(0, 10))
+
+        save_cfg_btn = tk.Button(
+            row2b, text="💾 Kaydet (.env.local)",
+            command=self._save_couchdb_config,
+            font=("Segoe UI", 9, "bold"), fg=BG_DARK, bg=SUCCESS,
+            relief="flat", cursor="hand2", bd=0, padx=10, pady=4
+        )
+        save_cfg_btn.pack(side="left")
+        _bind_hover(save_cfg_btn, SUCCESS, SUCCESS_H)
+
+        self._cfg_status_lbl = tk.Label(
+            cfg_inner, text="", font=("Segoe UI", 8), fg=FG_DIM, bg=BG_CARD
+        )
+        self._cfg_status_lbl.pack(anchor="w")
+
+        # Mevcut ayarları yükle
+        self._load_couchdb_config_ui()
+
         # ── Güncelleme Özeti Paneli ───────────────────────────────────────────
         sbar = tk.Frame(self, bg=BG_DARK)
         sbar.pack(fill="x", padx=20, pady=(10, 0))
@@ -1067,10 +1233,42 @@ class MertUpdater(tk.Tk):
                                        "", bg=BG_CARD)
         self._chart_ram.canvas.pack()
 
+        # Alt satır: CouchDB gauge + Sağlık yanıt süresi çizgi grafiği
+        inner_g2 = tk.Frame(self._graphs_frame, bg=BG_CARD)
+        inner_g2.pack(fill="x", padx=6, pady=(0, 6))
+
+        # CouchDB latency gauge
+        couch_g = tk.Frame(inner_g2, bg=BG_CARD)
+        couch_g.pack(side="left", fill="both", expand=True)
+        tk.Label(couch_g, text="CouchDB",
+                 font=("Segoe UI", 7), fg=FG_DIM, bg=BG_CARD).pack()
+        self._chart_couch = ChartCanvas(couch_g, 140, CHART_H,
+                                          "", bg=BG_CARD)
+        self._chart_couch.canvas.pack()
+
+        # App yanıt süresi çizgi grafiği
+        health_g = tk.Frame(inner_g2, bg=BG_CARD)
+        health_g.pack(side="left", fill="both", expand=True, padx=6)
+        tk.Label(health_g, text="App Yanıt Süresi (ms)",
+                 font=("Segoe UI", 7), fg=FG_DIM, bg=BG_CARD).pack()
+        self._chart_health = ChartCanvas(health_g, CHART_W, CHART_H,
+                                           "", bg=BG_CARD)
+        self._chart_health.canvas.pack()
+
+        # CouchDB yanıt süresi çizgi grafiği
+        couch_line_g = tk.Frame(inner_g2, bg=BG_CARD)
+        couch_line_g.pack(side="left", fill="both", expand=True)
+        tk.Label(couch_line_g, text="CouchDB Yanıt Süresi (ms)",
+                 font=("Segoe UI", 7), fg=FG_DIM, bg=BG_CARD).pack()
+        self._chart_couch_line = ChartCanvas(couch_line_g, CHART_W, CHART_H,
+                                               "", bg=BG_CARD)
+        self._chart_couch_line.canvas.pack()
+
         # İlk çizim + canlı polling başlat
         self.after(500,  self._redraw_history_charts)
         self.after(800,  self._poll_docker_stats)
         self.after(1000, self._poll_health)
+        self.after(1500, self._poll_couchdb)
 
         # ── Güncelleme Zaman Çizelgesi ────────────────────────────────────────
         tl_bar = tk.Frame(self, bg=BG_DARK)
@@ -1135,6 +1333,75 @@ class MertUpdater(tk.Tk):
 
         # İlk yükleme
         self.after(400, self._refresh_commits)
+
+    # ─── CouchDB Yapılandırma ─────────────────────────────────────────────────
+
+    _ENV_FILE = os.path.join(REPO_DIR, ".env.local")
+
+    def _load_couchdb_config_ui(self):
+        """Mevcut .env.local dosyasından CouchDB ayarlarını oku ve UI'a doldur."""
+        config = {"url": "http://localhost:5984", "user": "admin", "password": "mert2024"}
+        env_path = self._ENV_FILE
+        if os.path.exists(env_path):
+            try:
+                with open(env_path, "r", encoding="utf-8") as f:
+                    for line in f:
+                        line = line.strip()
+                        if line.startswith("VITE_COUCHDB_URL="):
+                            config["url"] = line.split("=", 1)[1]
+                        elif line.startswith("VITE_COUCHDB_USER="):
+                            config["user"] = line.split("=", 1)[1]
+                        elif line.startswith("VITE_COUCHDB_PASSWORD="):
+                            config["password"] = line.split("=", 1)[1]
+            except Exception:
+                pass
+        self._cfg_db_url_var.set(config["url"])
+        self._cfg_user_var.set(config["user"])
+        self._cfg_pass_var.set(config["password"])
+
+    def _save_couchdb_config(self):
+        """CouchDB ayarlarını .env.local dosyasına kaydet."""
+        url  = self._cfg_db_url_var.get().strip()
+        user = self._cfg_user_var.get().strip()
+        pwd  = self._cfg_pass_var.get().strip()
+
+        if not url:
+            self._cfg_status_lbl.configure(text="⚠ Veritabanı URL boş olamaz.", fg=ERROR)
+            return
+
+        env_path = self._ENV_FILE
+        # Mevcut satırları oku (diğer değişkenleri koru)
+        existing_lines = []
+        if os.path.exists(env_path):
+            try:
+                with open(env_path, "r", encoding="utf-8") as f:
+                    existing_lines = f.readlines()
+            except Exception:
+                pass
+
+        keys_to_set = {
+            "VITE_COUCHDB_URL":      url,
+            "VITE_COUCHDB_USER":     user,
+            "VITE_COUCHDB_PASSWORD": pwd,
+        }
+
+        # Mevcut satırlardan ilgili key'leri çıkar
+        filtered = [l for l in existing_lines
+                    if not any(l.startswith(k + "=") for k in keys_to_set)]
+        # Yeni değerleri ekle
+        for k, v in keys_to_set.items():
+            filtered.append(f"{k}={v}\n")
+
+        try:
+            with open(env_path, "w", encoding="utf-8") as f:
+                f.writelines(filtered)
+            self._cfg_status_lbl.configure(
+                text=f"✓ Kaydedildi: {env_path}  |  Değişikliklerin geçerli olması için Build & Başlat'a basın.",
+                fg=SUCCESS
+            )
+            self._log(f"CouchDB config .env.local'e kaydedildi → {url}  user={user}", "success")
+        except Exception as exc:
+            self._cfg_status_lbl.configure(text=f"✗ Kayıt hatası: {exc}", fg=ERROR)
 
     # ─── Konsol yardımcıları ─────────────────────────────────────────────────
     def _log(self, msg: str, tag: str = "info"):
@@ -1281,20 +1548,41 @@ class MertUpdater(tk.Tk):
                     self.after(0, lambda: self.behind_lbl.configure(text=""))
                     self.after(0, lambda: self.title("MERT.4 — Güncelleme Merkezi"))
 
-                # Docker durumu
+                # Docker durumu (mert-site)
                 r3 = subprocess.run(
                     ["docker", "ps", "--filter", "name=mert-site", "--format", "{{.Status}}"],
                     cwd=REPO_DIR, capture_output=True, text=True
                 )
                 ds = r3.stdout.strip()
-                if ds and "Up" in ds:
+
+                # Docker durumu (mert-couchdb)
+                r4 = subprocess.run(
+                    ["docker", "ps", "--filter", f"name={COUCHDB_CONTAINER}", "--format", "{{.Status}}"],
+                    cwd=REPO_DIR, capture_output=True, text=True
+                )
+                couch_ds = r4.stdout.strip()
+
+                site_up = ds and "Up" in ds
+                couch_up = couch_ds and "Up" in couch_ds
+
+                if site_up and couch_up:
                     self.after(0, lambda: self.status_dot.configure(fg=SUCCESS))
-                    self.after(0, lambda s=ds: self.status_label.configure(text=f"✓ Çalışıyor — {s}"))
+                    self.after(0, lambda s=ds: self.status_label.configure(
+                        text=f"✓ Çalışıyor — Site: {s}"))
                     if behind == 0:
                         self.after(0, lambda: self.title("MERT.4 ✓ Çalışıyor"))
+                elif site_up:
+                    self.after(0, lambda: self.status_dot.configure(fg=WARNING))
+                    self.after(0, lambda s=ds: self.status_label.configure(
+                        text=f"⚠ Site çalışıyor ({s}) — CouchDB kapalı"))
+                elif couch_up:
+                    self.after(0, lambda: self.status_dot.configure(fg=WARNING))
+                    self.after(0, lambda: self.status_label.configure(
+                        text="⚠ CouchDB çalışıyor — Site container kapalı"))
                 else:
                     self.after(0, lambda: self.status_dot.configure(fg=WARNING))
-                    self.after(0, lambda: self.status_label.configure(text="⚠ Docker container çalışmıyor"))
+                    self.after(0, lambda: self.status_label.configure(
+                        text="⚠ Docker container'lar çalışmıyor"))
             except FileNotFoundError:
                 self.after(0, lambda: self.status_dot.configure(fg=ERROR))
                 self.after(0, lambda: self.status_label.configure(text="✗ Docker bulunamadı!"))
@@ -1783,6 +2071,15 @@ class MertUpdater(tk.Tk):
             self.health_dot.config(fg=ERROR)
             self.health_lbl.config(text="Çevrim dışı", fg=ERROR)
 
+        # App yanıt süresi çizgi grafiği güncelle
+        if hasattr(self, '_chart_health') and len(self._health_history) >= 2:
+            valid = [v for v in self._health_history if v > 0]
+            if valid:
+                self._chart_health.draw_line(
+                    valid, color=ACCENT, fill_color="#1a2a4a",
+                    dot_color=ACCENT, y_fmt="{:.0f}"
+                )
+
     @staticmethod
     def _uptime_str(since: float | None) -> str:
         if since is None:
@@ -1790,6 +2087,163 @@ class MertUpdater(tk.Tk):
         s = int(time.time() - since)
         h, m = divmod(s // 60, 60)
         return f"{h}s {m:02d}d" if h else f"{m}d {s % 60:02d}sn"
+
+    # ─── CouchDB Sağlık Monitörü ────────────────────────────────────────────
+
+    def _get_couch_auth_headers(self) -> dict:
+        """Mevcut CouchDB kullanıcı/şifresini Authorization header olarak döndür."""
+        import base64
+        user = self._cfg_user_var.get().strip() if hasattr(self, '_cfg_user_var') else "admin"
+        pwd  = self._cfg_pass_var.get().strip() if hasattr(self, '_cfg_pass_var') else "mert2024"
+        if not user:
+            user, pwd = "admin", "mert2024"
+        token = base64.b64encode(f"{user}:{pwd}".encode()).decode()
+        return {
+            "User-Agent": "MERT4-CouchCheck/1.0",
+            "Authorization": f"Basic {token}",
+        }
+
+    def _get_couch_url(self) -> str:
+        """Yapılandırma panelindeki URL'i döndür, yoksa varsayılanı kullan."""
+        if hasattr(self, '_cfg_db_url_var'):
+            url = self._cfg_db_url_var.get().strip()
+            if url:
+                return url.rstrip("/")
+        return COUCHDB_URL
+
+    def _poll_couchdb(self):
+        """CouchDB'ye HTTP ping atar; yanıt süresini, durumu ve DB istatistiklerini kaydeder."""
+        def _worker():
+            t0 = time.monotonic()
+            ok = False
+            doc_counts = {}
+            couch_url = self._get_couch_url()
+            headers = self._get_couch_auth_headers()
+            try:
+                # Ana bağlantı testi (auth header ile)
+                req = urllib.request.Request(couch_url, headers=headers)
+                with urllib.request.urlopen(req, timeout=4) as resp:
+                    ok = resp.status < 400
+
+                # DB istatistikleri (auth header ile)
+                if ok:
+                    for db_name in COUCHDB_DBS:
+                        try:
+                            db_req = urllib.request.Request(
+                                f"{couch_url}/{db_name}",
+                                headers=headers
+                            )
+                            with urllib.request.urlopen(db_req, timeout=3) as db_resp:
+                                data = json.loads(db_resp.read().decode("utf-8"))
+                                doc_counts[db_name] = data.get("doc_count", 0)
+                        except Exception:
+                            doc_counts[db_name] = -1  # erişilemez
+            except Exception:
+                pass
+            ms = int((time.monotonic() - t0) * 1000)
+            self.after(0, self._apply_couchdb, ok, ms, doc_counts)
+
+        threading.Thread(target=_worker, daemon=True).start()
+        self.after(25_000, self._poll_couchdb)   # 25 sn
+
+    def _apply_couchdb(self, ok: bool, ms: int, doc_counts: dict):
+        """CouchDB sonucunu UI'a yansıtır."""
+        was_ok = self._couch_ok
+        self._couch_ok = ok
+        self._couch_ms = ms
+        self._couch_doc_counts = doc_counts
+
+        MAX_HIST = 40
+        self._couch_history.append(ms if ok else 0)
+        if len(self._couch_history) > MAX_HIST:
+            self._couch_history.pop(0)
+
+        total = sum(v for v in doc_counts.values() if v >= 0)
+        self._couch_total_docs = total
+        active_dbs = sum(1 for v in doc_counts.values() if v >= 0)
+
+        if ok:
+            if not was_ok:
+                self._couch_up_since = time.time()
+                self._toast("CouchDB bağlantısı kuruldu!", PEACH)
+            uptime = self._uptime_str(self._couch_up_since)
+            self.couch_dot.config(fg=PEACH)
+            self.couch_lbl.config(
+                text=f"CouchDB  {ms}ms  ·  {active_dbs} DB  ·  {total} doc  ·  {uptime}",
+                fg=PEACH
+            )
+        else:
+            if was_ok:
+                self._couch_up_since = None
+                self._toast("CouchDB bağlantısı kesildi!", ERROR, duration=6000)
+            self._couch_up_since = None
+            self.couch_dot.config(fg=ERROR)
+            self.couch_lbl.config(text="CouchDB çevrim dışı", fg=ERROR)
+
+        # CouchDB gauge güncelle
+        if hasattr(self, '_chart_couch'):
+            self._chart_couch.draw_gauge(
+                ms if ok else 0, 500.0, "CouchDB Latency", "ms",
+                low_color=PEACH, mid_color=WARNING, high_color=ERROR,
+                history=self._couch_history
+            )
+
+        # CouchDB yanıt süresi çizgi grafiği güncelle
+        if hasattr(self, '_chart_couch_line') and len(self._couch_history) >= 2:
+            valid = [v for v in self._couch_history if v > 0]
+            if valid:
+                self._chart_couch_line.draw_line(
+                    valid, color=PEACH, fill_color="#3a2a1a",
+                    dot_color=PEACH, y_fmt="{:.0f}"
+                )
+
+        # CouchDB DB stats panelini güncelle
+        if hasattr(self, '_couch_stats_frame'):
+            self._refresh_couch_stats()
+
+    def _refresh_couch_stats(self):
+        """CouchDB veritabanı istatistiklerini panelde göster."""
+        for w in self._couch_stats_inner.winfo_children():
+            w.destroy()
+
+        if not self._couch_ok:
+            tk.Label(
+                self._couch_stats_inner, text="CouchDB bağlantısı yok",
+                font=("Segoe UI", 9), fg=FG_DIM, bg=BG_CARD, pady=6
+            ).pack()
+            return
+
+        # 4 sütunlu grid
+        cols = 4
+        row_frame = None
+        for i, (db_name, count) in enumerate(self._couch_doc_counts.items()):
+            if i % cols == 0:
+                row_frame = tk.Frame(self._couch_stats_inner, bg=BG_CARD)
+                row_frame.pack(fill="x", padx=4, pady=1)
+
+            short_name = db_name.replace("mert_", "")
+            color = PEACH if count >= 0 else ERROR
+            count_str = str(count) if count >= 0 else "?"
+
+            cell = tk.Frame(row_frame, bg=BG_INPUT, padx=6, pady=3)
+            cell.pack(side="left", fill="x", expand=True, padx=2)
+
+            tk.Label(
+                cell, text=short_name,
+                font=("Consolas", 7), fg=FG_DIM, bg=BG_INPUT, anchor="w"
+            ).pack(side="left")
+            tk.Label(
+                cell, text=count_str,
+                font=("Segoe UI", 8, "bold"), fg=color, bg=BG_INPUT, anchor="e"
+            ).pack(side="right")
+
+        # Toplam satırı
+        total_frame = tk.Frame(self._couch_stats_inner, bg=BG_CARD)
+        total_frame.pack(fill="x", padx=4, pady=(3, 2))
+        tk.Label(
+            total_frame, text=f"Toplam: {self._couch_total_docs} belge  ·  {len(self._couch_doc_counts)} veritabanı",
+            font=("Segoe UI", 8, "bold"), fg=PEACH, bg=BG_CARD
+        ).pack(side="left")
 
     # ─── Toast Uyarı Sistemi ─────────────────────────────────────────────────
 
@@ -1994,50 +2448,73 @@ class MertUpdater(tk.Tk):
         self._draw_timeline()
 
     def _poll_docker_stats(self):
-        """Docker container CPU ve RAM'ini arka planda sorgular."""
+        """Docker container CPU ve RAM'ini arka planda sorgular (site + couchdb)."""
         def _worker():
-            try:
-                r = subprocess.run(
-                    ["docker", "stats", "--no-stream", "--format",
-                     "{{.CPUPerc}}|{{.MemUsage}}",
-                     "--filter", "name=mert-site"],
-                    capture_output=True, text=True, timeout=8
-                )
-                if r.returncode == 0 and r.stdout.strip():
-                    line = r.stdout.strip().splitlines()[0]
-                    parts = line.split("|")
-                    if len(parts) >= 2:
-                        cpu_str = parts[0].strip().replace("%", "")
-                        mem_str = parts[1].strip()   # örn: "123MiB / 512MiB"
-                        try:
-                            cpu = float(cpu_str)
-                        except ValueError:
-                            cpu = 0.0
-                        # RAM parse
-                        ram_used, ram_max = 0.0, 512.0
-                        m = re.match(r"([\d.]+)(\w+)\s*/\s*([\d.]+)(\w+)", mem_str)
-                        if m:
-                            def to_mb(val, unit):
-                                unit = unit.upper()
-                                if "GIB" in unit or "GB" in unit:
-                                    return float(val) * 1024
-                                if "MIB" in unit or "MB" in unit:
+            def _parse_stats(container_name):
+                try:
+                    r = subprocess.run(
+                        ["docker", "stats", "--no-stream", "--format",
+                         "{{.CPUPerc}}|{{.MemUsage}}",
+                         "--filter", f"name={container_name}"],
+                        capture_output=True, text=True, timeout=8
+                    )
+                    if r.returncode == 0 and r.stdout.strip():
+                        line = r.stdout.strip().splitlines()[0]
+                        parts = line.split("|")
+                        if len(parts) >= 2:
+                            cpu_str = parts[0].strip().replace("%", "")
+                            mem_str = parts[1].strip()
+                            try:
+                                cpu = float(cpu_str)
+                            except ValueError:
+                                cpu = 0.0
+                            ram_used, ram_max = 0.0, 512.0
+                            m = re.match(r"([\d.]+)(\w+)\s*/\s*([\d.]+)(\w+)", mem_str)
+                            if m:
+                                def to_mb(val, unit):
+                                    unit = unit.upper()
+                                    if "GIB" in unit or "GB" in unit:
+                                        return float(val) * 1024
+                                    if "MIB" in unit or "MB" in unit:
+                                        return float(val)
+                                    if "KIB" in unit or "KB" in unit:
+                                        return float(val) / 1024
                                     return float(val)
-                                if "KIB" in unit or "KB" in unit:
-                                    return float(val) / 1024
-                                return float(val)
-                            ram_used = to_mb(m.group(1), m.group(2))
-                            ram_max  = to_mb(m.group(3), m.group(4))
+                                ram_used = to_mb(m.group(1), m.group(2))
+                                ram_max  = to_mb(m.group(3), m.group(4))
+                            return cpu, ram_used, ram_max
+                except Exception:
+                    pass
+                return None
 
-                        self.after(0, self._apply_docker_stats, cpu, ram_used, ram_max)
-            except Exception:
-                pass
+            site_stats = _parse_stats("mert-site")
+            couch_stats = _parse_stats(COUCHDB_CONTAINER)
+
+            # Toplam CPU ve RAM hesapla
+            total_cpu = 0.0
+            total_ram = 0.0
+            total_ram_max = 0.0
+
+            if site_stats:
+                total_cpu += site_stats[0]
+                total_ram += site_stats[1]
+                total_ram_max += site_stats[2]
+            if couch_stats:
+                total_cpu += couch_stats[0]
+                total_ram += couch_stats[1]
+                total_ram_max += couch_stats[2]
+
+            if site_stats or couch_stats:
+                self.after(0, self._apply_docker_stats, total_cpu, total_ram,
+                           max(total_ram_max, 1),
+                           site_stats, couch_stats)
 
         threading.Thread(target=_worker, daemon=True).start()
         # 4 saniyede bir tekrarla
         self._stats_after = self.after(4000, self._poll_docker_stats)
 
-    def _apply_docker_stats(self, cpu: float, ram_used: float, ram_max: float):
+    def _apply_docker_stats(self, cpu: float, ram_used: float, ram_max: float,
+                            site_stats=None, couch_stats=None):
         """Stats geldi → geçmiş güncelle → grafikleri çiz."""
         MAX_HISTORY = 30
 
@@ -2066,11 +2543,15 @@ class MertUpdater(tk.Tk):
             history=self._ram_history
         )
 
-        # Üst ibare güncelle
+        # Üst ibare güncelle — detaylı bilgi
         ts = datetime.datetime.now().strftime("%H:%M:%S")
-        self._stats_lbl.config(
-            text=f"CPU {cpu:.1f}%  RAM {ram_used:.0f}/{ram_max:.0f}MB  ·  {ts}"
-        )
+        detail_parts = []
+        if site_stats:
+            detail_parts.append(f"Site: {site_stats[0]:.1f}%/{site_stats[1]:.0f}M")
+        if couch_stats:
+            detail_parts.append(f"CouchDB: {couch_stats[0]:.1f}%/{couch_stats[1]:.0f}M")
+        detail = "  ".join(detail_parts) if detail_parts else f"CPU {cpu:.1f}%  RAM {ram_used:.0f}M"
+        self._stats_lbl.config(text=f"{detail}  ·  {ts}")
 
         # Akıllı uyarı: eşik aşıldığında toast gönder (60 sn cooldown)
         now = time.time()
@@ -2081,6 +2562,85 @@ class MertUpdater(tk.Tk):
             elif ram_max > 0 and (ram_used / ram_max) >= 0.90:
                 self._health_last_toast = now
                 self._toast(f"Yüksek RAM: {ram_used:.0f}/{ram_max:.0f}MB", WARNING)
+
+    # ─── CouchDB İşlemleri ─────────────────────────────────────────────────
+
+    def _do_couchdb_setup(self):
+        """CouchDB veritabanlarını ve CORS ayarlarını curl ile oluşturur."""
+        def _task():
+            self._start_task()
+            self.after(0, self._clear_console)
+            self.after(0, self._log, "━━━ CouchDB Kurulum ━━━", "info")
+
+            couch_url = self._get_couch_url()
+            user = self._cfg_user_var.get().strip() if hasattr(self, '_cfg_user_var') else "admin"
+            pwd  = self._cfg_pass_var.get().strip() if hasattr(self, '_cfg_pass_var') else "mert2024"
+            auth = f"{user}:{pwd}"
+
+            self.after(0, self._log, f"Bağlantı: {couch_url}  kullanıcı: {user}", "dim")
+
+            # Sistem veritabanları
+            for db in ["_users", "_replicator", "_global_changes"]:
+                self._run_cmd(
+                    f'curl -s -X PUT "{couch_url}/{db}" -u "{auth}"',
+                    f"Sistem DB: {db}"
+                )
+
+            # Uygulama veritabanları
+            failed = 0
+            for db_name in COUCHDB_DBS:
+                ok, out = self._run_cmd(
+                    f'curl -s -X PUT "{couch_url}/{db_name}" -u "{auth}"',
+                    f"DB oluşturuluyor: {db_name}"
+                )
+                if not ok:
+                    failed += 1
+
+            # CORS ayarları
+            self.after(0, self._log, "CORS ayarları yapılandırılıyor...", "dim")
+            cors_cmds = [
+                f'curl -s -X PUT "{couch_url}/_node/_local/_config/httpd/enable_cors" -d \'"true"\' -u "{auth}"',
+                f'curl -s -X PUT "{couch_url}/_node/_local/_config/cors/origins" -d \'"*"\' -u "{auth}"',
+                f'curl -s -X PUT "{couch_url}/_node/_local/_config/cors/methods" -d \'"GET, PUT, POST, HEAD, DELETE"\' -u "{auth}"',
+                f'curl -s -X PUT "{couch_url}/_node/_local/_config/cors/headers" -d \'"accept, authorization, content-type, origin, referer"\' -u "{auth}"',
+                f'curl -s -X PUT "{couch_url}/_node/_local/_config/cors/credentials" -d \'"true"\' -u "{auth}"',
+            ]
+            for cmd in cors_cmds:
+                self._run_cmd(cmd, "CORS")
+
+            if failed == 0:
+                self.after(0, self._log, "━━━ CouchDB Kurulumu Tamamlandı! ━━━", "success")
+            else:
+                self.after(0, self._log, f"Kurulum bitti — {failed} DB hata verdi (zaten var olabilir)", "warning")
+            self.after(500, self._poll_couchdb)
+            self._end_task("CouchDB Kurulum")
+
+        self._threaded(_task)
+
+    def _do_couchdb_compact(self):
+        """CouchDB veritabanlarını compact eder (disk alanı kazandırır)."""
+        def _task():
+            self._start_task()
+            self.after(0, self._clear_console)
+            self.after(0, self._log, "━━━ CouchDB Compact ━━━", "info")
+
+            success_count = 0
+            for db_name in COUCHDB_DBS:
+                ok, _ = self._run_cmd(
+                    f'curl -s -X POST {COUCHDB_URL}/{db_name}/_compact '
+                    f'-H "Content-Type: application/json" -u admin:mert2024',
+                    f"Compact: {db_name}"
+                )
+                if ok:
+                    success_count += 1
+
+            self.after(0, self._log,
+                       f"━━━ Compact Tamamlandı ({success_count}/{len(COUCHDB_DBS)} DB) ━━━",
+                       "success")
+            self.after(500, self._poll_couchdb)
+            self._end_task("CouchDB Compact")
+
+        self._threaded(_task)
 
     def _do_restore(self, backup_id: str, label: str):
         if not messagebox.askyesno(

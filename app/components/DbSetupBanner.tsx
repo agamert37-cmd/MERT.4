@@ -11,12 +11,28 @@
 import React, { useEffect, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { Database, CheckCircle2, Loader2, AlertTriangle, RefreshCw, X } from 'lucide-react';
-import {
-  checkDatabaseStatus,
-  setupDatabase,
-  resetDbInitCache,
-  type DbInitStatus,
-} from '../lib/db-init';
+import { testCouchDbConnection } from '../lib/pouchdb';
+
+type DbInitStatus = 'idle' | 'checking' | 'setup_needed' | 'setting_up' | 'ready' | 'error';
+
+// CouchDB-based stubs replacing old db-init (Supabase)
+async function checkDatabaseStatus(): Promise<{ status: DbInitStatus; message?: string }> {
+  try {
+    const result = await testCouchDbConnection();
+    if (result.ok) return { status: 'ready' };
+    return { status: 'error', message: result.error || 'CouchDB bağlantı hatası' };
+  } catch (e: any) {
+    return { status: 'error', message: e.message || 'Bağlantı hatası' };
+  }
+}
+
+async function setupDatabase(): Promise<{ status: DbInitStatus; message?: string }> {
+  return checkDatabaseStatus();
+}
+
+function resetDbInitCache() {
+  // no-op for CouchDB
+}
 
 // ─── Props ────────────────────────────────────────────────────────────────────
 

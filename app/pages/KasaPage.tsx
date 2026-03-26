@@ -1,3 +1,4 @@
+// [AJAN-2 | claude/serene-gagarin | 2026-03-25] Son düzenleyen: Claude Sonnet 4.6
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
   ArrowUpCircle, 
@@ -17,6 +18,7 @@ import {
   Filter
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { staggerContainer, rowItem, hover, tap } from '../utils/animations';
 import * as Dialog from '@radix-ui/react-dialog';
 import { toast } from 'sonner';
 import { useTableSync } from '../hooks/useTableSync';
@@ -29,6 +31,7 @@ import { useEmployee } from '../contexts/EmployeeContext';
 import { useModuleBus } from '../hooks/useModuleBus';
 import { getPagePermissions } from '../utils/permissions';
 import { usePageSecurity } from '../hooks/usePageSecurity';
+import { kvGet, kvSet } from '../lib/pouchdb-kv';
 
 const checkIsDayClosed = (): boolean => {
   try {
@@ -116,6 +119,20 @@ export function KasaPage() {
   const [posDevices, setPosDevices] = useState<POSDevice[]>(() => {
     return getFromStorage<POSDevice[]>(StorageKey.POS_DATA) || [];
   });
+
+  // BUG FIX [AJAN-2]: localStorage boşsa KV store'dan POS cihazlarını yükle (mobil ilk açılış)
+  useEffect(() => {
+    const saved = getFromStorage<POSDevice[]>(StorageKey.POS_DATA);
+    if (!saved || saved.length === 0) {
+      kvGet<POSDevice[]>('pos_devices').then(remote => {
+        if (remote && remote.length > 0) {
+          setPosDevices(remote);
+          setInStorage(StorageKey.POS_DATA, remote);
+        }
+      }).catch(() => {});
+    }
+  }, []);
+
   const [isPosModalOpen, setIsPosModalOpen] = useState(false);
   const [newPosForm, setNewPosForm] = useState({
     name: '',
@@ -249,6 +266,8 @@ export function KasaPage() {
     const updated = [newDevice, ...posDevices];
     setPosDevices(updated);
     setInStorage(StorageKey.POS_DATA, updated);
+    // BUG FIX [AJAN-2]: POS cihazını KV store'a da yaz
+    kvSet('pos_devices', updated).catch(e => console.error('[Kasa] POS kv sync:', e));
     toast.success('POS cihazı sisteme eklendi');
     setIsPosModalOpen(false);
     setNewPosForm({ name: '', bankName: '', serialNumber: '' });
@@ -496,7 +515,12 @@ export function KasaPage() {
               </div>
 
               {/* Transactions List */}
-              <div className="space-y-3">
+              <motion.div
+                className="space-y-3"
+                variants={staggerContainer(0.04, 0.02)}
+                initial="initial"
+                animate="animate"
+              >
                 {filteredTransactions.length === 0 ? (
                   <div className="text-center py-16">
                     <Wallet className="w-16 h-16 text-gray-700 mx-auto mb-4" />
@@ -507,8 +531,11 @@ export function KasaPage() {
                   filteredTransactions.map((transaction) => (
                     <motion.div
                       key={transaction.id}
-                      initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
-                      className="group flex flex-col md:flex-row items-start md:items-center justify-between p-4 bg-white/5 border border-white/5 hover:border-white/10 rounded-2xl transition-all"
+                      layout
+                      variants={rowItem}
+                      whileHover={{ x: 3, borderColor: 'rgba(255,255,255,0.12)', transition: { duration: 0.15 } }}
+                      whileTap={tap.card}
+                      className="group flex flex-col md:flex-row items-start md:items-center justify-between p-4 bg-white/5 border border-white/5 rounded-2xl transition-colors"
                     >
                       <div className="flex items-center gap-4 w-full md:w-auto mb-4 md:mb-0">
                         <div className={`p-3 rounded-xl flex-shrink-0 ${transaction.type === 'Gelir' ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}>
@@ -539,7 +566,7 @@ export function KasaPage() {
                     </motion.div>
                   ))
                 )}
-              </div>
+              </motion.div>
             </div>
           )}
 
@@ -570,6 +597,8 @@ export function KasaPage() {
                             const updated = posDevices.filter(d => d.id !== device.id);
                             setPosDevices(updated);
                             setInStorage(StorageKey.POS_DATA, updated);
+                            // BUG FIX [AJAN-2]: POS silme KV store'a da yaz
+                            kvSet('pos_devices', updated).catch(e => console.error('[Kasa] POS kv sync:', e));
                             toast.success('POS Cihazı silindi.');
                           }
                         }}
@@ -746,6 +775,9 @@ export function KasaPage() {
           </Dialog.Content>
         </Dialog.Portal>
       </Dialog.Root>
+
+      {/* ─── Banka Yönetimi ─── */}
+      <BankWidget canEdit={canAdd} />
 
     </div>
   );

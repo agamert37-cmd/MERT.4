@@ -4,6 +4,7 @@ import { Shield, X, Clock, Send, LayoutDashboard } from 'lucide-react';
 import { useEmployee } from '../contexts/EmployeeContext';
 import { toast } from 'sonner';
 import { getFromStorage, setInStorage } from '../utils/storage';
+import { kvSet } from '../lib/pouchdb-kv';
 
 interface RoleRequestModalProps {
   isOpen: boolean;
@@ -57,8 +58,10 @@ export function RoleRequestModal({ isOpen, onClose }: RoleRequestModalProps) {
     };
 
     const existingRequests = getFromStorage<any[]>('role_requests') || [];
-    setInStorage('role_requests', [newRequest, ...existingRequests]);
-    
+    const updatedReqs = [newRequest, ...existingRequests];
+    setInStorage('role_requests', updatedReqs);
+    kvSet('role_requests', updatedReqs).catch(() => {});
+
     toast.success('Yetki talebiniz yöneticiye iletildi');
     onClose();
     setReason('');

@@ -1,11 +1,10 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback, useRef } from 'react';
 import { StorageKey, getFromStorage, setInStorage, removeFromStorage } from '../utils/storage';
-import { hashString } from '../utils/security';
+import { hashString, hashStringWithSalt } from '../utils/security';
 import { registerSession, removeSession, generateCSRFToken, appendToLogChain, addSecurityThreat, isUnusualHour, recordDeviceLogin, checkPasswordBreach } from '../utils/security';
 import { logActivity } from '../utils/activityLogger';
 import { toast } from 'sonner';
-import { forceSync } from '../utils/supabase-storage';
-import { supabase } from '../lib/supabase';
+import { kvGet, kvSet, kvDel } from '../lib/pouchdb-kv';
 
 interface User {
   id: string;
@@ -52,6 +51,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         p.id === currentUser.id ? { ...p, status: 'offline' } : p
       );
       setInStorage(StorageKey.PERSONEL_DATA, updatedPersonnel);
+      // KV sync — personel online/offline durumu tüm cihazlarda güncel olsun
+      kvSet(`personel:${currentUser.id}:status`, { id: currentUser.id, status: 'offline', lastSeen: new Date().toISOString() }).catch(() => {});
       logActivity('logout', 'Kullanıcı sistemden çıkış yaptı', {
         employeeId: currentUser.id,
         employeeName: currentUser.name,
@@ -146,20 +147,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const currentUser = userRef.current;
         if (!currentUser) return;
         try {
-          const { data } = await supabase
-            .from('kv_store_daadfb0c')
-            .select('value')
-            .eq('key', `sync_force_logout_${currentUser.id}`)
-            .maybeSingle();
+          const value = await kvGet<any>(`sync_force_logout_${currentUser.id}`);
 
-          if (data?.value) {
+          if (value) {
             // Anahtarı temizle
-            await supabase
-              .from('kv_store_daadfb0c')
-              .delete()
-              .eq('key', `sync_force_logout_${currentUser.id}`);
+            await kvDel(`sync_force_logout_${currentUser.id}`);
 
-            const reason = data.value?.reason || 'Yönetici tarafından oturumunuz sonlandırıldı.';
+            const reason = value?.reason || 'Yönetici tarafından oturumunuz sonlandırıldı.';
             logActivity('security_alert', 'Uzaktan oturum kapatma', {
               employeeId: currentUser.id,
               employeeName: currentUser.name,
@@ -169,7 +163,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             removeSession();
             appendToLogChain(`force_logout:${currentUser.id}:${currentUser.name}`);
             doLogout();
-            toast.error(`🔒 ${reason}`, { duration: 8000 });
+            toast.error(`${reason}`, { duration: 8000 });
           }
         } catch {}
       }, 60_000); // 60 saniyede bir kontrol
@@ -192,10 +186,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // ── Mobil / Yeni Cihaz: Yerel veri yoksa Supabase'den çek ─────
     // localStorage henüz senkronize edilmemişse (yeni cihaz / ilk açılış)
     // forceSync() ile buluttan personel verisini indir.
+    // PouchDB otomatik senkronize eder — ek forceSync gerekmez
     if (storedPersonnel.length === 0) {
       try {
-        await forceSync();
-        storedPersonnel = getFromStorage<any[]>(StorageKey.PERSONEL_DATA) || [];
+        // PouchDB'den personel verisini kontrol et (tablo sync üzerinden gelir)
+        const { getDb } = await import('../lib/pouchdb');
+        const db = getDb('personeller');
+        const result = await db.allDocs({ include_docs: true });
+        const docs = result.rows.filter((r: any) => r.doc && !r.doc._deleted).map((r: any) => {
+          const { _id, _rev, _deleted, ...rest } = r.doc;
+          if (!rest.id && _id) rest.id = _id;
+          return rest;
+        });
+        if (docs.length > 0) {
+          setInStorage(StorageKey.PERSONEL_DATA, docs);
+          storedPersonnel = docs;
+        }
       } catch {
         // Ağ yoksa yine de devam et — acil bypass (admin/1234) çalışmaya devam eder
       }
@@ -322,8 +328,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // ── Şifre doğrulama ────────────────────────────────────────────
     const userPassword = (foundUser.password || '').trim();
     const userPin = (foundUser.pinCode || foundUser.pin_code || '').trim();
-    const hashedPassword = await hashString(trimmedPassword);
+    // Tuzlu hash (yeni format) — kullanici ID'si tuz olarak kullanilir
+    const saltKey = foundUser.id;
+    const hashedPassword = await hashString(trimmedPassword);              // Eski format (tuzsuz)
+    const hashedPasswordSalted = await hashStringWithSalt(trimmedPassword, saltKey); // Yeni format (tuzlu)
 
+    // Once tuzlu (yeni) hash dene, sonra tuzsuz (eski/migration) hash dene
     const isPasswordValid =
       (userPassword && userPassword === hashedPassword) ||       // hash eşleşmesi
       (userPin && userPin === hashedPassword) ||                  // PIN hash eşleşmesi
@@ -340,12 +350,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return false;
     }
 
-    // Eğer şifre düz metin olarak kayıtlıysa, bunu güvenli (hashed) versiyona geçir
-    // Not: Her alan kendi trimmedPassword eşleşmesiyle ayrı ayrı kontrol edilir.
-    // password ile giriş yapıldığında pin'in hash'lenmesi engellenir, tersi de geçerlidir.
-    const isPasswordPlaintext = !!(userPassword && userPassword === trimmedPassword);
-    const isPinPlaintext      = !!(userPin && userPin === trimmedPassword);
-    const isPlaintextMatch    = isPasswordPlaintext || isPinPlaintext;
+    // Eski tuzsuz hash ile giriş yapıldıysa tuzlu hash'e migrate et
+    const needsPasswordMigration = !!(userPassword && userPassword === hashedPassword && userPassword !== hashedPasswordSalted);
+    const needsPinMigration = !!(userPin && userPin === hashedPassword && userPin !== hashedPasswordSalted);
 
     const loggedInUser: User = { 
       id: foundUser.id, 
@@ -373,15 +380,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Personel durumunu güncelle
     const updatedPersonnel = storedPersonnel.map(p => {
       if (p.id === foundUser.id) {
-        return { 
-          ...p, 
-          status: 'online', 
-          lastLogin: new Date().toLocaleString('tr-TR'), 
+        return {
+          ...p,
+          status: 'online',
+          lastLogin: new Date().toLocaleString('tr-TR'),
           last_login: new Date().toLocaleString('tr-TR'),
-          // Migration: her alan yalnızca kendi düz metin eşleşmesi varsa hash'lenir
-          ...(isPasswordPlaintext && p.password ? { password: hashedPassword } : {}),
-          ...(isPinPlaintext && p.pinCode  ? { pinCode:  hashedPassword } : {}),
-          ...(isPinPlaintext && p.pin_code ? { pin_code: hashedPassword } : {}),
+          // Migration: tuzsuz hash'i tuzlu hash'e gecir
+          ...(needsPasswordMigration && p.password ? { password: hashedPasswordSalted } : {}),
+          ...(needsPinMigration && p.pinCode  ? { pinCode:  hashedPasswordSalted } : {}),
+          ...(needsPinMigration && p.pin_code ? { pin_code: hashedPasswordSalted } : {}),
         };
       }
       return p;

@@ -1,6 +1,8 @@
+// [AJAN-2 | claude/serene-gagarin | 2026-03-25] Son düzenleyen: Claude Sonnet 4.6
 import React, { useState, useMemo } from 'react';
 import { UserCog, Shield, Clock, MapPin, Phone, Mail, Plus, Trash2, Activity, MousePointerClick, History, Eye, EyeOff, Edit3, Lock, Key, Save, X, Search, CheckCircle2, LogOut, WifiOff } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { staggerContainer, gridCard, hover, tap } from '../utils/animations';
 import * as Dialog from '@radix-ui/react-dialog';
 import { toast } from 'sonner';
 import { useTableSync } from '../hooks/useTableSync';
@@ -13,7 +15,7 @@ import { getPagePermissions } from '../utils/permissions';
 import { SyncStatusBar, SyncBadge } from '../components/SyncStatusBar';
 import { getFromStorage, setInStorage, StorageKey } from '../utils/storage';
 import { hashString } from '../utils/security';
-import { supabase } from '../lib/supabase';
+import { kvSet } from '../lib/pouchdb-kv';
 import { analyzePasswordStrength, getSecurityPolicy, checkRateLimit, generateCSRFToken, validateCSRFToken, addSecurityThreat, detectRapidActions, deepSanitize, detectSQLInjection, appendToLogChain } from '../utils/security';
 import { useSecurityMonitor } from '../hooks/useSecurityMonitor';
 import { PasswordStrengthBar } from '../components/PasswordStrengthBar';
@@ -268,13 +270,14 @@ export function PersonelPage() {
       return;
     }
 
+    const newPersonnelId = crypto.randomUUID();
     const newPersonnel: Personnel = {
-      id: crypto.randomUUID(), name: deepSanitize(nameVal), username: deepSanitize(uname),
+      id: newPersonnelId, name: deepSanitize(nameVal), username: deepSanitize(uname),
       position: (fd.get('department') as string).trim(), role: requestedRole,
       status: 'offline', phone: (fd.get('phone') as string).trim(), email: (fd.get('email') as string || '').trim(),
       lastLogin: t('personnel.neverLoggedIn'), joinDate: new Date().toLocaleDateString('tr-TR'),
       department: (fd.get('department') as string).trim(), salary: Number(fd.get('salary') || 0), active: true,
-      pinCode: pin ? await hashString(pin) : undefined, password: pw ? await hashString(pw) : undefined, permissions: addPermissions,
+      pinCode: pin ? await hashStringWithSalt(pin, newPersonnelId) : undefined, password: pw ? await hashStringWithSalt(pw, newPersonnelId) : undefined, permissions: addPermissions,
     };
 
     await addItem(newPersonnel);
@@ -348,8 +351,8 @@ export function PersonelPage() {
       name: deepSanitize(editName.trim()), username: deepSanitize(editUsername.trim()), position: editDepartment.trim(), department: editDepartment.trim(),
       role: editRole, phone: editPhone.trim(), email: editEmail.trim(), salary: Number(editSalary || 0), permissions: editPermissions,
     };
-    if (editPin.trim()) updates.pinCode = await hashString(editPin.trim());
-    if (editPassword.trim()) updates.password = await hashString(editPassword.trim());
+    if (editPin.trim()) updates.pinCode = await hashStringWithSalt(editPin.trim(), editId);
+    if (editPassword.trim()) updates.password = await hashStringWithSalt(editPassword.trim(), editId);
 
     setIsSaving(true);
     try {
@@ -382,21 +385,15 @@ export function PersonelPage() {
         label: 'Evet, Kapat',
         onClick: async () => {
           try {
-            // Supabase KV'e force_logout sinyali yaz — kullanıcının tarayıcısı 60s içinde algılar
-            await supabase.from('kv_store_daadfb0c').upsert({
-              key: `sync_force_logout_${personId}`,
-              value: {
-                reason: `Yönetici (${user?.name || 'Admin'}) tarafından oturumunuz sonlandırıldı.`,
-                by: user?.name || 'Admin',
-                at: new Date().toISOString(),
-              },
+            // KV'e force_logout sinyali yaz — kullanıcının tarayıcısı 60s içinde algılar
+            await kvSet(`sync_force_logout_${personId}`, {
+              reason: `Yönetici (${user?.name || 'Admin'}) tarafından oturumunuz sonlandırıldı.`,
+              by: user?.name || 'Admin',
+              at: new Date().toISOString(),
             });
-            // Personel durumunu offline olarak işaretle
-            const personnel = getFromStorage<any[]>(StorageKey.PERSONEL_DATA) || [];
-            const updated = personnel.map(p =>
-              p.id === personId ? { ...p, status: 'offline' } : p
-            );
-            setInStorage(StorageKey.PERSONEL_DATA, updated);
+            // Personel durumunu offline olarak işaretle — [AJAN-2]: useTableSync üzerinden güncelle
+            // setInStorage bypass kaldırıldı — useTableSync hem localStorage hem Supabase'i yönetir
+            updateItem(personId, { status: 'offline' } as any).catch(e => console.warn('[PersonelPage] status update hatası:', e));
             logActivity('security_alert', 'Uzaktan oturum kapatma tetiklendi', {
               employeeName: user?.name,
               level: 'high',
@@ -439,6 +436,8 @@ export function PersonelPage() {
     const allReqs = getFromStorage<any[]>('role_requests') || [];
     const updatedReqs = allReqs.map(r => r.id === request.id ? { ...r, status: 'approved', approvedAt: new Date().toISOString(), expiresAt } : r);
     setInStorage('role_requests', updatedReqs); setRoleRequests(updatedReqs);
+    // BUG FIX [AJAN-2]: role_requests KV store'a da yaz — çapraz cihaz onay akışı
+    kvSet('role_requests', updatedReqs).catch(e => console.error('[Personel] role_requests kv sync:', e));
 
     const allPersonnel = getFromStorage<any[]>('personel_data') || [];
     const updatedPersonnel = allPersonnel.map(p => {
@@ -453,6 +452,12 @@ export function PersonelPage() {
       return p;
     });
     setInStorage('personel_data', updatedPersonnel);
+    // BUG FIX [AJAN-2]: Personel izin değişikliği Supabase'e de yaz
+    const updatedEmployee = updatedPersonnel.find((p: any) => p.id === request.employeeId);
+    if (updatedEmployee) {
+      updateItem(request.employeeId, { permissions: updatedEmployee.permissions, tempPermissions: updatedEmployee.tempPermissions } as any)
+        .catch(e => console.error('[Personel] perm update sync:', e));
+    }
     logActivity('employee_update', `Gecici yetki onaylandi: ${request.panelName}`, {
       employeeId: request.employeeId,
       employeeName: request.employeeName,
@@ -465,6 +470,8 @@ export function PersonelPage() {
     const allReqs = getFromStorage<any[]>('role_requests') || [];
     const updatedReqs = allReqs.map(r => r.id === request.id ? { ...r, status: 'rejected' } : r);
     setInStorage('role_requests', updatedReqs); setRoleRequests(updatedReqs);
+    // BUG FIX [AJAN-2]: role_requests KV store'a da yaz
+    kvSet('role_requests', updatedReqs).catch(e => console.error('[Personel] role_requests kv sync:', e));
     logActivity('employee_update', `Gecici yetki reddedildi: ${request.panelName}`, {
       employeeId: request.employeeId,
       employeeName: request.employeeName,
@@ -579,12 +586,23 @@ export function PersonelPage() {
       </div>
 
       {/* Personnel Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+      <motion.div
+        className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5 sm:gap-6"
+        variants={staggerContainer(0.07, 0.03)}
+        initial="initial"
+        animate="animate"
+      >
         <AnimatePresence>
-          {filteredPersonnel.map((person, index) => (
-            <motion.div key={person.id} layout initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} transition={{ delay: index * 0.05 }}
+          {filteredPersonnel.map((person) => (
+            <motion.div
+              key={person.id}
+              layout
+              variants={gridCard}
+              exit={{ opacity: 0, scale: 0.92, filter: 'blur(6px)', transition: { duration: 0.2 } }}
+              whileHover={hover.card}
+              whileTap={tap.card}
               onClick={() => setSelectedEmployee(person)}
-              className="p-6 rounded-3xl bg-[#111] border border-white/5 hover:border-white/20 cursor-pointer transition-all group flex flex-col justify-between min-h-[220px]"
+              className="p-5 sm:p-6 rounded-3xl bg-[#111] border border-white/5 hover:border-white/15 cursor-pointer group flex flex-col justify-between min-h-[220px] hover:shadow-xl hover:shadow-black/30 transition-colors"
             >
               <div>
                 <div className="flex justify-between items-start mb-4">
@@ -640,7 +658,7 @@ export function PersonelPage() {
             </motion.div>
           ))}
         </AnimatePresence>
-      </div>
+      </motion.div>
 
       {/* Add Modal */}
       <Dialog.Root open={isAddModalOpen} onOpenChange={setIsAddModalOpen}>

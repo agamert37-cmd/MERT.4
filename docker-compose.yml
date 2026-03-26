@@ -1,7 +1,54 @@
 services:
+  couchdb:
+    image: couchdb:3.3
+    container_name: mert-couchdb
+    restart: unless-stopped
+    ports:
+      - "5984:5984"
+    environment:
+      COUCHDB_USER: admin
+      COUCHDB_PASSWORD: mert2024
+    volumes:
+      - couchdb_data:/opt/couchdb/data
+
+  # CouchDB veritabanlarını oluştur (ilk başlatmada)
+  couchdb-init:
+    image: curlimages/curl:latest
+    container_name: mert-couchdb-init
+    depends_on:
+      - couchdb
+    restart: "no"
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        echo "CouchDB hazır olana kadar bekleniyor..."
+        sleep 5
+        COUCH="http://admin:mert2024@couchdb:5984"
+        # Sistem veritabanları
+        for db in _users _replicator _global_changes; do
+          curl -s -X PUT "$$COUCH/$$db" 2>/dev/null || true
+        done
+        # Uygulama veritabanları
+        for db in mert_fisler mert_urunler mert_cari_hesaplar mert_kasa_islemleri mert_personeller mert_bankalar mert_cekler mert_araclar mert_arac_shifts mert_arac_km_logs mert_uretim_profilleri mert_uretim_kayitlari mert_faturalar mert_fatura_stok mert_tahsilatlar mert_kv_store; do
+          curl -s -X PUT "$$COUCH/$$db" 2>/dev/null || true
+          echo "  DB: $$db"
+        done
+        # CORS ayarları
+        curl -s -X PUT "$$COUCH/_node/_local/_config/httpd/enable_cors" -d '"true"'
+        curl -s -X PUT "$$COUCH/_node/_local/_config/cors/origins" -d '"*"'
+        curl -s -X PUT "$$COUCH/_node/_local/_config/cors/methods" -d '"GET, PUT, POST, HEAD, DELETE"'
+        curl -s -X PUT "$$COUCH/_node/_local/_config/cors/headers" -d '"accept, authorization, content-type, origin, referer"'
+        curl -s -X PUT "$$COUCH/_node/_local/_config/cors/credentials" -d '"true"'
+        echo "CouchDB kurulumu tamamlandi!"
+
   mert-site:
     build: .
     container_name: mert-site
     ports:
       - "8080:80"
     restart: unless-stopped
+    depends_on:
+      - couchdb
+
+volumes:
+  couchdb_data:

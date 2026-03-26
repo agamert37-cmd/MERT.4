@@ -5,6 +5,7 @@ import { useEmployee } from '../contexts/EmployeeContext';
 import { toast } from 'sonner';
 import { getFromStorage, setInStorage, StorageKey } from '../utils/storage';
 import { hashString } from '../utils/security';
+import { kvSet } from '../lib/pouchdb-kv';
 
 interface ProfileEditModalProps {
   isOpen: boolean;
@@ -58,7 +59,9 @@ export function ProfileEditModal({ isOpen, onClose }: ProfileEditModalProps) {
 
     // Save back to storage
     setInStorage(StorageKey.PERSONEL_DATA, updatedPersonnel);
-    
+    // [AJAN-2] KV sync — profil değişiklikleri tüm cihazlarda görünsün
+    kvSet('personel_status', updatedPersonnel).catch(() => {});
+
     // Update context
     setCurrentEmployee({ ...currentEmployee, ...updateData } as any);
     
@@ -72,8 +75,20 @@ export function ProfileEditModal({ isOpen, onClose }: ProfileEditModalProps) {
     <Dialog.Root open={isOpen} onOpenChange={(open) => !open && onClose()}>
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50" />
-        <Dialog.Content className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-popover border border-border p-6 rounded-2xl shadow-2xl w-full max-w-md z-50" aria-describedby={undefined}>
-          <div className="flex items-center justify-between mb-6">
+        <Dialog.Content
+          className="fixed z-50 bg-popover border border-border shadow-2xl w-full
+            /* Mobile: bottom sheet */
+            bottom-0 left-0 right-0 rounded-t-2xl p-4 max-h-[92vh] overflow-y-auto
+            /* Desktop: centered modal */
+            sm:bottom-auto sm:top-1/2 sm:left-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-2xl sm:max-w-md sm:p-6 sm:max-h-none sm:overflow-visible"
+          aria-describedby={undefined}
+        >
+          {/* Mobil drag indicator */}
+          <div className="sm:hidden flex justify-center mb-3">
+            <div className="w-10 h-1 rounded-full bg-white/20" />
+          </div>
+
+          <div className="flex items-center justify-between mb-4 sm:mb-6">
             <div className="flex items-center gap-3">
               <div className="p-2 bg-blue-500/20 text-blue-400 rounded-lg">
                 <UserCircle className="w-6 h-6" />
@@ -132,7 +147,7 @@ export function ProfileEditModal({ isOpen, onClose }: ProfileEditModalProps) {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="text-muted-foreground text-sm mb-1 block">Yeni Şifre</label>
                 <div className="relative">

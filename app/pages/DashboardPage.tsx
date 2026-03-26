@@ -11,6 +11,7 @@ import {
   CreditCard, Landmark, Flame, ArrowLeftRight, Factory, Bot, X
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { staggerContainer, staggerItem, hover, tap } from '../utils/animations';
 import { useNavigate } from 'react-router';
 import { toast } from 'sonner';
 import {
@@ -429,6 +430,48 @@ export function DashboardPage() {
     return total;
   }, [rawFisler]);
 
+  // ─── Canlı saatlik satış akışı (bugün saat saat) ───
+  const hourlySalesFlow = useMemo(() => {
+    const now = new Date();
+    const hours: { saat: string; ciro: number; adet: number }[] = [];
+    for (let h = 7; h <= Math.min(now.getHours(), 23); h++) {
+      const hourSales = rawFisler.filter(f => {
+        if (f.mode !== 'sale' && f.mode !== 'satis') return false;
+        if (!f.date?.startsWith(todayISO) && f.date !== todayISO) return false;
+        const created = f.createdAt ? new Date(f.createdAt) : null;
+        return created ? created.getHours() === h : false;
+      });
+      const ciro = hourSales.reduce((sum, fis) => {
+        return sum + (fis.items || []).reduce((s: number, p: any) => {
+          return s + Math.abs(safeNum(p.totalPrice) || safeNum(p.total) || 0);
+        }, 0);
+      }, 0);
+      hours.push({ saat: `${h}:00`, ciro, adet: hourSales.length });
+    }
+    return hours;
+  }, [rawFisler, todayISO, liveCounter]);
+
+  // ─── Anlık kârlılık oranı (son 7 gün trend) ───
+  const profitTrend = useMemo(() => {
+    const today = new Date();
+    return Array.from({ length: 7 }).map((_, i) => {
+      const d = new Date(today);
+      d.setDate(d.getDate() - (6 - i));
+      const iso = d.toISOString().split('T')[0];
+      const daySales = rawFisler
+        .filter(f => (f.mode === 'sale' || f.mode === 'satis') && (f.date?.startsWith(iso) || f.date === iso))
+        .reduce((sum, item) => sum + (item.items || []).reduce((s: number, p: any) => s + Math.abs(safeNum(p.totalPrice) || safeNum(p.total) || 0), 0), 0);
+      const dayPurch = rawFisler
+        .filter(f => f.mode === 'alis' && (f.date?.startsWith(iso) || f.date === iso))
+        .reduce((sum, item) => sum + (item.items || []).reduce((s: number, p: any) => s + Math.abs(safeNum(p.totalPrice) || safeNum(p.total) || 0), 0), 0);
+      return {
+        gun: d.toLocaleDateString('tr-TR', { weekday: 'short' }),
+        kar: daySales - dayPurch,
+        oran: daySales > 0 ? Math.round(((daySales - dayPurch) / daySales) * 100) : 0
+      };
+    });
+  }, [rawFisler, liveCounter]);
+
   // ─── Stok akış verileri (fişlerden türetilen giriş/çıkış — son 5 ürün) ───
   const stockFlowData = useMemo(() => {
     const productFlow: Record<string, { inflow: number; outflow: number }> = {};
@@ -653,6 +696,9 @@ export function DashboardPage() {
   }, [rawFisler, rawKasa]);
 
   const [activityTab, setActivityTab] = useState<'recent' | 'deleted'>('recent');
+  const isMobile = useIsMobile(768);
+  const [showAdvancedMobile, setShowAdvancedMobile] = useState(false);
+  const [notesExpanded, setNotesExpanded] = useState(false);
 
   const weekTotal = weeklySalesData.reduce((s, d) => s + d.satis, 0);
 
@@ -727,8 +773,27 @@ export function DashboardPage() {
             </button>
           </div>
         </div>
-        {/* Live Clock Row - isolated component, won't re-render the whole dashboard */}
-        <LiveClockWidget />
+        {/* Live Clock Row + Auto-refresh indicator */}
+        <div className="flex items-center justify-between flex-wrap gap-2">
+          <LiveClockWidget />
+          <motion.div
+            key={liveCounter}
+            initial={{ opacity: 0, scale: 0.8 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20"
+          >
+            <motion.div
+              animate={{ rotate: 360 }}
+              transition={{ duration: 1, ease: "linear" }}
+              key={`spin-${liveCounter}`}
+            >
+              <RefreshCw className="w-3 h-3 text-emerald-400" />
+            </motion.div>
+            <span className="text-[9px] sm:text-[10px] font-bold text-emerald-400">
+              Otomatik Yenileme Aktif · 15s
+            </span>
+          </motion.div>
+        </div>
       </div>
 
       {/* ─── AI Sohbet Paneli ─── */}
@@ -748,10 +813,18 @@ export function DashboardPage() {
       </AnimatePresence>
 
       {/* ─── Stat Cards Grid ─── */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 lg:gap-6">
+      <motion.div
+        className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 lg:gap-6"
+        variants={staggerContainer(0.07, 0.02)}
+        initial="initial"
+        animate="animate"
+      >
         {/* Günlük Ciro */}
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0 }}
-          className="relative p-4 sm:p-5 lg:p-6 rounded-2xl lg:rounded-3xl bg-gradient-to-br from-blue-500/10 via-[#111] to-[#111] border border-blue-500/20 overflow-hidden group hover:border-blue-500/40 transition-all"
+        <motion.div
+          variants={staggerItem}
+          whileHover={{ scale: 1.028, y: -5, transition: { type: 'spring', stiffness: 420, damping: 28 } }}
+          whileTap={{ scale: 0.97 }}
+          className="relative p-4 sm:p-5 lg:p-6 rounded-2xl lg:rounded-3xl bg-gradient-to-br from-blue-500/10 via-[#111] to-[#111] border border-blue-500/20 overflow-hidden group hover:border-blue-500/40 hover:shadow-xl hover:shadow-blue-500/10 transition-colors cursor-pointer"
         >
           <div className="absolute -top-8 -right-8 w-28 h-28 bg-blue-500/10 rounded-full blur-2xl group-hover:bg-blue-500/20 transition-all" />
           <div className="relative z-10">
@@ -765,19 +838,35 @@ export function DashboardPage() {
               </div>
             </div>
             <p className="text-[9px] sm:text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1">{t('dashboard.dailyRevenue')}</p>
-            <p className="text-xl sm:text-2xl lg:text-3xl font-black text-white">
+            <motion.p
+              key={`rev-${liveCounter}`}
+              initial={{ opacity: 0.7, scale: 0.98 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ type: 'spring', stiffness: 300, damping: 20 }}
+              className="text-xl sm:text-2xl lg:text-3xl font-black text-white"
+            >
               <AnimatedCounter value={realtimeRevenue} prefix="₺" />
-            </p>
+            </motion.p>
             <div className="mt-2 sm:mt-3 flex items-center gap-2">
-              <Sparkline data={dailySparkData} color="#3b82f6" width={60} height={24} />
-              <span className="text-[9px] sm:text-[10px] text-gray-500">7 gün</span>
+              <Sparkline data={dailySparkData} color="#3b82f6" width={80} height={28} />
+              <div className="flex flex-col">
+                <span className="text-[9px] sm:text-[10px] text-gray-500">7 gün</span>
+                {dailySparkData.length >= 2 && (
+                  <span className={`text-[8px] font-bold ${dailySparkData[dailySparkData.length - 1] >= dailySparkData[dailySparkData.length - 2] ? 'text-emerald-400' : 'text-red-400'}`}>
+                    {dailySparkData[dailySparkData.length - 1] >= dailySparkData[dailySparkData.length - 2] ? '↑' : '↓'} dün vs bugün
+                  </span>
+                )}
+              </div>
             </div>
           </div>
         </motion.div>
 
         {/* Satış Adedi */}
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }}
-          className="relative p-4 sm:p-5 lg:p-6 rounded-2xl lg:rounded-3xl bg-gradient-to-br from-emerald-500/10 via-[#111] to-[#111] border border-emerald-500/20 overflow-hidden group hover:border-emerald-500/40 transition-all"
+        <motion.div
+          variants={staggerItem}
+          whileHover={{ scale: 1.028, y: -5, transition: { type: 'spring', stiffness: 420, damping: 28 } }}
+          whileTap={{ scale: 0.97 }}
+          className="relative p-4 sm:p-5 lg:p-6 rounded-2xl lg:rounded-3xl bg-gradient-to-br from-emerald-500/10 via-[#111] to-[#111] border border-emerald-500/20 overflow-hidden group hover:border-emerald-500/40 hover:shadow-xl hover:shadow-emerald-500/10 transition-colors cursor-pointer"
         >
           <div className="absolute -top-8 -right-8 w-28 h-28 bg-emerald-500/10 rounded-full blur-2xl group-hover:bg-emerald-500/20 transition-all" />
           <div className="relative z-10">
@@ -794,8 +883,11 @@ export function DashboardPage() {
         </motion.div>
 
         {/* Kritik Stok */}
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}
-          className={`relative p-4 sm:p-5 lg:p-6 rounded-2xl lg:rounded-3xl overflow-hidden group transition-all ${
+        <motion.div
+          variants={staggerItem}
+          whileHover={{ scale: 1.028, y: -5, transition: { type: 'spring', stiffness: 420, damping: 28 } }}
+          whileTap={{ scale: 0.97 }}
+          className={`relative p-4 sm:p-5 lg:p-6 rounded-2xl lg:rounded-3xl overflow-hidden group cursor-pointer ${
             criticalStockCount > 0
               ? 'bg-gradient-to-br from-red-500/15 via-[#111] to-[#111] border border-red-500/30 hover:border-red-500/50'
               : 'bg-gradient-to-br from-gray-500/5 via-[#111] to-[#111] border border-white/10 hover:border-white/20'
@@ -808,10 +900,21 @@ export function DashboardPage() {
                 <AlertTriangle className="w-4 h-4 sm:w-5 sm:h-5" />
               </div>
               {criticalStockCount > 0 && (
-                <motion.span animate={{ scale: [1, 1.05, 1] }} transition={{ duration: 1.5, repeat: Infinity }}
+                <motion.span
+                  initial={{ scale: 0, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  transition={{ type: 'spring', stiffness: 460, damping: 20 }}
                   className="flex items-center gap-1 sm:gap-1.5 px-1.5 sm:px-2 py-0.5 sm:py-1 bg-red-500/20 text-red-400 text-[8px] sm:text-[9px] font-bold rounded-full border border-red-500/30"
                 >
-                  <span className="w-1.5 h-1.5 rounded-full bg-red-400 animate-pulse" /> KRİTİK
+                  <span className="relative flex w-1.5 h-1.5">
+                    <motion.span
+                      className="absolute inline-flex h-full w-full rounded-full bg-red-400"
+                      animate={{ scale: [1, 2.4, 1], opacity: [0.5, 0, 0.5] }}
+                      transition={{ duration: 1.8, repeat: Infinity, ease: 'easeOut' }}
+                    />
+                    <span className="relative inline-flex rounded-full w-1.5 h-1.5 bg-red-500" />
+                  </span>
+                  KRİTİK
                 </motion.span>
               )}
             </div>
@@ -822,11 +925,14 @@ export function DashboardPage() {
         </motion.div>
 
         {/* Net Kâr */}
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }}
-          className={`relative p-4 sm:p-5 lg:p-6 rounded-2xl lg:rounded-3xl overflow-hidden group transition-all ${
+        <motion.div
+          variants={staggerItem}
+          whileHover={{ scale: 1.028, y: -5, transition: { type: 'spring', stiffness: 420, damping: 28 } }}
+          whileTap={{ scale: 0.97 }}
+          className={`relative p-4 sm:p-5 lg:p-6 rounded-2xl lg:rounded-3xl overflow-hidden group cursor-pointer ${
             todayNetProfit >= 0
-              ? 'bg-gradient-to-br from-purple-500/10 via-[#111] to-[#111] border border-purple-500/20 hover:border-purple-500/40'
-              : 'bg-gradient-to-br from-orange-500/10 via-[#111] to-[#111] border border-orange-500/20 hover:border-orange-500/40'
+              ? 'bg-gradient-to-br from-purple-500/10 via-[#111] to-[#111] border border-purple-500/20 hover:border-purple-500/40 hover:shadow-xl hover:shadow-purple-500/10'
+              : 'bg-gradient-to-br from-orange-500/10 via-[#111] to-[#111] border border-orange-500/20 hover:border-orange-500/40 hover:shadow-xl hover:shadow-orange-500/10'
           }`}
         >
           <div className={`absolute -top-8 -right-8 w-28 h-28 rounded-full blur-2xl transition-all ${todayNetProfit >= 0 ? 'bg-purple-500/10' : 'bg-orange-500/10'}`} />
@@ -838,33 +944,56 @@ export function DashboardPage() {
               {todayNetProfit !== 0 && <TrendBadge value={todayNetProfit >= 0 ? 8.2 : -3.5} />}
             </div>
             <p className="text-[9px] sm:text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1">Günlük Net Kâr</p>
-            <p className={`text-xl sm:text-2xl lg:text-3xl font-black ${todayNetProfit >= 0 ? 'text-purple-400' : 'text-orange-400'}`}>
+            <motion.p
+              key={`profit-${liveCounter}`}
+              initial={{ opacity: 0.7, scale: 0.98 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ type: 'spring', stiffness: 300, damping: 20 }}
+              className={`text-xl sm:text-2xl lg:text-3xl font-black ${todayNetProfit >= 0 ? 'text-purple-400' : 'text-orange-400'}`}
+            >
               <AnimatedCounter value={todayNetProfit} prefix="₺" />
-            </p>
-            <p className="text-[9px] sm:text-[10px] text-gray-500 mt-2">Satış − Alış</p>
+            </motion.p>
+            <div className="mt-2 flex items-center gap-2">
+              <Sparkline data={profitTrend.map(d => d.kar)} color={todayNetProfit >= 0 ? '#a855f7' : '#f97316'} width={60} height={22} />
+              <span className="text-[9px] sm:text-[10px] text-gray-500">7 gün kâr</span>
+            </div>
           </div>
         </motion.div>
-      </div>
+      </motion.div>
 
       {/* ─── Secondary Stats Row ─── */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 lg:gap-4">
+      <motion.div
+        className="grid grid-cols-2 sm:grid-cols-4 gap-3 lg:gap-4"
+        variants={staggerContainer(0.06, 0.05)}
+        initial="initial"
+        animate="animate"
+      >
         {[
           { label: 'Aktif Personel', value: `${activeEmployeeCount}/${rawPersonel.length}`, icon: <Users className="w-4 h-4 text-cyan-400" />, color: '#06b6d4' },
           { label: 'Stok Değeri', value: `₺${totalStockValue >= 1000 ? `${(totalStockValue/1000).toFixed(0)}k` : totalStockValue.toLocaleString('tr-TR')}`, icon: <Package className="w-4 h-4 text-amber-400" />, color: '#f59e0b' },
           { label: 'Kasa Bakiye', value: `₺${kasaStats.kasaBalance.toLocaleString('tr-TR')}`, icon: <Wallet className="w-4 h-4 text-emerald-400" />, color: '#10b981' },
           { label: 'Aktif Cariler', value: `${cariStats.toplam}`, icon: <Users className="w-4 h-4 text-purple-400" />, color: '#8b5cf6' },
         ].map((item, i) => (
-          <motion.div key={i} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 + i * 0.05 }}
-            className="flex items-center gap-2 sm:gap-3 p-3 sm:p-3.5 rounded-xl bg-white/[0.03] border border-white/[0.06] hover:border-white/[0.12] transition-all"
+          <motion.div
+            key={i}
+            variants={staggerItem}
+            whileHover={{ scale: 1.04, y: -2, borderColor: `${item.color}40`, transition: { type: 'spring', stiffness: 500, damping: 28 } }}
+            whileTap={{ scale: 0.96 }}
+            className="flex items-center gap-2 sm:gap-3 p-3 sm:p-3.5 rounded-xl bg-white/[0.03] border border-white/[0.06] cursor-pointer transition-colors"
           >
-            <div className="p-1.5 sm:p-2 rounded-lg shrink-0" style={{ background: `${item.color}15` }}>{item.icon}</div>
+            <motion.div
+              className="p-1.5 sm:p-2 rounded-lg shrink-0"
+              style={{ background: `${item.color}15` }}
+              whileHover={{ scale: 1.15, rotate: 8 }}
+              transition={{ type: 'spring', stiffness: 600, damping: 24 }}
+            >{item.icon}</motion.div>
             <div className="min-w-0">
               <p className="text-[9px] sm:text-[10px] font-semibold text-muted-foreground uppercase tracking-wider truncate">{item.label}</p>
               <p className="text-xs sm:text-sm font-bold text-white truncate">{item.value}</p>
             </div>
           </motion.div>
         ))}
-      </div>
+      </motion.div>
 
       {/* ─── Main Chart Section ─── */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 sm:gap-4 lg:gap-6">
@@ -1036,6 +1165,108 @@ export function DashboardPage() {
             </div>
           </motion.div>
         </div>
+      </div>
+
+      {/* ─── Canlı Saatlik Satış + Kârlılık Trend ─── */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-4 lg:gap-6">
+        {/* Saatlik Canlı Ciro Akışı */}
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.32 }}
+          className="p-4 sm:p-5 lg:p-6 rounded-2xl lg:rounded-3xl bg-[#111] border border-white/10 relative overflow-hidden"
+        >
+          <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-bl from-blue-500/5 to-transparent rounded-full blur-2xl" />
+          <div className="flex items-center justify-between mb-4 sm:mb-5">
+            <div className="flex items-center gap-2">
+              <div className="p-2 rounded-lg bg-blue-500/15">
+                <Activity className="w-4 h-4 text-blue-400" />
+              </div>
+              <div>
+                <h2 className="text-sm sm:text-base font-bold text-white">Canlı Ciro Akışı</h2>
+                <p className="text-[9px] sm:text-[10px] text-gray-500">Bugün saat saat · otomatik güncellenir</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <LivePulse color="#3b82f6" />
+              <span className="text-[8px] sm:text-[9px] text-blue-400 font-bold uppercase tracking-wider">Canlı</span>
+            </div>
+          </div>
+          <div className="h-[200px] sm:h-[240px]">
+            {hourlySalesFlow.length > 0 ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={hourlySalesFlow} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id="liveFlowGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#3b82f6" stopOpacity={0.4}/>
+                      <stop offset="100%" stopColor="#3b82f6" stopOpacity={0}/>
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#ffffff06" vertical={false} />
+                  <XAxis dataKey="saat" stroke="#ffffff25" fontSize={10} tickLine={false} axisLine={false} />
+                  <YAxis stroke="#ffffff25" fontSize={10} tickLine={false} axisLine={false} tickFormatter={v => v === 0 ? '0' : `₺${(v/1000).toFixed(0)}k`} />
+                  <Tooltip content={<PremiumTooltip formatter={(v: number) => `₺${v.toLocaleString('tr-TR')}`} />} />
+                  <Area type="monotone" dataKey="ciro" stroke="#3b82f6" strokeWidth={2.5} fillOpacity={1} fill="url(#liveFlowGrad)" name="Ciro"
+                    dot={{ r: 3, fill: '#111', stroke: '#3b82f6', strokeWidth: 2 }}
+                    activeDot={{ r: 6, fill: '#3b82f6', stroke: '#111', strokeWidth: 2 }} />
+                  <Bar dataKey="adet" fill="#3b82f640" name="Fiş Adedi" barSize={8} radius={[3, 3, 0, 0]} />
+                </AreaChart>
+              </ResponsiveContainer>
+            ) : (
+              <EmptyChartState message="Henüz bugünkü satış verisi yok" />
+            )}
+          </div>
+        </motion.div>
+
+        {/* Günlük Kârlılık Trend */}
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.34 }}
+          className="p-4 sm:p-5 lg:p-6 rounded-2xl lg:rounded-3xl bg-[#111] border border-white/10 relative overflow-hidden"
+        >
+          <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-bl from-emerald-500/5 to-transparent rounded-full blur-2xl" />
+          <div className="flex items-center gap-2 mb-4 sm:mb-5">
+            <div className="p-2 rounded-lg bg-emerald-500/15">
+              <TrendingUp className="w-4 h-4 text-emerald-400" />
+            </div>
+            <div>
+              <h2 className="text-sm sm:text-base font-bold text-white">Kârlılık Trendi</h2>
+              <p className="text-[9px] sm:text-[10px] text-gray-500">Son 7 günlük net kâr ve oran</p>
+            </div>
+          </div>
+          <div className="h-[200px] sm:h-[240px]">
+            {profitTrend.some(d => d.kar !== 0) ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <ComposedChart data={profitTrend} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id="profitGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#10b981" stopOpacity={0.3}/>
+                      <stop offset="100%" stopColor="#10b981" stopOpacity={0}/>
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#ffffff06" vertical={false} />
+                  <XAxis dataKey="gun" stroke="#ffffff25" fontSize={10} tickLine={false} axisLine={false} />
+                  <YAxis yAxisId="left" stroke="#ffffff25" fontSize={10} tickLine={false} axisLine={false} tickFormatter={v => v === 0 ? '0' : `₺${(v/1000).toFixed(0)}k`} />
+                  <YAxis yAxisId="right" orientation="right" stroke="#ffffff15" fontSize={9} tickLine={false} axisLine={false} tickFormatter={v => `${v}%`} />
+                  <Tooltip content={<PremiumTooltip formatter={(v: number) => v > 100 ? `₺${v.toLocaleString('tr-TR')}` : `%${v}`} />} />
+                  <Area yAxisId="left" type="monotone" dataKey="kar" stroke="#10b981" strokeWidth={2.5} fillOpacity={1} fill="url(#profitGrad)" name="Net Kâr"
+                    dot={{ r: 4, fill: '#111', stroke: '#10b981', strokeWidth: 2 }}
+                    activeDot={{ r: 6, fill: '#10b981' }} />
+                  <Line yAxisId="right" type="monotone" dataKey="oran" stroke="#f59e0b" strokeWidth={2} strokeDasharray="5 5" dot={{ r: 3, fill: '#f59e0b' }} name="Kâr Oranı %" />
+                </ComposedChart>
+              </ResponsiveContainer>
+            ) : (
+              <EmptyChartState message="Kârlılık verisi hesaplanıyor..." />
+            )}
+          </div>
+          {/* Anlık kâr özet strip */}
+          <div className="flex gap-2 mt-3 overflow-x-auto scrollbar-hide">
+            {profitTrend.slice(-3).map((d, i) => (
+              <div key={i} className={`shrink-0 px-2.5 py-1.5 rounded-lg border ${d.kar >= 0 ? 'bg-emerald-500/10 border-emerald-500/20' : 'bg-red-500/10 border-red-500/20'}`}>
+                <p className="text-[8px] font-bold text-gray-500 uppercase">{d.gun}</p>
+                <p className={`text-xs font-black ${d.kar >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                  {d.kar >= 0 ? '+' : ''}₺{d.kar.toLocaleString('tr-TR')}
+                </p>
+                <p className="text-[8px] text-gray-500">%{d.oran}</p>
+              </div>
+            ))}
+          </div>
+        </motion.div>
       </div>
 
       {/* ─── Middle Row: Finance Chart + Top Products ─── */}
@@ -1271,11 +1502,14 @@ export function DashboardPage() {
       </div>
 
       {/* ─── KPI Ticker Banner ─── */}
+      {(!isMobile || showAdvancedMobile) && (
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.62 }}>
         <KPITicker items={kpiTickerItems} />
       </motion.div>
+      )}
 
       {/* ─── Trend Comparison + Bullet KPIs Row ─── */}
+      {(!isMobile || showAdvancedMobile) && (
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-4 lg:gap-6">
         {/* Haftalık Trend Karşılaştırma */}
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.63 }}
@@ -1309,8 +1543,21 @@ export function DashboardPage() {
           </div>
         </motion.div>
       </div>
+      )}
+
+      {/* ─── Mobil: Gelişmiş Analitik Toggle ─── */}
+      {isMobile && (
+        <button
+          onClick={() => setShowAdvancedMobile(v => !v)}
+          className="w-full py-3 px-4 rounded-2xl border border-white/10 bg-white/[0.03] hover:bg-white/[0.06] transition-all flex items-center justify-center gap-2 text-sm font-bold text-gray-400"
+        >
+          <BarChart3 className="w-4 h-4 text-blue-400" />
+          {showAdvancedMobile ? 'Gelişmiş Analizleri Gizle ▲' : 'Gelişmiş Analizleri Göster ▼'}
+        </button>
+      )}
 
       {/* ─── Advanced Analytics Row ─── */}
+      {(!isMobile || showAdvancedMobile) && (
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 sm:gap-4 lg:gap-6">
 
         {/* Saatlik Satış Isı Haritası */}
@@ -1349,8 +1596,10 @@ export function DashboardPage() {
           )}
         </motion.div>
       </div>
+      )}
 
       {/* ─── Performance Radar + Funnel + Waterfall Row ─── */}
+      {(!isMobile || showAdvancedMobile) && (
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 lg:gap-6">
 
         {/* Performans Radarı */}
@@ -1416,8 +1665,10 @@ export function DashboardPage() {
           <WaterfallChart items={waterfallData} height={180} />
         </motion.div>
       </div>
+      )}
 
       {/* ─── Week Comparison + Stock Flow + Production Row ─── */}
+      {(!isMobile || showAdvancedMobile) && (
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 lg:gap-6">
 
         {/* Haftalık Karşılaştırma */}
@@ -1509,6 +1760,7 @@ export function DashboardPage() {
           )}
         </motion.div>
       </div>
+      )}
 
       {/* ─── Cari Borç/Alacak Özet ─── */}
       {cariStats.toplam > 0 && (

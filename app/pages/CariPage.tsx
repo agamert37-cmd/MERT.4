@@ -1,3 +1,4 @@
+// [AJAN-2 | claude/serene-gagarin | 2026-03-25] Son düzenleyen: Claude Sonnet 4.6
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import {
   Plus, Search, Building2, User, Phone, TrendingUp, TrendingDown,
@@ -6,6 +7,7 @@ import {
   Sparkles, ArrowRight, ShieldCheck, Store, Truck, CheckCircle2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { staggerContainer, tableRow, gridCard, hover, tap } from '../utils/animations';
 import { useNavigate } from 'react-router';
 import * as Dialog from '@radix-ui/react-dialog';
 import { toast } from 'sonner';
@@ -18,6 +20,7 @@ import { logActivity } from '../utils/activityLogger';
 import { useModuleBus } from '../hooks/useModuleBus';
 import { getPagePermissions } from '../utils/permissions';
 import { usePageSecurity } from '../hooks/usePageSecurity';
+import { kvGet, kvSet } from '../lib/pouchdb-kv';
 
 // ─── Interfaces ─────────────────────────────────────────────────────────────
 interface Cari {
@@ -644,6 +647,8 @@ export function CariPage() {
   const saveRegions = (updated: Region[]) => {
     setRegions(updated);
     localStorage.setItem('isleyen_et_regions', JSON.stringify(updated));
+    // BUG FIX [AJAN-2]: Bölgeler KV store'a da yaz — çapraz cihaz sync
+    kvSet('cari_regions', updated).catch(e => console.error('[Cari] regions kv sync:', e));
   };
 
   // Kategoriler — localStorage'da sakla (özelleştirilebilir)
@@ -666,7 +671,24 @@ export function CariPage() {
     setToptanciCategories(toptanci);
     localStorage.setItem('isleyen_et_musteri_cats', JSON.stringify(musteri));
     localStorage.setItem('isleyen_et_toptanci_cats', JSON.stringify(toptanci));
+    // BUG FIX [AJAN-2]: Müşteri/toptancı kategorileri KV store'a da yaz — çapraz cihaz sync
+    kvSet('cari_musteri_cats', musteri).catch(e => console.error('[Cari] cats kv sync:', e));
+    kvSet('cari_toptanci_cats', toptanci).catch(e => console.error('[Cari] cats kv sync:', e));
   };
+
+  // BUG FIX [AJAN-2]: Mount'ta KV'den bölge ve kategorileri yükle (mobil ilk açılış)
+  useEffect(() => {
+    if (!localStorage.getItem('isleyen_et_regions')) {
+      kvGet<Region[]>('cari_regions').then(r => { if (r && r.length > 0) { setRegions(r); localStorage.setItem('isleyen_et_regions', JSON.stringify(r)); } }).catch(() => {});
+    }
+    if (!localStorage.getItem('isleyen_et_musteri_cats')) {
+      kvGet<string[]>('cari_musteri_cats').then(r => { if (r && r.length > 0) { setMusteriCategories(r); localStorage.setItem('isleyen_et_musteri_cats', JSON.stringify(r)); } }).catch(() => {});
+    }
+    if (!localStorage.getItem('isleyen_et_toptanci_cats')) {
+      kvGet<string[]>('cari_toptanci_cats').then(r => { if (r && r.length > 0) { setToptanciCategories(r); localStorage.setItem('isleyen_et_toptanci_cats', JSON.stringify(r)); } }).catch(() => {});
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // UI State
   const [searchTerm, setSearchTerm] = useState('');
@@ -801,7 +823,7 @@ export function CariPage() {
   };
 
   return (
-    <div className="p-3 sm:p-6 lg:p-8 space-y-4 sm:space-y-6 pb-28 sm:pb-6">
+    <div className="p-3 sm:p-6 lg:p-10 space-y-4 sm:space-y-6 lg:space-y-8 pb-28 sm:pb-6">
       <SyncStatusBar tableName="cari_hesaplar" />
 
       {/* Header */}
@@ -1104,19 +1126,22 @@ export function CariPage() {
                 <th className="px-5 py-3"></th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-border">
+            <motion.tbody
+              className="divide-y divide-border"
+              variants={staggerContainer(0.04, 0.02)}
+              initial="initial"
+              animate="animate"
+            >
               <AnimatePresence>
-                {filteredCari.map((cari, index) => (
+                {filteredCari.map((cari) => (
                   <motion.tr
                     key={cari.id}
                     layout
-                    initial={{ opacity: 0, x: -10 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    exit={{ opacity: 0, x: 10 }}
-                    transition={{ delay: index * 0.05, duration: 0.3 }}
-                    className="hover:bg-blue-600/5 transition-all cursor-pointer group data-row border-b border-border/40 last:border-0 relative"
+                    variants={tableRow}
+                    exit={{ opacity: 0, x: 12, filter: 'blur(6px)', transition: { duration: 0.18 } }}
+                    className="hover:bg-accent/30 transition-colors cursor-pointer group data-row border-b border-border/40 last:border-0 relative"
                     style={{ '--row-accent': cari.type === 'Müşteri' ? '#3b82f6' : '#a855f7' } as React.CSSProperties}
-                    whileHover={{ x: 2, transition: { duration: 0.15 } }}
+                    whileHover={hover.row}
                     onClick={() => { setSelectedCari(cari); setIsDetailModalOpen(true); }}
                   >
                     <td className="px-5 py-4">
@@ -1175,7 +1200,7 @@ export function CariPage() {
                   </motion.tr>
                 ))}
               </AnimatePresence>
-            </tbody>
+            </motion.tbody>
           </table>
           {filteredCari.length === 0 && (
             <div className="text-center py-16 text-muted-foreground">

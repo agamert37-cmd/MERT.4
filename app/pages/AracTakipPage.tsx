@@ -1,3 +1,4 @@
+// [AJAN-2 | claude/serene-gagarin | 2026-03-25] Son düzenleyen: Claude Sonnet 4.6
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { useEmployee } from '../contexts/EmployeeContext';
 import { getFromStorage, setInStorage, StorageKey } from '../utils/storage';
@@ -114,11 +115,20 @@ export function AracTakipPage() {
   const { canAdd, canDelete, canEdit } = getPagePermissions(user, currentEmployee, 'araclar');
 
   // useTableSync ile KV store senkronizasyonu
-  const { data: syncedShifts } = useTableSync<VehicleShift>({
+  const { data: syncedShifts, addItem: addShiftToSupabase } = useTableSync<VehicleShift>({
     tableName: 'arac_shifts',
     storageKey: StorageKey.ARAC_SHIFTS,
     initialData: [],
     orderBy: 'date',
+    orderAsc: false,
+  });
+
+  // KM logları için Supabase sync — BUG FIX [AJAN-2]: daha önce sadece localStorage'a yazılıyordu
+  const { addItem: addKmLogToSupabase } = useTableSync<KmLog>({
+    tableName: 'arac_km_logs',
+    storageKey: StorageKey.ARAC_KM_LOGS,
+    initialData: [],
+    orderBy: 'timestamp',
     orderAsc: false,
   });
 
@@ -286,6 +296,8 @@ export function AracTakipPage() {
 
     persistShift(newShift);
     persistLogs([newLog, ...kmLogs]);
+    // BUG FIX [AJAN-2]: KM logunu Supabase'e yaz
+    addKmLogToSupabase(newLog).catch(e => console.error('[AracTakip] km log sync:', e));
 
     logActivity('vehicle_shift_start', `Vardiya baslatildi: ${vehicle.plate}`, {
       employeeId: currentEmployee?.id,
@@ -340,6 +352,9 @@ export function AracTakipPage() {
     persistLogs([newLog, ...kmLogs]);
     persistHistory([completedShift, ...shiftHistory]);
     persistShift(null);
+    // BUG FIX [AJAN-2]: Vardiya ve KM logunu Supabase'e yaz
+    addShiftToSupabase(completedShift).catch(e => console.error('[AracTakip] shift sync:', e));
+    addKmLogToSupabase(newLog).catch(e => console.error('[AracTakip] km log sync:', e));
 
     logActivity('vehicle_shift_end', `Vardiya bitirildi: ${activeShift.vehiclePlate}`, {
       employeeId: currentEmployee?.id,
@@ -420,6 +435,10 @@ export function AracTakipPage() {
     persistLogs([startLog, endLog, ...kmLogs]);
     persistHistory([completedShift, ...shiftHistory]);
     persistShift(newShift);
+    // BUG FIX [AJAN-2]: Vardiya ve KM loglarını Supabase'e yaz
+    addShiftToSupabase(completedShift).catch(e => console.error('[AracTakip] shift sync:', e));
+    addKmLogToSupabase(endLog).catch(e => console.error('[AracTakip] km log sync:', e));
+    addKmLogToSupabase(startLog).catch(e => console.error('[AracTakip] km log sync:', e));
 
     logActivity('vehicle_change', `Arac degistirildi: ${activeShift.vehiclePlate} -> ${vehicle.plate}`, {
       employeeId: currentEmployee?.id,

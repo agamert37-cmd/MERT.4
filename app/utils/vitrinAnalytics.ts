@@ -3,6 +3,7 @@
  * Tüm veriler Pazarlama modülünden izlenebilir.
  */
 import { getFromStorage, setInStorage, StorageKey } from './storage';
+import { kvSet } from '../lib/pouchdb-kv';
 
 export interface VitrinEvent {
   id: string;
@@ -43,6 +44,8 @@ function saveAnalytics(analytics: VitrinAnalytics) {
     analytics.events = analytics.events.slice(-500);
   }
   setInStorage(StorageKey.VITRIN_ANALYTICS, analytics);
+  // [AJAN-2] KV sync — analitik verileri Pazarlama modülünden tüm cihazlarda izlensin
+  kvSet('vitrin_analytics', analytics).catch(() => {});
 }
 
 export function trackVitrinEvent(type: VitrinEvent['type'], data?: Record<string, any>) {
@@ -81,6 +84,21 @@ export function trackVitrinEvent(type: VitrinEvent['type'], data?: Record<string
 
 export function getVitrinAnalytics(): VitrinAnalytics {
   return getAnalytics();
+}
+
+/**
+ * [AJAN-2] KV fallback — localStorage boşsa vitrin analitik verilerini KV'den yükle
+ */
+export async function loadVitrinAnalyticsFromKV(): Promise<void> {
+  const local = getFromStorage<VitrinAnalytics>(StorageKey.VITRIN_ANALYTICS);
+  if (local && local.events && local.events.length > 0) return;
+  try {
+    const { kvGet } = await import('../lib/pouchdb-kv');
+    const kv = await kvGet<VitrinAnalytics>('vitrin_analytics');
+    if (kv && kv.events && kv.events.length > 0) {
+      setInStorage(StorageKey.VITRIN_ANALYTICS, kv);
+    }
+  } catch {}
 }
 
 export function getVitrinEventsByType(type: VitrinEvent['type']): VitrinEvent[] {
@@ -138,7 +156,7 @@ export function getDailyStats(days: number = 7): { date: string; views: number; 
 }
 
 export function clearVitrinAnalytics() {
-  setInStorage(StorageKey.VITRIN_ANALYTICS, {
+  const empty = {
     events: [],
     summary: {
       totalPageViews: 0,
@@ -148,5 +166,7 @@ export function clearVitrinAnalytics() {
       totalNewsViews: 0,
       lastVisit: '',
     },
-  });
+  };
+  setInStorage(StorageKey.VITRIN_ANALYTICS, empty);
+  kvSet('vitrin_analytics', empty).catch(() => {});
 }

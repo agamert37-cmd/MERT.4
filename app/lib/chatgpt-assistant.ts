@@ -4,7 +4,6 @@
  */
 
 import OpenAI from 'openai';
-import { supabase } from './supabase';
 import { getOpenAIKey } from './api-config';
 
 // OpenAI Client - Safely initialize

@@ -4,6 +4,7 @@
  */
 
 import { getFromStorage, setInStorage, StorageKey } from './storage';
+import { kvSet } from '../lib/pouchdb-kv';
 
 export type ActivityType =
   | 'login' | 'logout'
@@ -53,7 +54,9 @@ const MAX_LOGS = 1000;
 let _sessionId: string | null = null;
 function getSessionId(): string {
   if (!_sessionId) {
-    _sessionId = `s_${Date.now().toString(36)}_${Math.random().toString(36).substring(2, 8)}`;
+    const arr = new Uint8Array(8);
+    crypto.getRandomValues(arr);
+    _sessionId = `s_${Array.from(arr).map(b => b.toString(16).padStart(2, '0')).join('')}`;
   }
   return _sessionId;
 }
@@ -119,6 +122,8 @@ export function logActivity(
     }
 
     setInStorage(StorageKey.USER_ACTIVITY_LOG, logs);
+    // [AJAN-2] KV sync — denetim logları tüm cihazlarda görünsün
+    kvSet('activity_logs', logs).catch(() => {});
   } catch (e) {
     console.warn('[ActivityLogger] Log kaydetme hatasi:', e);
   }
@@ -129,6 +134,22 @@ export function logActivity(
  */
 export function getActivityLogs(): ActivityLogEntry[] {
   return getFromStorage<ActivityLogEntry[]>(StorageKey.USER_ACTIVITY_LOG) || [];
+}
+
+/**
+ * [AJAN-2] KV fallback — localStorage boşsa denetim loglarını KV'den yükle
+ * Mount-time çağrılır (async, sonucu localStorage'a yazar)
+ */
+export async function loadActivityLogsFromKV(): Promise<void> {
+  const local = getFromStorage<ActivityLogEntry[]>(StorageKey.USER_ACTIVITY_LOG);
+  if (local && local.length > 0) return;
+  try {
+    const { kvGet } = await import('../lib/pouchdb-kv');
+    const kv = await kvGet<ActivityLogEntry[]>('activity_logs');
+    if (kv && kv.length > 0) {
+      setInStorage(StorageKey.USER_ACTIVITY_LOG, kv);
+    }
+  } catch {}
 }
 
 /**
@@ -186,6 +207,7 @@ export function getActivityStats(): Record<ActivityCategory, number> {
  */
 export function clearActivityLogs(): void {
   setInStorage(StorageKey.USER_ACTIVITY_LOG, []);
+  kvSet('activity_logs', []).catch(() => {});
 }
 
 // ─── ANOMALİ TESPİT ALGORİTMASI ──────────────────────────────────────────────

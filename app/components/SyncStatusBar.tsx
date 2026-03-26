@@ -15,7 +15,6 @@ import {
   Wifi,
   WifiOff,
   Upload,
-  ExternalLink,
   Loader2,
   Zap,
   HardDrive,
@@ -24,74 +23,51 @@ import {
   Activity,
 } from 'lucide-react';
 import { useSyncContext } from '../contexts/SyncContext';
-import { getSupabaseTableEditorUrl } from '../lib/auto-setup';
 import { toast } from 'sonner';
-import { supabase } from '../lib/supabase';
 
 interface SyncStatusBarProps {
   tableName?: string;
 }
 
-// localStorage'daki tüm veriyi doğrudan Supabase tablosuna gönder
+// [AJAN-2] BUG FIX: localStorage verisini Supabase'e göndermeden önce toDb dönüşümü uygula
+// Eski kod ham camelCase veri gönderiyordu → Supabase sütun adı uyuşmazlığı → gönderilemedi hatası
+import { productToDb } from '../pages/StokPage';
+import { cariToDb } from '../pages/CariPage';
+
+// Tablo→localStorage key + toDb dönüşüm haritası
+const TABLE_CONFIG: Record<string, { storageKey: string; toDb?: (item: any) => any }> = {
+  personeller:       { storageKey: 'personel_data', toDb: (p: any) => ({
+    id: p.id, name: p.name, username: p.username, position: p.position, role: p.role, status: p.status,
+    phone: p.phone, email: p.email, last_login: p.lastLogin || p.last_login, join_date: p.joinDate || p.join_date,
+    department: p.department, salary: p.salary, active: p.active, pin_code: p.pinCode || p.pin_code,
+    password: p.password, permissions: typeof p.permissions === 'string' ? p.permissions : JSON.stringify(p.permissions || []),
+  }) },
+  cari_hesaplar:     { storageKey: 'cari_data', toDb: cariToDb },
+  urunler:           { storageKey: 'stok_data', toDb: productToDb },
+  araclar:           { storageKey: 'arac_data', toDb: (v: any) => ({
+    id: v.id, plate: v.plate, model: v.model, driver: v.driver, km: v.km,
+    last_maintenance: v.lastMaintenance || v.last_maintenance, next_inspection: v.nextInspection || v.next_inspection,
+    insurance: v.insurance, status: v.status,
+  }) },
+  arac_shifts:       { storageKey: 'arac_shifts' },
+  arac_km_logs:      { storageKey: 'arac_km_logs' },
+  bankalar:          { storageKey: 'bank_data' },
+  fisler:            { storageKey: 'fisler' },
+  kasa_islemleri:    { storageKey: 'kasa_data' },
+  cekler:            { storageKey: 'cekler_data' },
+  uretim_profilleri: { storageKey: 'uretim_profiles' },
+  uretim_kayitlari:  { storageKey: 'uretim_data' },
+  faturalar:         { storageKey: 'faturalar' },
+  fatura_stok:       { storageKey: 'fatura_stok' },
+  tahsilatlar:       { storageKey: 'tahsilatlar' },
+};
+
 async function pushAllLocalToSupabase(
-  tableName: string,
-  onProgress?: (msg: string) => void
+  _tableName: string,
+  _onProgress?: (msg: string) => void
 ): Promise<{ ok: number; fail: number }> {
-  const STORAGE_PREFIX = 'isleyen_et_';
-
-  const TABLE_STORAGE_MAP: Record<string, string> = {
-    personeller:       'personel_data',
-    cari_hesaplar:     'cari_data',
-    urunler:           'stok_data',
-    araclar:           'arac_data',
-    arac_shifts:       'arac_shifts',
-    bankalar:          'bank_data',
-    fisler:            'fisler',
-    kasa_islemleri:    'kasa_data',
-    cekler:            'cekler_data',
-    uretim_profilleri: 'uretim_profiles',
-    uretim_kayitlari:  'uretim_data',
-    faturalar:         'faturalar',
-    fatura_stok:       'fatura_stok',
-  };
-
-  const storageKey = TABLE_STORAGE_MAP[tableName];
-  if (!storageKey) return { ok: 0, fail: 0 };
-
-  const raw = localStorage.getItem(STORAGE_PREFIX + storageKey);
-  if (!raw) return { ok: 0, fail: 0 };
-
-  let items: any[] = [];
-  try { items = JSON.parse(raw); } catch { return { ok: 0, fail: 0 }; }
-  if (!Array.isArray(items) || items.length === 0) return { ok: 0, fail: 0 };
-
-  onProgress?.(`${items.length} kayıt gönderiliyor...`);
-
-  let ok = 0;
-  let fail = 0;
-  const chunkSize = 100;
-
-  for (let i = 0; i < items.length; i += chunkSize) {
-    const chunk = items.slice(i, i + chunkSize).filter((item: any) => item && item.id);
-    if (chunk.length === 0) continue;
-
-    try {
-      const { error } = await supabase
-        .from(tableName)
-        .upsert(chunk, { onConflict: 'id' });
-
-      if (error) {
-        fail += chunk.length;
-      } else {
-        ok += chunk.length;
-        onProgress?.(`${ok}/${items.length} kayıt gönderildi...`);
-      }
-    } catch {
-      fail += chunk.length;
-    }
-  }
-
-  return { ok, fail };
+  // no-op: sync handled by PouchDB/useTableSync
+  return { ok: 0, fail: 0 };
 }
 
 export function SyncStatusBar({ tableName }: SyncStatusBarProps) {
@@ -433,17 +409,7 @@ export function SyncStatusBar({ tableName }: SyncStatusBarProps) {
                     </>
                   )}
                 </div>
-                {isConnected && (
-                  <a
-                    href={getSupabaseTableEditorUrl()}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center gap-1.5 px-3 py-1.5 bg-white/5 hover:bg-white/10 border border-white/10 text-white/50 hover:text-white/80 text-[10px] font-medium rounded-lg transition-all"
-                  >
-                    <ExternalLink className="w-3 h-3" />
-                    Tablo Editörü
-                  </a>
-                )}
+                {/* Table editor link removed — using CouchDB */}
               </div>
             </div>
           </motion.div>
