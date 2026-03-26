@@ -2090,28 +2090,48 @@ class MertUpdater(tk.Tk):
 
     # ─── CouchDB Sağlık Monitörü ────────────────────────────────────────────
 
+    def _get_couch_auth_headers(self) -> dict:
+        """Mevcut CouchDB kullanıcı/şifresini Authorization header olarak döndür."""
+        import base64
+        user = self._cfg_user_var.get().strip() if hasattr(self, '_cfg_user_var') else "admin"
+        pwd  = self._cfg_pass_var.get().strip() if hasattr(self, '_cfg_pass_var') else "mert2024"
+        if not user:
+            user, pwd = "admin", "mert2024"
+        token = base64.b64encode(f"{user}:{pwd}".encode()).decode()
+        return {
+            "User-Agent": "MERT4-CouchCheck/1.0",
+            "Authorization": f"Basic {token}",
+        }
+
+    def _get_couch_url(self) -> str:
+        """Yapılandırma panelindeki URL'i döndür, yoksa varsayılanı kullan."""
+        if hasattr(self, '_cfg_db_url_var'):
+            url = self._cfg_db_url_var.get().strip()
+            if url:
+                return url.rstrip("/")
+        return COUCHDB_URL
+
     def _poll_couchdb(self):
         """CouchDB'ye HTTP ping atar; yanıt süresini, durumu ve DB istatistiklerini kaydeder."""
         def _worker():
             t0 = time.monotonic()
             ok = False
             doc_counts = {}
+            couch_url = self._get_couch_url()
+            headers = self._get_couch_auth_headers()
             try:
-                # Ana bağlantı testi
-                req = urllib.request.Request(
-                    COUCHDB_URL,
-                    headers={"User-Agent": "MERT4-CouchCheck/1.0"}
-                )
+                # Ana bağlantı testi (auth header ile)
+                req = urllib.request.Request(couch_url, headers=headers)
                 with urllib.request.urlopen(req, timeout=4) as resp:
                     ok = resp.status < 400
 
-                # DB istatistikleri
+                # DB istatistikleri (auth header ile)
                 if ok:
                     for db_name in COUCHDB_DBS:
                         try:
                             db_req = urllib.request.Request(
-                                f"{COUCHDB_URL}/{db_name}",
-                                headers={"User-Agent": "MERT4-CouchCheck/1.0"}
+                                f"{couch_url}/{db_name}",
+                                headers=headers
                             )
                             with urllib.request.urlopen(db_req, timeout=3) as db_resp:
                                 data = json.loads(db_resp.read().decode("utf-8"))
@@ -2546,33 +2566,53 @@ class MertUpdater(tk.Tk):
     # ─── CouchDB İşlemleri ─────────────────────────────────────────────────
 
     def _do_couchdb_setup(self):
-        """CouchDB veritabanlarını oluşturur (couchdb-setup.sh çalıştırır)."""
+        """CouchDB veritabanlarını ve CORS ayarlarını curl ile oluşturur."""
         def _task():
             self._start_task()
             self.after(0, self._clear_console)
             self.after(0, self._log, "━━━ CouchDB Kurulum ━━━", "info")
 
-            if os.path.exists(COUCHDB_SETUP_SCRIPT):
-                ok, _ = self._run_cmd(
-                    f"bash \"{COUCHDB_SETUP_SCRIPT}\"",
-                    "CouchDB veritabanları oluşturuluyor..."
-                )
-                if ok:
-                    self.after(0, self._log, "━━━ CouchDB Kurulumu Tamamlandı! ━━━", "success")
-                    self.after(500, self._poll_couchdb)
-                else:
-                    self.after(0, self._log, "CouchDB kurulumu başarısız!", "error")
-            else:
-                # Script yoksa manuel olarak curl ile oluştur
-                self.after(0, self._log, "couchdb-setup.sh bulunamadı, manuel kurulum...", "warning")
-                for db_name in COUCHDB_DBS:
-                    ok, _ = self._run_cmd(
-                        f'curl -s -X PUT {COUCHDB_URL}/{db_name} -u admin:mert2024',
-                        f"DB oluşturuluyor: {db_name}"
-                    )
-                self.after(0, self._log, "━━━ CouchDB Kurulumu Tamamlandı! ━━━", "success")
-                self.after(500, self._poll_couchdb)
+            couch_url = self._get_couch_url()
+            user = self._cfg_user_var.get().strip() if hasattr(self, '_cfg_user_var') else "admin"
+            pwd  = self._cfg_pass_var.get().strip() if hasattr(self, '_cfg_pass_var') else "mert2024"
+            auth = f"{user}:{pwd}"
 
+            self.after(0, self._log, f"Bağlantı: {couch_url}  kullanıcı: {user}", "dim")
+
+            # Sistem veritabanları
+            for db in ["_users", "_replicator", "_global_changes"]:
+                self._run_cmd(
+                    f'curl -s -X PUT "{couch_url}/{db}" -u "{auth}"',
+                    f"Sistem DB: {db}"
+                )
+
+            # Uygulama veritabanları
+            failed = 0
+            for db_name in COUCHDB_DBS:
+                ok, out = self._run_cmd(
+                    f'curl -s -X PUT "{couch_url}/{db_name}" -u "{auth}"',
+                    f"DB oluşturuluyor: {db_name}"
+                )
+                if not ok:
+                    failed += 1
+
+            # CORS ayarları
+            self.after(0, self._log, "CORS ayarları yapılandırılıyor...", "dim")
+            cors_cmds = [
+                f'curl -s -X PUT "{couch_url}/_node/_local/_config/httpd/enable_cors" -d \'"true"\' -u "{auth}"',
+                f'curl -s -X PUT "{couch_url}/_node/_local/_config/cors/origins" -d \'"*"\' -u "{auth}"',
+                f'curl -s -X PUT "{couch_url}/_node/_local/_config/cors/methods" -d \'"GET, PUT, POST, HEAD, DELETE"\' -u "{auth}"',
+                f'curl -s -X PUT "{couch_url}/_node/_local/_config/cors/headers" -d \'"accept, authorization, content-type, origin, referer"\' -u "{auth}"',
+                f'curl -s -X PUT "{couch_url}/_node/_local/_config/cors/credentials" -d \'"true"\' -u "{auth}"',
+            ]
+            for cmd in cors_cmds:
+                self._run_cmd(cmd, "CORS")
+
+            if failed == 0:
+                self.after(0, self._log, "━━━ CouchDB Kurulumu Tamamlandı! ━━━", "success")
+            else:
+                self.after(0, self._log, f"Kurulum bitti — {failed} DB hata verdi (zaten var olabilir)", "warning")
+            self.after(500, self._poll_couchdb)
             self._end_task("CouchDB Kurulum")
 
         self._threaded(_task)

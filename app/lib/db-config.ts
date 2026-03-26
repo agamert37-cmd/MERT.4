@@ -10,10 +10,29 @@ export interface CouchDbConfig {
   peerUrl: string; // diğer bilgisayarın CouchDB adresi
 }
 
+/**
+ * Varsayılan CouchDB bağlantı noktasını belirle.
+ *
+ * Tarayıcıda:  site ile aynı origin üzerinden nginx proxy kullanılır.
+ *   http://localhost:8080/couchdb  →  nginx  →  http://couchdb:5984
+ *   • CORS sorunu olmaz (aynı origin)
+ *   • Yerel kurulu CouchDB ile çakışmaz
+ *   • Docker CouchDB'sine ulaşır
+ *
+ * .env.local değeri varsa (updater.py yapılandırması) önceliklidir.
+ */
+function _defaultCouchUrl(): string {
+  const envUrl = (import.meta as any).env?.VITE_COUCHDB_URL;
+  if (envUrl) return envUrl;
+  // Tarayıcıda: sitenin kendi origin'i + nginx proxy yolu
+  if (typeof window !== 'undefined') {
+    return window.location.origin + '/couchdb';
+  }
+  return 'http://localhost:5984';
+}
+
 const DEFAULT_CONFIG: CouchDbConfig = {
-  // Önce .env.local değerlerini kullan (updater.py'de yapılandırılır),
-  // yoksa varsayılan değerlere dön.
-  url: (import.meta as any).env?.VITE_COUCHDB_URL || 'http://localhost:5984',
+  url: _defaultCouchUrl(),
   user: (import.meta as any).env?.VITE_COUCHDB_USER || 'admin',
   password: (import.meta as any).env?.VITE_COUCHDB_PASSWORD || 'mert2024',
   peerUrl: (import.meta as any).env?.VITE_COUCHDB_PEER_URL || '',
