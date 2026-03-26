@@ -24,11 +24,8 @@ FROM nginx:1.27-alpine
 # Build çıktısını nginx'e kopyala
 COPY --from=builder /app/dist /usr/share/nginx/html
 
-# CouchDB setup script'ini kopyala
-COPY couchdb-setup.sh /docker-entrypoint.d/couchdb-setup.sh
-RUN chmod +x /docker-entrypoint.d/couchdb-setup.sh 2>/dev/null || true
-
 # React Router + CouchDB Proxy nginx yapılandırması
+# Not: CouchDB veritabanı kurulumu docker-compose'daki couchdb-init servisi tarafından yapılır
 # - Tüm route'lar index.html'e yönlendirilir (SPA)
 # - /couchdb/ istekleri CouchDB'ye proxy edilir (CORS sorunu önlenir)
 # - gzip sıkıştırma aktif
