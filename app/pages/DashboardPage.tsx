@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useEmployee } from '../contexts/EmployeeContext';
 import { useLanguage } from '../contexts/LanguageContext';
@@ -35,6 +35,7 @@ import {
 } from '../components/ChartComponents';
 import { ActivityTimeline } from '../components/ActivityTimeline';
 import { DashboardAIChat } from '../components/DashboardAIChat';
+import { useIsMobile } from '../hooks/useMobile';
 
 const safeNum = (v: any, fallback = 0): number => {
   if (v === null || v === undefined || v === '') return fallback;
@@ -117,6 +118,13 @@ export function DashboardPage() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [chartView, setChartView] = useState<'area' | 'bar' | 'composed'>('composed');
   const [showAIChat, setShowAIChat] = useState(false);
+  const [liveCounter, setLiveCounter] = useState(0);
+
+  // Saatlik canlı güncelleme (her dakika)
+  useEffect(() => {
+    const timer = setInterval(() => setLiveCounter(c => c + 1), 60000);
+    return () => clearInterval(timer);
+  }, []);
 
   // Sayfa ziyaretini logla (kullanıcı yüklenince bir kez)
   useEffect(() => {

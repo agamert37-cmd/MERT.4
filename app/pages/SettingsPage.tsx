@@ -1,7 +1,7 @@
 // [AJAN-2 | claude/serene-gagarin | 2026-03-25] Son düzenleyen: Claude Sonnet 4.6
 import React, { useState, useRef, useEffect } from 'react';
 import OpenAI from 'openai';
-import { Settings, Database, Sparkles, Save, Trash2, Eye, EyeOff, CheckCircle, XCircle, Shield, ExternalLink, Building2, Phone, MapPin, FileText, Hash, Monitor, Upload, Loader2, RefreshCw, X, Plus, History, ShieldCheck, Zap, Wrench, Star } from 'lucide-react';
+import { Settings, Database, Sparkles, Save, Trash2, Eye, EyeOff, CheckCircle, XCircle, Shield, ExternalLink, Building2, Phone, MapPin, FileText, Hash, Monitor, Upload, Loader2, RefreshCw, X, Plus, History, ShieldCheck, Zap, Wrench, Star, MessageCircle, ToggleLeft, ToggleRight } from 'lucide-react';
 import { getOpenAIKey, saveOpenAIKey, clearOpenAIKey, isOpenAIConfigured } from '../lib/api-config';
 import { reinitializeOpenAI } from '../lib/chatgpt-assistant';
 import { testCouchDbConnection } from '../lib/pouchdb';
@@ -9,7 +9,8 @@ import { getFromStorage, setInStorage, StorageKey } from '../utils/storage';
 import { toast } from 'sonner';
 import { motion, AnimatePresence } from 'motion/react';
 import { staggerContainer, gridCard, hover } from '../utils/animations';
-// supabase-config removed — using CouchDB
+import { SERVER_BASE_URL as serverBase, publicAnonKey } from '../lib/supabase-config';
+import { type SMSConfig, DEFAULT_SMS_CONFIG } from '../utils/smsService';
 import { runIntegrityCheck, getStorageStats, type IntegrityReport } from '../utils/data-integrity';
 import { useAuth } from '../contexts/AuthContext';
 import { useEmployee } from '../contexts/EmployeeContext';

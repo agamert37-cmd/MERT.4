@@ -35,14 +35,14 @@ import { InteractiveDataPanel } from '../components/InteractiveDataPanel';
 
 type TabId = 'overview' | 'threats' | 'sessions' | 'logs' | 'policy' | 'audit' | 'autoresponse';
 
-const SEVERITY_CONFIG = {
+const SEVERITY_CONFIG: Record<string, { icon: any; color: string; bg: string; border: string; label: string }> = {
   critical: { icon: XCircle, color: 'text-red-500', bg: 'bg-red-500/10', border: 'border-red-500/30', label: 'Kritik' },
   high: { icon: AlertTriangle, color: 'text-red-400', bg: 'bg-red-500/10', border: 'border-red-500/20', label: 'Yuksek' },
   medium: { icon: ShieldAlert, color: 'text-orange-400', bg: 'bg-orange-500/10', border: 'border-orange-500/20', label: 'Orta' },
   low: { icon: Eye, color: 'text-blue-400', bg: 'bg-blue-500/10', border: 'border-blue-500/20', label: 'Dusuk' },
 };
 
-const THREAT_LEVEL_CONFIG = {
+const THREAT_LEVEL_CONFIG: Record<string, { color: string; bg: string; border: string; label: string; glow: string }> = {
   safe: { color: 'text-emerald-400', bg: 'bg-emerald-500/10', border: 'border-emerald-500/30', label: 'Guvenli', glow: 'shadow-emerald-500/20' },
   low: { color: 'text-blue-400', bg: 'bg-blue-500/10', border: 'border-blue-500/30', label: 'Dusuk Risk', glow: 'shadow-blue-500/20' },
   medium: { color: 'text-orange-400', bg: 'bg-orange-500/10', border: 'border-orange-500/30', label: 'Orta Risk', glow: 'shadow-orange-500/20' },

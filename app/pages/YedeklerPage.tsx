@@ -90,6 +90,60 @@ export function YedeklerPage() {
   const [autoBackupInterval, setAutoBackupInterval] = useState(() => getAutoBackupConfig().intervalHours || 24);
   const [lastAutoBackup, setLastAutoBackup] = useState(() => getAutoBackupConfig().lastRun || null);
 
+  // ─── Cloud backup stubs (Supabase removed, CouchDB not yet configured) ──────
+  const [cloudBackups] = useState<BackupMeta[]>([]);
+  const [filteredCloudBackups] = useState<BackupMeta[]>([]);
+  const [verifyingId, setVerifyingId] = useState<string | null>(null);
+  const [verifyResult] = useState<{ ok: boolean; message: string } | null>(null);
+  const fetchCloudBackups = useCallback(() => { toast.info('Bulut yedekleme henüz yapılandırılmadı (CouchDB gerekli)'); }, []);
+  const handleCreateCloudBackup = useCallback(() => { toast.info('Bulut yedekleme için CouchDB yapılandırın'); }, []);
+  const handleVerifyBackup = useCallback((_id: string) => { toast.info('Doğrulama için CouchDB gerekli'); }, []);
+  const handleDownloadCloudBackup = useCallback((_id: string) => { toast.info('İndirme için CouchDB gerekli'); }, []);
+  const handleDeleteCloudBackup = useCallback((_id: string) => { toast.info('Silme için CouchDB gerekli'); }, []);
+  // ─── Sync health stubs ───────────────────────────────────────────────────────
+  const [syncHealth, setSyncHealth] = useState<any>(null);
+  const [syncHealthLoading, setSyncHealthLoading] = useState(false);
+  const fetchSyncHealth = useCallback(async () => {
+    setSyncHealthLoading(true);
+    try {
+      const { getDb } = await import('../lib/pouchdb');
+      const tables = ['fisler', 'stok', 'cari', 'kasa', 'personel'];
+      const tableStats: Record<string, { ok: boolean; count: number }> = {};
+      for (const t of tables) {
+        try {
+          const db = getDb(t);
+          const info = await db.info();
+          tableStats[t] = { ok: true, count: info.doc_count };
+        } catch { tableStats[t] = { ok: false, count: 0 }; }
+      }
+      setSyncHealth({ healthy: true, latencyMs: 0, totalKeys: Object.values(tableStats).reduce((s, v) => s + v.count, 0), timestamp: new Date().toISOString(), tables: tableStats });
+    } catch { setSyncHealth(null); }
+    setSyncHealthLoading(false);
+  }, []);
+  // ─── Local repo config stubs ──────────────────────────────────────────────
+  const getLocalRepoConfig = useCallback(() => ({ enabled: false }), []);
+  const isLocalHealthy = useCallback(() => false, []);
+  // ─── Legacy / table restore stubs ──────────────────────────────────────────
+  const handleLegacyBackup = useCallback(() => {
+    const { data } = collectLocalStorageData();
+    downloadJSON({ type: 'localStorage', timestamp: new Date().toISOString(), data }, `localStorage_backup_${Date.now()}.json`);
+    toast.success('localStorage yedeği indirildi');
+  }, []);
+  const handleRestoreTableBackup = useCallback(async (backupId: string) => {
+    setRestoringId(backupId);
+    try {
+      const backupList = getBackupMetaList();
+      const meta = backupList.find(b => b.id === backupId);
+      if (!meta) { toast.error('Yedek bulunamadı'); return; }
+      const kvData = await kvGet<any>(`backup_${backupId}`);
+      if (!kvData) { toast.error('Yedek verisi bulunamadı'); return; }
+      const result = await restoreSelectedTables(kvData, Object.keys(kvData.tables || {}));
+      if (result.ok > 0) toast.success('Geri yükleme tamamlandı');
+      else toast.error('Geri yükleme başarısız: ' + (result.errors?.join(', ') || ''));
+    } catch (e: any) { toast.error('Geri yükleme hatası: ' + e.message); }
+    setRestoringId(null);
+  }, []);
+
   const fetchLocalBackups = useCallback(() => {
     setLocalBackups(getBackupMetaList());
   }, []);

@@ -50,7 +50,7 @@ interface ActivityTimelineProps {
   hideHeader?: boolean;
 }
 
-const CATEGORY_CONFIG: Record<ActivityCategory, { icon: React.ElementType; color: string; bgColor: string; label: string }> = {
+const CATEGORY_CONFIG: Record<string, { icon: React.ElementType; color: string; bgColor: string; label: string }> = {
   auth:       { icon: LogIn,      color: 'text-blue-400',   bgColor: 'bg-blue-600',    label: 'Giris/Cikis' },
   sales:      { icon: ShoppingCart,color: 'text-green-400',  bgColor: 'bg-green-600',   label: 'Satis' },
   stock:      { icon: Package,    color: 'text-indigo-400', bgColor: 'bg-indigo-600',  label: 'Stok' },

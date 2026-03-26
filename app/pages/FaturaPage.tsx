@@ -969,7 +969,7 @@ export function FaturaPage() {
               <div className="grid grid-cols-5 gap-2 text-[10px] text-gray-500 uppercase tracking-widest font-bold px-3 pb-2 border-b border-white/5">
                 <span>Oran</span><span>Alış Net</span><span>Alış KDV</span><span>Satış Net</span><span>Satış KDV</span>
               </div>
-              {Object.entries(kdvRaporu.kdvByRate).sort(([a], [b]) => Number(a) - Number(b)).map(([rate, data]) => (
+              {(Object.entries(kdvRaporu.kdvByRate) as [string, { alisNet: number; alisKdv: number; satisNet: number; satisKdv: number; count: number }][]).sort(([a], [b]) => Number(a) - Number(b)).map(([rate, data]) => (
                 <div key={rate} className="grid grid-cols-5 gap-2 text-xs px-3 py-2 rounded-xl bg-white/[0.02] hover:bg-white/[0.04] transition-all">
                   <span className="font-bold text-blue-400">%{rate}</span>
                   <span className="text-orange-300">₺{data.alisNet.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}</span>
@@ -992,7 +992,7 @@ export function FaturaPage() {
               <div className="grid grid-cols-5 gap-2 text-[10px] text-gray-500 uppercase tracking-widest font-bold px-3 pb-2 border-b border-white/5">
                 <span>Dönem</span><span>Fatura</span><span>Alış KDV</span><span>Satış KDV</span><span>Fark</span>
               </div>
-              {Object.entries(kdvRaporu.monthlyKdv).sort(([a], [b]) => b.localeCompare(a)).map(([month, data]) => (
+              {(Object.entries(kdvRaporu.monthlyKdv) as [string, { alisKdv: number; satisKdv: number; net: number; faturaCount: number }][]).sort(([a], [b]) => b.localeCompare(a)).map(([month, data]) => (
                 <div key={month} className="grid grid-cols-5 gap-2 text-xs px-3 py-2 rounded-xl bg-white/[0.02] hover:bg-white/[0.04] transition-all">
                   <span className="font-bold text-white">{month}</span>
                   <span className="text-gray-400">{data.faturaCount}</span>

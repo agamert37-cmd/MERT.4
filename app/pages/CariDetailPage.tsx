@@ -379,7 +379,7 @@ export function CariDetailPage() {
     });
   }, [cariNotes]);
 
-  const priorityConfig = {
+  const priorityConfig: Record<string, { label: string; color: string; bg: string; icon: any }> = {
     low: { label: 'Düşük', color: '#6b7280', bg: 'bg-gray-500/10 text-gray-400 border-gray-500/20', icon: Info },
     normal: { label: 'Normal', color: '#3b82f6', bg: 'bg-blue-500/10 text-blue-400 border-blue-500/20', icon: MessageSquare },
     high: { label: 'Yüksek', color: '#f59e0b', bg: 'bg-amber-500/10 text-amber-400 border-amber-500/20', icon: AlertTriangle },

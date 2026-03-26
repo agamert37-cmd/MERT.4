@@ -32,7 +32,7 @@ function detectEnvironment(): Environment {
 // Figma Make ortamında 'cloud' kullanılmalı, yerel geliştirmede 'local' veya null
 const FORCE_ENVIRONMENT: Environment | null = 'cloud';
 
-export const ENV: Environment = FORCE_ENVIRONMENT || detectEnvironment();
+export const ENV: string = FORCE_ENVIRONMENT || detectEnvironment();
 
 // ═══════════════════════════════════════════════════════════════
 // YEREL SUPABASE (Docker - npx supabase start)

@@ -100,7 +100,7 @@ export function DbSetupBanner({ onReady }: DbSetupBannerProps) {
 
   if (dismissed || !visible) return null;
 
-  const config: Record<DbInitStatus, {
+  const config: Record<string, {
     bg: string;
     border: string;
     icon: React.ReactNode;
