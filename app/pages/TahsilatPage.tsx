@@ -279,6 +279,7 @@ export function TahsilatPage() {
     if (paymentType === 'cek') {
       const newCek: CekData = {
         id: `cek-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
+        direction: 'alinan',
         amount: paymentAmount,
         bankName: bankObj?.name || selectedBank,
         checkNumber: checkNumber || undefined,
@@ -309,6 +310,7 @@ export function TahsilatPage() {
       installmentPlan.forEach((inst, idx) => {
         const instCek: CekData = {
           id: `taksit-${Date.now()}-${idx}-${Math.random().toString(36).substr(2, 4)}`,
+          direction: 'alinan',
           amount: inst.amount,
           bankName: bankObj?.name || 'Taksit',
           checkNumber: `T${idx + 1}/${installmentPlan.length}`,

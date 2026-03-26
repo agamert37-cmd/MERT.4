@@ -1963,6 +1963,7 @@ export function SalesPage() {
                           const bankList = getFromStorage<any[]>(StorageKey.BANK_DATA) || [];
                           const newCek: CekData = {
                             id: `cek-fis-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
+                            direction: 'alinan',
                             amount: paymentInfo.amount,
                             bankName: t('salesPage.notSpecified'),
                             dueDate: paymentInfo.dueDate,

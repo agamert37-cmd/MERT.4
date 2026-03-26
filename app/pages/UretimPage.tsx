@@ -103,7 +103,15 @@ interface UretimKayit {
   ciktiUrunAdi: string;
   ciktiStokId: string;
   stokIslemleriYapildi: boolean;
-  uretimTipi?: 'pisirme' | 'kiyma';
+  uretimTipi?: 'pisirme' | 'kiyma' | 'karisim';
+  // Karışım (multi-ingredient mixing) verileri
+  karisimGirdiler?: Array<{
+    stokId: string;
+    urunAdi: string;
+    miktar: number;
+    birim: string;
+    birimFiyat: number;
+  }>;
   createdAt: string;
 }
 
@@ -112,6 +120,16 @@ interface UretimDefaults {
   paketlemeMaliyeti: number;
   isyeriMaliyeti: number;
   calisanMaliyeti: number;
+}
+
+interface KarisimGirdi {
+  id: string;
+  stokId: string;
+  urunAdi: string;
+  miktar: number;
+  maxStok: number;
+  birim: string;
+  birimFiyat: number;
 }
 
 interface SupplierInfo {
@@ -333,6 +351,15 @@ function StokSearchSelect({ value, onSelect, stokList }: {
 
   const handleOpen = () => {
     if (isOpen) { setIsOpen(false); return; }
+    if (containerRef.current) {
+      const rect = containerRef.current.getBoundingClientRect();
+      const spaceBelow = window.innerHeight - rect.bottom;
+      const spaceAbove = rect.top;
+      const goUpward = spaceBelow < 300 && spaceAbove > spaceBelow;
+      setOpenUpward(goUpward);
+      const available = (goUpward ? spaceAbove : spaceBelow) - 16;
+      setDropdownMaxH(Math.min(window.innerHeight * 0.65, Math.max(220, available)));
+    }
     setIsOpen(true);
   };
 
@@ -460,26 +487,9 @@ function CiktiUrunSelect({ value, onChange, stokList, hammaddeAdi }: {
     const spaceBelow = window.innerHeight - rect.bottom;
     const spaceAbove = rect.top;
     const goUpward = spaceBelow < 300 && spaceAbove > spaceBelow;
-    const maxH = Math.min(360, Math.max(160, (goUpward ? spaceAbove : spaceBelow) - 12));
-    if (goUpward) {
-      setDropdownStyle({ position: 'fixed', bottom: window.innerHeight - rect.top + 8, left: rect.left, width: rect.width, maxHeight: maxH, zIndex: 9999 });
-    } else {
-      setDropdownStyle({ position: 'fixed', top: rect.bottom + 8, left: rect.left, width: rect.width, maxHeight: maxH, zIndex: 9999 });
-    }
-  }, []);
-
-  useEffect(() => {
-    if (!isOpen) return;
-    updatePosition();
-    window.addEventListener('scroll', updatePosition, true);
-    window.addEventListener('resize', updatePosition);
-    return () => {
-      window.removeEventListener('scroll', updatePosition, true);
-      window.removeEventListener('resize', updatePosition);
-    };
-  }, [isOpen, updatePosition]);
-
-  const openMenu = () => {
+    setOpenUpward(goUpward);
+    const available = (goUpward ? spaceAbove : spaceBelow) - 16;
+    setDropdownMaxH(Math.min(window.innerHeight * 0.65, Math.max(220, available)));
     setIsOpen(true);
   };
 
@@ -805,17 +815,7 @@ export function UretimPage() {
 
   const [defaults, setDefaults] = useState<UretimDefaults>(DEFAULT_URETIM_DEFAULTS);
 
-  const [activeView, setActiveView] = useState<'kayitlar' | 'yeni' | 'hizli' | 'profiller' | 'analiz' | 'kiyma'>('kayitlar');
-
-  // ─── Kıyma state ────────────────────────────────────────────────
-  const [kiymaKalemler, setKiymaKalemler] = useState<KiymaKalem[]>([
-    { id: crypto.randomUUID(), name: '', stokId: '', kg: 0, birimFiyat: 0, useStokFiyat: true, stokOrtMaliyet: 0 },
-  ]);
-  const [kiymaReceteler, setKiymaReceteler] = useState<KiymaRecete[]>(() =>
-    getFromStorage<KiymaRecete[]>(KIYMA_STORAGE_KEY as any) || []
-  );
-  const [kiymaReceteAdi, setKiymaReceteAdi] = useState('');
-  const [kiymaOzelMarj, setKiymaOzelMarj] = useState<number>(40);
+  const [activeView, setActiveView] = useState<'kayitlar' | 'yeni' | 'hizli' | 'karisim' | 'profiller' | 'analiz'>('kayitlar');
   const [currentStep, setCurrentStep] = useState(0);
   const [selectedProfile, setSelectedProfile] = useState<UretimProfile | null>(null);
   const [showProfileModal, setShowProfileModal] = useState(false);
@@ -1043,6 +1043,64 @@ export function UretimPage() {
       ciktiUrunAdi: '', ciktiMiktar: 0, aciklama: '',
     });
     setSelectedStokItem(null);
+  };
+
+  // ─── Karışım (Multi-Ingredient Mixing) State ─────────────────────
+  const [karisimGirdiler, setKarisimGirdiler] = useState<KarisimGirdi[]>([]);
+  const [karisimCikti, setKarisimCikti] = useState({
+    urunAdi: '',
+    miktar: 0,
+    aciklama: '',
+    showMaliyet: false,
+    iscilikMaliyeti: 0,
+    ekMaliyet: 0,
+  });
+
+  const karisimCalc = useMemo(() => {
+    const toplamGirdi = karisimGirdiler.reduce((s, g) => s + g.miktar, 0);
+    const hammaddeMaliyet = karisimGirdiler.reduce((s, g) => s + (g.miktar * g.birimFiyat), 0);
+    const ekMaliyetler = karisimCikti.showMaliyet ? (karisimCikti.iscilikMaliyeti + karisimCikti.ekMaliyet) : 0;
+    const toplamMaliyet = hammaddeMaliyet + ekMaliyetler;
+    const birimMaliyet = karisimCikti.miktar > 0 ? (toplamMaliyet / karisimCikti.miktar) : 0;
+    const verimlilik = toplamGirdi > 0 ? ((karisimCikti.miktar / toplamGirdi) * 100) : 0;
+    const fireKg = Math.max(0, toplamGirdi - karisimCikti.miktar);
+    const fireOrani = toplamGirdi > 0 ? ((fireKg / toplamGirdi) * 100) : 0;
+    const karMarjlari = [20, 30, 50].map(marj => ({
+      marj,
+      fiyat: birimMaliyet > 0 ? Math.round(birimMaliyet * (1 + marj / 100) * 100) / 100 : 0,
+      kar: birimMaliyet > 0 ? Math.round(birimMaliyet * (marj / 100) * karisimCikti.miktar * 100) / 100 : 0,
+    }));
+    return { toplamGirdi, hammaddeMaliyet, ekMaliyetler, toplamMaliyet, birimMaliyet, verimlilik, fireKg, fireOrani, karMarjlari };
+  }, [karisimGirdiler, karisimCikti]);
+
+  const addKarisimGirdi = (item: any) => {
+    if (karisimGirdiler.find(g => g.stokId === item.id)) {
+      toast.error('Bu ürün zaten listeye ekli');
+      return;
+    }
+    const stokMiktar = item.currentStock ?? item.stock ?? 0;
+    setKarisimGirdiler(prev => [...prev, {
+      id: crypto.randomUUID(),
+      stokId: item.id,
+      urunAdi: item.name || '',
+      miktar: 0,
+      maxStok: stokMiktar,
+      birim: item.unit || 'KG',
+      birimFiyat: item.sellPrice ?? item.price ?? 0,
+    }]);
+  };
+
+  const removeKarisimGirdi = (id: string) => {
+    setKarisimGirdiler(prev => prev.filter(g => g.id !== id));
+  };
+
+  const updateKarisimGirdi = (id: string, field: string, value: number) => {
+    setKarisimGirdiler(prev => prev.map(g => g.id === id ? { ...g, [field]: value } : g));
+  };
+
+  const resetKarisimForm = () => {
+    setKarisimGirdiler([]);
+    setKarisimCikti({ urunAdi: '', miktar: 0, aciklama: '', showMaliyet: false, iscilikMaliyeti: 0, ekMaliyet: 0 });
   };
 
   // Load defaults and initial stock
@@ -1757,6 +1815,171 @@ export function UretimPage() {
     }
   };
 
+  // ─── Karışım Kaydet ────────────────────────────────────────────
+  const handleSaveKarisim = async () => {
+    if (!canAdd) { sec.logUnauthorized('uretim_add', 'Karışım kaydı yetki yok'); return; }
+    if (karisimGirdiler.length < 2) { toast.error('En az 2 farklı hammadde seçin'); return; }
+    const emptyGirdi = karisimGirdiler.find(g => g.miktar <= 0);
+    if (emptyGirdi) { toast.error(`"${emptyGirdi.urunAdi}" için miktar giriniz`); return; }
+    const overStock = karisimGirdiler.find(g => g.miktar > g.maxStok);
+    if (overStock) { toast.error(`"${overStock.urunAdi}" stokta yetersiz! Mevcut: ${overStock.maxStok.toFixed(1)}`); return; }
+    if (karisimCikti.miktar <= 0) { toast.error('Çıktı miktarı giriniz'); return; }
+    if (!karisimCikti.urunAdi.trim()) { toast.error('Çıktı ürün adını giriniz'); return; }
+
+    try {
+      const toplamGirdi = karisimCalc.toplamGirdi;
+      const hammaddeAdlari = karisimGirdiler.map(g => g.urunAdi).join(' + ');
+      const toplamMaliyet = karisimCalc.toplamMaliyet;
+      const birimMaliyet = karisimCalc.birimMaliyet;
+
+      const newKayit: UretimKayit = {
+        id: crypto.randomUUID(),
+        profileId: '__karisim__',
+        profileName: 'Karışım İşleme',
+        date: new Date().toISOString(),
+        hammaddeStokId: karisimGirdiler[0].stokId,
+        hammaddeAdi: hammaddeAdlari,
+        toptanciAdi: '',
+        trKodu: '',
+        cigKg: toplamGirdi,
+        birimFiyat: toplamGirdi > 0 ? karisimCalc.hammaddeMaliyet / toplamGirdi : 0,
+        copKg: 0,
+        temizKg: toplamGirdi,
+        copOrani: 0,
+        ciktiKg: karisimCikti.miktar,
+        fireKg: karisimCalc.fireKg,
+        fireOrani: karisimCalc.fireOrani,
+        kazanSayisi: 0,
+        pisSuresiSaat: 0,
+        tupPerKazan: 0,
+        tupBaslangicKg: 0,
+        tupBitisKg: 0,
+        tupKullanilanKg: 0,
+        tupFiyatKg: 0,
+        paketlemeMaliyeti: 0,
+        isyeriMaliyeti: karisimCikti.showMaliyet ? karisimCikti.iscilikMaliyeti : 0,
+        calisanMaliyeti: karisimCikti.showMaliyet ? karisimCikti.ekMaliyet : 0,
+        toplamMaliyet,
+        kgBasinaMaliyet: birimMaliyet,
+        ciktiUrunAdi: karisimCikti.urunAdi,
+        ciktiStokId: '',
+        stokIslemleriYapildi: true,
+        uretimTipi: 'karisim',
+        karisimGirdiler: karisimGirdiler.map(g => ({
+          stokId: g.stokId,
+          urunAdi: g.urunAdi,
+          miktar: g.miktar,
+          birim: g.birim,
+          birimFiyat: g.birimFiyat,
+        })),
+        createdAt: new Date().toISOString(),
+      };
+
+      // Stok işlemleri
+      const rawStok = getFromStorage<any[]>(StorageKey.STOK_DATA) || [];
+      const currentStok = rawStok.map(s => {
+        let movements = Array.isArray(s.movements) ? s.movements : [];
+        if (movements.length === 0 && s.supplier_entries) {
+          try {
+            const parsed = typeof s.supplier_entries === 'string' ? JSON.parse(s.supplier_entries) : s.supplier_entries;
+            if (parsed && Array.isArray(parsed.movements)) movements = parsed.movements;
+            else if (Array.isArray(parsed)) movements = parsed.map((e: any) => ({
+              id: e.id || crypto.randomUUID(), type: 'ALIS', partyName: e.supplierName || 'Bilinmeyen',
+              date: e.date || new Date().toISOString(), quantity: e.quantity || 0, price: e.buyPrice || 0, totalAmount: e.totalAmount || 0,
+            }));
+          } catch {}
+        }
+        return { ...s, currentStock: s.currentStock ?? s.current_stock ?? s.stock ?? 0, movements };
+      });
+
+      // 1) Tüm hammaddeleri stoktan düş
+      let updatedStok = [...currentStok];
+      const changedIds: string[] = [];
+      for (const girdi of karisimGirdiler) {
+        updatedStok = updatedStok.map(s => {
+          if (s.id === girdi.stokId) {
+            const newStock = Math.max(0, s.currentStock - girdi.miktar);
+            const movements = [...(s.movements || []), {
+              id: crypto.randomUUID(),
+              type: 'URETIM_CIKIS',
+              partyName: 'Karışım İşleme',
+              date: new Date().toISOString(),
+              quantity: girdi.miktar,
+              price: girdi.birimFiyat,
+              totalAmount: girdi.miktar * girdi.birimFiyat,
+              description: `Karışım: ${girdi.miktar} ${girdi.birim.toLowerCase()} → ${karisimCikti.urunAdi}`,
+            }];
+            changedIds.push(s.id);
+            return { ...s, currentStock: newStock, stock: newStock, movements, supplier_entries: JSON.stringify({ category: s.category || 'Genel', movements }) };
+          }
+          return s;
+        });
+      }
+
+      // 2) Çıktı ürünü stoka ekle
+      const ciktiMovement = {
+        id: crypto.randomUUID(),
+        type: 'URETIM_GIRIS' as const,
+        partyName: 'Karışım İşleme',
+        date: new Date().toISOString(),
+        quantity: karisimCikti.miktar,
+        price: birimMaliyet,
+        totalAmount: toplamMaliyet,
+        description: `Karışım: ${hammaddeAdlari} → ${karisimCikti.miktar} kg ${karisimCikti.urunAdi}`,
+      };
+
+      const existingCikti = updatedStok.find(s => s.name === karisimCikti.urunAdi);
+      if (existingCikti) {
+        const idx = updatedStok.findIndex(s => s.id === existingCikti.id);
+        const newStock = (existingCikti.currentStock ?? 0) + karisimCikti.miktar;
+        const movements = [...(existingCikti.movements || []), ciktiMovement];
+        updatedStok[idx] = { ...existingCikti, currentStock: newStock, stock: newStock, movements, supplier_entries: JSON.stringify({ category: existingCikti.category || 'İşlenmiş Et', movements }) };
+        newKayit.ciktiStokId = existingCikti.id;
+        changedIds.push(existingCikti.id);
+      } else {
+        const newCiktiId = crypto.randomUUID();
+        const now = new Date().toISOString();
+        updatedStok.push({
+          id: newCiktiId, name: karisimCikti.urunAdi, category: 'Karışım', unit: 'KG',
+          sellPrice: Math.round(birimMaliyet * 1.2 * 100) / 100,
+          currentStock: karisimCikti.miktar, stock: karisimCikti.miktar, minStock: 5,
+          movements: [ciktiMovement],
+          supplier_entries: JSON.stringify({ category: 'Karışım', movements: [ciktiMovement] }),
+          createdAt: now, created_at: now,
+        });
+        newKayit.ciktiStokId = newCiktiId;
+        changedIds.push(newCiktiId);
+      }
+
+      setInStorage(StorageKey.STOK_DATA, updatedStok);
+      setStokList(updatedStok);
+      addKayit(newKayit);
+      emit('uretim:completed', { kayitId: newKayit.id, inputKg: newKayit.cigKg, outputKg: newKayit.ciktiKg, productName: newKayit.ciktiUrunAdi });
+
+      // KV Sync
+      const changedItems = updatedStok.filter((s: any) => changedIds.includes(s.id));
+      if (changedItems.length > 0) {
+        try { await syncStokItemsToKV(changedItems); } catch (e) { console.error('[UretimPage] KV sync failed:', e); }
+      }
+
+      toast.success(
+        <div>
+          <p className="font-bold">Karışım kaydedildi!</p>
+          <p className="text-xs opacity-80 mt-0.5">
+            {karisimGirdiler.length} hammadde → {karisimCikti.miktar} kg {karisimCikti.urunAdi}
+          </p>
+        </div>
+      );
+      sec.auditLog('uretim_karisim_add', newKayit.id, `${hammaddeAdlari}→${karisimCikti.urunAdi}`);
+      logActivity('custom', 'Karışım üretim kaydı oluşturuldu', { employeeName: user?.name, page: 'Uretim', description: `${karisimGirdiler.length} hammadde → ${karisimCikti.miktar} kg ${karisimCikti.urunAdi}` });
+      setActiveView('kayitlar');
+      resetKarisimForm();
+    } catch (error) {
+      console.error('[UretimPage] handleSaveKarisim HATA:', error);
+      toast.error(`Karışım kaydedilirken hata: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  };
+
   // ─── Analytics ───────────────────────────────────────────────────
   const analytics = useMemo(() => {
     if (kayitlar.length === 0) return null;
@@ -1888,6 +2111,7 @@ export function UretimPage() {
         {[
           { key: 'kayitlar', label: t('uretim.tabs.history') || 'Uretim Kayitlari', shortLabel: t('uretim.tabs.history_short') || 'Kayitlar', icon: History, count: kayitlar.length },
           { key: 'hizli', label: 'Hızlı İşleme', shortLabel: 'İşleme', icon: Scissors },
+          { key: 'karisim', label: 'Karışım / Kıyma', shortLabel: 'Karışım', icon: Layers },
           { key: 'yeni', label: t('uretim.tabs.new') || 'Yeni Uretim', shortLabel: t('uretim.tabs.new_short') || 'Yeni', icon: PlayCircle },
           { key: 'profiller', label: t('uretim.tabs.profiles') || 'Urun Profilleri', shortLabel: t('uretim.tabs.profiles_short') || 'Profiller', icon: Layers, count: profiles.length },
           { key: 'analiz', label: t('uretim.tabs.analytics') || 'Analiz & Raporlar', shortLabel: t('uretim.tabs.analytics_short') || 'Analiz', icon: BarChart3 },
@@ -1900,6 +2124,7 @@ export function UretimPage() {
               setActiveView(tab.key as any);
               if (tab.key === 'yeni') { resetForm(); refreshStok(); }
               if (tab.key === 'hizli') { resetHizliForm(); refreshStok(); }
+              if (tab.key === 'karisim') { resetKarisimForm(); refreshStok(); }
             }}
             className={`relative flex-1 flex items-center justify-center gap-1.5 md:gap-2 px-2.5 md:px-4 py-2.5 md:py-2.5 rounded-lg md:rounded-xl font-medium text-[11px] md:text-sm whitespace-nowrap transition-all duration-300 active:scale-[0.97] ${
               activeView === tab.key
@@ -3418,6 +3643,393 @@ export function UretimPage() {
       )}
 
       {/* ═══════════════════════════════════════════════════════
+           KARIŞIM / KIYMA İŞLEME
+         ═══════════════════════════════════════════════════════ */}
+      {activeView === 'karisim' && (
+        <motion.div
+          key="view-karisim"
+          initial={{ opacity: 0, x: 24 }}
+          animate={{ opacity: 1, x: 0 }}
+          exit={{ opacity: 0, x: -24 }}
+          transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
+          className="space-y-4 md:space-y-5"
+        >
+          {/* Üst bilgi kartı */}
+          <div className="card-premium card-shine rounded-xl md:rounded-2xl p-4 md:p-6 relative overflow-hidden">
+            <div className="absolute inset-0 bg-gradient-to-r from-amber-500/[0.04] via-transparent to-red-500/[0.04] pointer-events-none" />
+            <div className="relative z-10 flex items-center gap-3 md:gap-4">
+              <div className="relative">
+                <div className="w-10 h-10 md:w-12 md:h-12 rounded-xl md:rounded-2xl bg-gradient-to-br from-amber-500 to-red-600 flex items-center justify-center shadow-lg shadow-amber-500/25">
+                  <Layers className="w-5 h-5 md:w-6 md:h-6 text-white" />
+                </div>
+                <div className="absolute -inset-1 rounded-xl md:rounded-2xl bg-amber-500/15 blur-md -z-10" />
+              </div>
+              <div>
+                <h2 className="text-lg md:text-xl font-bold text-white">Karışım / Kıyma İşleme</h2>
+                <p className="text-[11px] md:text-xs text-muted-foreground/70">Birden fazla hammaddeyi karıştırarak yeni ürün oluşturun</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-5">
+            {/* ── Sol: Hammaddeler ─────────────────────────── */}
+            <div className="space-y-4 relative">
+              {/* Hammadde Ekle */}
+              <div className="card-premium rounded-xl md:rounded-2xl p-4 md:p-5 space-y-3 md:space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="w-7 h-7 md:w-8 md:h-8 rounded-lg bg-blue-500/15 flex items-center justify-center">
+                      <ShoppingCart className="w-3.5 h-3.5 md:w-4 md:h-4 text-blue-400" />
+                    </div>
+                    <h3 className="text-sm md:text-base font-bold text-white">Hammaddeler</h3>
+                  </div>
+                  {karisimGirdiler.length > 0 && (
+                    <span className="text-[10px] text-blue-400/70 px-2 py-0.5 rounded-lg bg-blue-500/10">
+                      {karisimGirdiler.length} ürün seçili
+                    </span>
+                  )}
+                </div>
+
+                <StokSearchSelect
+                  value=""
+                  onSelect={addKarisimGirdi}
+                  stokList={stokList.filter(s => !karisimGirdiler.find(g => g.stokId === s.id))}
+                />
+
+                {/* Seçili hammaddeler listesi */}
+                <AnimatePresence>
+                  {karisimGirdiler.map((girdi, idx) => (
+                    <motion.div
+                      key={girdi.id}
+                      initial={{ opacity: 0, y: -8 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, x: -20 }}
+                      transition={{ delay: idx * 0.03 }}
+                      className="p-3 rounded-xl bg-blue-600/5 border border-blue-600/15 space-y-2"
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <Package className="w-3.5 h-3.5 text-blue-400 flex-shrink-0" />
+                          <span className="text-sm font-medium text-white truncate">{girdi.urunAdi}</span>
+                          <span className="text-[10px] text-muted-foreground/60">
+                            ({girdi.maxStok.toFixed(1)} {girdi.birim.toLowerCase()} stok)
+                          </span>
+                        </div>
+                        <button
+                          onClick={() => removeKarisimGirdi(girdi.id)}
+                          className="w-6 h-6 rounded-lg bg-red-500/10 flex items-center justify-center hover:bg-red-500/20 transition-colors"
+                        >
+                          <X className="w-3 h-3 text-red-400" />
+                        </button>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="block text-[10px] text-muted-foreground mb-0.5">Miktar ({girdi.birim.toLowerCase()})</label>
+                          <input
+                            type="number"
+                            value={girdi.miktar || ''}
+                            onChange={e => updateKarisimGirdi(girdi.id, 'miktar', Math.max(0, Number(e.target.value)))}
+                            className={`w-full px-3 py-2 bg-card border rounded-lg text-white text-sm focus:outline-none focus:ring-1 focus:ring-blue-500/40 ${
+                              girdi.miktar > girdi.maxStok ? 'border-red-500/50' : 'border-border'
+                            }`}
+                            placeholder="0"
+                            min={0}
+                            max={girdi.maxStok}
+                            step={0.1}
+                          />
+                          {girdi.miktar > girdi.maxStok && (
+                            <p className="text-[9px] text-red-400 mt-0.5 flex items-center gap-0.5">
+                              <AlertTriangle className="w-2.5 h-2.5" /> Stok yetersiz!
+                            </p>
+                          )}
+                        </div>
+                        <div>
+                          <label className="block text-[10px] text-muted-foreground mb-0.5">Fiyat (₺/{girdi.birim.toLowerCase()})</label>
+                          <div className="px-3 py-2 bg-card/60 border border-border/50 rounded-lg text-sm text-muted-foreground">
+                            ₺{girdi.birimFiyat.toFixed(2)}
+                          </div>
+                        </div>
+                      </div>
+                      {girdi.miktar > 0 && (
+                        <div className="flex justify-between text-[10px] text-muted-foreground/60 px-1">
+                          <span>Tutar: ₺{(girdi.miktar * girdi.birimFiyat).toFixed(0)}</span>
+                          <span>Oran: %{karisimCalc.toplamGirdi > 0 ? ((girdi.miktar / karisimCalc.toplamGirdi) * 100).toFixed(0) : 0}</span>
+                        </div>
+                      )}
+                    </motion.div>
+                  ))}
+                </AnimatePresence>
+
+                {karisimGirdiler.length > 0 && (
+                  <div className="p-3 rounded-xl bg-gradient-to-r from-blue-600/5 to-violet-600/5 border border-blue-500/15">
+                    <div className="flex justify-between text-xs">
+                      <span className="text-muted-foreground">Toplam Girdi:</span>
+                      <span className="text-blue-400 font-bold">{karisimCalc.toplamGirdi.toFixed(1)} kg</span>
+                    </div>
+                    <div className="flex justify-between text-xs mt-1">
+                      <span className="text-muted-foreground">Toplam Hammadde Maliyeti:</span>
+                      <span className="text-white font-bold">₺{karisimCalc.hammaddeMaliyet.toFixed(0)}</span>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* ── Sağ: Çıktı & Maliyet ─────────────────────── */}
+            <div className="space-y-4 relative">
+              {karisimGirdiler.length >= 2 && karisimCalc.toplamGirdi > 0 && (
+                <>
+                  {/* Çıktı Ürün */}
+                  <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
+                    className="card-premium rounded-xl md:rounded-2xl p-4 md:p-5 space-y-3 md:space-y-4">
+                    <div className="flex items-center gap-2">
+                      <div className="w-7 h-7 md:w-8 md:h-8 rounded-lg bg-emerald-500/15 flex items-center justify-center">
+                        <Package className="w-3.5 h-3.5 md:w-4 md:h-4 text-emerald-400" />
+                      </div>
+                      <h3 className="text-sm md:text-base font-bold text-white">Çıktı Ürün</h3>
+                    </div>
+
+                    <CiktiUrunSelect
+                      value={karisimCikti.urunAdi}
+                      onChange={(val) => setKarisimCikti(prev => ({ ...prev, urunAdi: val }))}
+                      stokList={stokList}
+                      hammaddeAdi={karisimGirdiler.map(g => g.urunAdi).join(' + ')}
+                    />
+
+                    <div>
+                      <label className="block text-xs md:text-sm font-medium text-foreground/80 mb-1.5">
+                        Çıktı Miktarı (kg)
+                        <span className="text-[10px] text-muted-foreground ml-2">Girdi toplamı: {karisimCalc.toplamGirdi.toFixed(1)} kg</span>
+                      </label>
+                      <input
+                        type="number"
+                        value={karisimCikti.miktar || ''}
+                        onChange={e => setKarisimCikti(prev => ({ ...prev, miktar: Math.max(0, Number(e.target.value)) }))}
+                        className="w-full px-4 py-3 bg-card border border-border rounded-xl text-white text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-500/50 transition-corporate"
+                        placeholder={karisimCalc.toplamGirdi.toFixed(1)}
+                        min={0}
+                        step={0.1}
+                      />
+                    </div>
+
+                    {karisimCikti.urunAdi && stokList.find(s => s.name === karisimCikti.urunAdi) && (
+                      <div className="flex items-center gap-1.5 p-2 rounded-lg bg-blue-600/5 border border-blue-600/15">
+                        <Info className="w-3 h-3 text-blue-400 flex-shrink-0" />
+                        <p className="text-[10px] text-blue-300">
+                          Mevcut stok: {((stokList.find(s => s.name === karisimCikti.urunAdi)?.currentStock ?? 0)).toFixed(1)} kg — Üzerine eklenecek
+                        </p>
+                      </div>
+                    )}
+                    {karisimCikti.urunAdi && !stokList.find(s => s.name === karisimCikti.urunAdi) && (
+                      <div className="flex items-center gap-1.5 p-2 rounded-lg bg-emerald-600/5 border border-emerald-600/15">
+                        <Sparkles className="w-3 h-3 text-emerald-400 flex-shrink-0" />
+                        <p className="text-[10px] text-emerald-300">Yeni ürün olarak stoka eklenecek</p>
+                      </div>
+                    )}
+
+                    <div>
+                      <label className="block text-[10px] md:text-xs font-medium text-muted-foreground mb-1">Açıklama (opsiyonel)</label>
+                      <input
+                        value={karisimCikti.aciklama}
+                        onChange={e => setKarisimCikti(prev => ({ ...prev, aciklama: e.target.value }))}
+                        className="w-full px-4 py-2.5 bg-card border border-border rounded-xl text-white text-sm focus:outline-none focus:ring-1 focus:ring-emerald-500/30"
+                        placeholder="Örn: %60 dana %40 kuzu karışım kıyma"
+                      />
+                    </div>
+                  </motion.div>
+
+                  {/* Ek Maliyet (Opsiyonel) */}
+                  <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}
+                    className="card-premium rounded-xl md:rounded-2xl p-4 md:p-5 space-y-3">
+                    <button
+                      onClick={() => setKarisimCikti(prev => ({ ...prev, showMaliyet: !prev.showMaliyet }))}
+                      className="w-full flex items-center justify-between group active:scale-[0.99] transition-transform"
+                    >
+                      <div className="flex items-center gap-2">
+                        <div className={`w-7 h-7 md:w-8 md:h-8 rounded-lg flex items-center justify-center transition-colors ${
+                          karisimCikti.showMaliyet ? 'bg-emerald-500/15' : 'bg-secondary/60'
+                        }`}>
+                          <DollarSign className={`w-3.5 h-3.5 md:w-4 md:h-4 ${karisimCikti.showMaliyet ? 'text-emerald-400' : 'text-muted-foreground/60'}`} />
+                        </div>
+                        <div className="text-left">
+                          <h3 className="text-sm md:text-base font-bold text-white">Ek Maliyetler</h3>
+                          <p className="text-[10px] md:text-[11px] text-muted-foreground/60">İşçilik, kıyma makinesi vb.</p>
+                        </div>
+                      </div>
+                      {karisimCikti.showMaliyet
+                        ? <ToggleRight className="w-7 h-7 md:w-8 md:h-8 text-emerald-400" />
+                        : <ToggleLeft className="w-7 h-7 md:w-8 md:h-8 text-muted-foreground/40" />
+                      }
+                    </button>
+
+                    <AnimatePresence>
+                      {karisimCikti.showMaliyet && (
+                        <motion.div
+                          initial={{ opacity: 0, y: -6 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0, y: -6 }}
+                          className="grid grid-cols-2 gap-3 pt-2"
+                        >
+                          <div>
+                            <label className="block text-[10px] md:text-xs font-medium text-muted-foreground mb-1">İşçilik (₺)</label>
+                            <input
+                              type="number"
+                              value={karisimCikti.iscilikMaliyeti || ''}
+                              onChange={e => setKarisimCikti(prev => ({ ...prev, iscilikMaliyeti: Math.max(0, Number(e.target.value)) }))}
+                              className="w-full px-3 py-2.5 bg-card border border-border rounded-xl text-white text-sm focus:outline-none focus:ring-1 focus:ring-emerald-500/30"
+                              placeholder="0"
+                              min={0}
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[10px] md:text-xs font-medium text-muted-foreground mb-1">Ek Masraf (₺)</label>
+                            <input
+                              type="number"
+                              value={karisimCikti.ekMaliyet || ''}
+                              onChange={e => setKarisimCikti(prev => ({ ...prev, ekMaliyet: Math.max(0, Number(e.target.value)) }))}
+                              className="w-full px-3 py-2.5 bg-card border border-border rounded-xl text-white text-sm focus:outline-none focus:ring-1 focus:ring-emerald-500/30"
+                              placeholder="0"
+                              min={0}
+                            />
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </motion.div>
+                </>
+              )}
+            </div>
+          </div>
+
+          {/* ── Akış Özeti & Kaydet ────────────────────────── */}
+          {karisimGirdiler.length >= 2 && karisimCalc.toplamGirdi > 0 && karisimCikti.miktar > 0 && karisimCikti.urunAdi.trim() && (
+            <motion.div initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} className="space-y-4">
+              {/* Akış Görseli */}
+              <div className="card-premium rounded-xl md:rounded-2xl p-4 md:p-5 relative overflow-hidden">
+                <div className="absolute inset-0 bg-gradient-to-r from-amber-500/[0.03] via-transparent to-emerald-500/[0.03] pointer-events-none" />
+                <div className="flex items-center gap-1.5 mb-3 relative z-10">
+                  <Zap className="w-3.5 h-3.5 text-amber-400" />
+                  <span className="text-[10px] md:text-xs text-muted-foreground uppercase tracking-wider font-bold">Karışım Akışı</span>
+                </div>
+
+                {/* Girdi ürünleri → Çıktı */}
+                <div className="relative z-10 space-y-2">
+                  <div className="flex flex-wrap gap-1.5">
+                    {karisimGirdiler.map((g, idx) => (
+                      <React.Fragment key={g.id}>
+                        {idx > 0 && <span className="text-amber-400/50 text-sm font-bold self-center">+</span>}
+                        <div className="px-3 py-1.5 rounded-lg bg-blue-600/10 border border-blue-500/20 text-center">
+                          <p className="text-[11px] text-blue-400 font-bold tech-number">{g.miktar.toFixed(1)} kg</p>
+                          <p className="text-[9px] text-muted-foreground/70 truncate max-w-[80px]">{g.urunAdi}</p>
+                        </div>
+                      </React.Fragment>
+                    ))}
+                    <div className="flex items-center gap-1 flex-shrink-0">
+                      <div className="w-4 h-[2px] bg-gradient-to-r from-muted-foreground/20 to-emerald-500/30 rounded-full" />
+                      <ArrowRight className="w-4 h-4 text-emerald-400/60" />
+                    </div>
+                    <div className="px-3 py-1.5 rounded-lg bg-emerald-600/10 border border-emerald-500/20 text-center">
+                      <p className="text-[11px] text-emerald-400 font-bold tech-number">{karisimCikti.miktar.toFixed(1)} kg</p>
+                      <p className="text-[9px] text-muted-foreground/70 truncate max-w-[80px]">{karisimCikti.urunAdi}</p>
+                    </div>
+                  </div>
+
+                  {/* Maliyet özeti */}
+                  <div className="mt-3 p-3 rounded-xl bg-emerald-500/5 border border-emerald-500/15 space-y-1">
+                    <div className="flex justify-between text-[11px]">
+                      <span className="text-muted-foreground">Hammadde maliyeti:</span>
+                      <span className="text-white font-medium">₺{karisimCalc.hammaddeMaliyet.toFixed(0)}</span>
+                    </div>
+                    {karisimCalc.ekMaliyetler > 0 && (
+                      <div className="flex justify-between text-[11px]">
+                        <span className="text-muted-foreground">Ek maliyetler:</span>
+                        <span className="text-white font-medium">₺{karisimCalc.ekMaliyetler.toFixed(0)}</span>
+                      </div>
+                    )}
+                    <div className="border-t border-emerald-500/15 pt-1 flex justify-between text-xs">
+                      <span className="text-emerald-400 font-bold">Toplam maliyet:</span>
+                      <span className="text-emerald-400 font-bold">₺{karisimCalc.toplamMaliyet.toFixed(0)}</span>
+                    </div>
+                    <div className="flex justify-between text-[10px] text-muted-foreground/70">
+                      <span>Birim maliyet:</span>
+                      <span>₺{karisimCalc.birimMaliyet.toFixed(2)}/kg</span>
+                    </div>
+                    {karisimCalc.fireKg > 0 && (
+                      <div className="flex justify-between text-[10px]">
+                        <span className="text-red-400/70">Fire:</span>
+                        <span className="text-red-400">{karisimCalc.fireKg.toFixed(1)} kg (%{karisimCalc.fireOrani.toFixed(0)})</span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Verimlilik */}
+                  {karisimCalc.verimlilik > 0 && (
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] text-muted-foreground/60">Verimlilik:</span>
+                      <div className="flex-1 h-2 bg-secondary/40 rounded-full overflow-hidden">
+                        <motion.div
+                          initial={{ width: 0 }}
+                          animate={{ width: `${Math.min(100, karisimCalc.verimlilik)}%` }}
+                          transition={{ duration: 0.8 }}
+                          className={`h-full rounded-full ${
+                            karisimCalc.verimlilik >= 90 ? 'bg-gradient-to-r from-emerald-500 to-emerald-400' :
+                            karisimCalc.verimlilik >= 70 ? 'bg-gradient-to-r from-blue-500 to-blue-400' :
+                            'bg-gradient-to-r from-orange-500 to-orange-400'
+                          }`}
+                        />
+                      </div>
+                      <span className={`text-[10px] font-bold tech-number ${
+                        karisimCalc.verimlilik >= 90 ? 'text-emerald-400' : karisimCalc.verimlilik >= 70 ? 'text-blue-400' : 'text-orange-400'
+                      }`}>%{karisimCalc.verimlilik.toFixed(0)}</span>
+                    </div>
+                  )}
+
+                  {/* Satış fiyatı önerisi */}
+                  {karisimCalc.birimMaliyet > 0 && (
+                    <div className="grid grid-cols-3 gap-2 mt-2">
+                      {karisimCalc.karMarjlari.map((m) => (
+                        <div key={m.marj} className="p-2 rounded-xl bg-secondary/40 border border-border/20 text-center hover:border-emerald-500/20 transition-colors">
+                          <p className="text-[9px] text-muted-foreground/60 uppercase tracking-wider font-bold mb-0.5">%{m.marj} Kâr</p>
+                          <p className="text-sm font-bold text-emerald-400 tech-number">₺{m.fiyat.toFixed(0)}</p>
+                          <p className="text-[8px] text-muted-foreground/50">/kg</p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Stok işlemleri özeti */}
+                <div className="mt-3 space-y-1.5 relative z-10">
+                  {karisimGirdiler.map(g => (
+                    <div key={g.id} className="flex items-center gap-2 p-1.5 rounded-lg bg-red-600/5 border border-red-600/10">
+                      <ArrowDown className="w-3 h-3 text-red-400 flex-shrink-0" />
+                      <p className="text-[10px] text-white truncate">{g.urunAdi}: <span className="text-red-400 font-bold">-{g.miktar.toFixed(1)} kg</span></p>
+                    </div>
+                  ))}
+                  <div className="flex items-center gap-2 p-1.5 rounded-lg bg-emerald-600/5 border border-emerald-600/10">
+                    <ArrowUp className="w-3 h-3 text-emerald-400 flex-shrink-0" />
+                    <p className="text-[10px] text-white truncate">{karisimCikti.urunAdi}: <span className="text-emerald-400 font-bold">+{karisimCikti.miktar.toFixed(1)} kg</span></p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Kaydet Butonu */}
+              <motion.button
+                whileHover={{ scale: 1.01, y: -1 }}
+                whileTap={{ scale: 0.97 }}
+                onClick={handleSaveKarisim}
+                className="w-full relative flex items-center justify-center gap-2.5 px-6 py-4 sm:py-3.5 bg-gradient-to-r from-amber-500 to-red-600 hover:from-amber-400 hover:to-red-500 active:from-amber-600 active:to-red-700 text-white font-bold text-sm md:text-base rounded-xl shadow-xl shadow-amber-600/25 hover:shadow-amber-500/35 transition-all duration-300 overflow-hidden"
+              >
+                <div className="absolute inset-0 bg-gradient-to-r from-white/0 via-white/10 to-white/0 translate-x-[-100%] hover:translate-x-[100%] transition-transform duration-700" />
+                <Save className="w-4 h-4 md:w-5 md:h-5 relative z-10" />
+                <span className="relative z-10">Karışımı Kaydet & Stok Güncelle</span>
+              </motion.button>
+            </motion.div>
+          )}
+        </motion.div>
+      )}
+
+      {/* ═══════════════════════════════════════════════════════
            ÜRETİM KAYITLARI
          ═══════════════════════════════════════════════════════ */}
       {activeView === 'kayitlar' && (
@@ -3800,7 +4412,8 @@ export function UretimPage() {
                 <h2 className="text-sm md:text-lg font-bold text-white">Profil Bazli Analiz</h2>
               </div>
               <div className="space-y-2 md:space-y-3">
-                {Object.entries(analytics.profileMap).map(([id, data], i) => {
+                {Object.entries(analytics.profileMap).map(([id, data_], i) => {
+                  const data = data_ as { name: string; count: number; totalIn: number; totalOut: number; avgFire: number; avgCop: number };
                   const verimlilik = data.totalIn > 0 ? ((data.totalOut / data.totalIn) * 100) : 0;
                   return (
                     <motion.div key={id} initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.06 }}
@@ -3847,7 +4460,7 @@ export function UretimPage() {
               </div>
             </div>
             <div className="space-y-2 md:space-y-4">
-              {Object.entries(analytics.supplierMap)
+              {(Object.entries(analytics.supplierMap) as [string, any][])
                 .sort(([, a], [, b]) => b.totalKg - a.totalKg)
                 .map(([name, data], i) => {
                   const verimlilik = data.totalKg > 0 ? ((data.totalCikti / data.totalKg) * 100) : 0;

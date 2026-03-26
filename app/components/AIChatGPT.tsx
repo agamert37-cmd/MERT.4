@@ -13,6 +13,11 @@ import html2canvas from 'html2canvas';
 import { useAuth } from '../contexts/AuthContext';
 import { useLanguage } from '../contexts/LanguageContext';
 import { logActivity } from '../utils/activityLogger';
+import {
+  BarChart, Bar, AreaChart, Area, LineChart, Line,
+  PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid,
+  Tooltip, ResponsiveContainer,
+} from 'recharts';
 
 interface Message {
   id: string;

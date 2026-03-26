@@ -21,7 +21,11 @@ export type ActivityType =
   | 'report_export'
   | 'production_start' | 'production_end'
   | 'check_add' | 'check_update'
+  | 'cek_verilen' | 'cek_alinan' | 'cek_tahsil' | 'cek_iptal'
   | 'collection_add'
+  | 'invoice_add' | 'invoice_update' | 'invoice_cancel' | 'invoice_delete'
+  | 'fatura_stok_add' | 'fatura_stok_delete' | 'fatura_stok_update'
+  | 'cari_note_add' | 'cari_note_delete' | 'cari_payment'
   | 'day_end'
   | 'security_alert'
   | 'custom';

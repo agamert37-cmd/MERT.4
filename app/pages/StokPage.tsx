@@ -1238,7 +1238,7 @@ export function StokPage() {
       {activeTab === 'ozet' && (() => {
         const CHART_COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ef4444', '#06b6d4', '#ec4899', '#14b8a6'];
 
-        const categoryPieData = Object.entries(stats.categoryBreakdown)
+        const categoryPieData = (Object.entries(stats.categoryBreakdown) as [string, number][])
           .sort((a, b) => b[1] - a[1])
           .map(([name, value], i) => ({ name, value, fill: CHART_COLORS[i % CHART_COLORS.length] }));
 
