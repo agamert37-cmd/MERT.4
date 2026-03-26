@@ -252,7 +252,7 @@ export function MainLayout() {
 
   // Security: Auto-logout on idle (15 minutes)
   useEffect(() => {
-    let timeoutId: NodeJS.Timeout;
+    let timeoutId: ReturnType<typeof setTimeout>;
     const IDLE_TIMEOUT = sessionTimeoutMs; // Dinamik zaman aşımı
 
     const resetTimer = () => {

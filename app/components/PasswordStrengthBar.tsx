@@ -13,7 +13,7 @@ interface PasswordStrengthBarProps {
   compact?: boolean;
 }
 
-const LEVEL_CONFIG: Record<PasswordStrength['level'], { icon: any; glow: string; bgBar: string; borderColor: string; badgeBg: string }> = {
+const LEVEL_CONFIG: Record<string, { icon: any; glow: string; bgBar: string; borderColor: string; badgeBg: string }> = {
   cok_zayif: { icon: ShieldX, glow: 'shadow-red-500/30', bgBar: 'bg-red-500', borderColor: 'border-red-500/30', badgeBg: 'bg-red-500/15' },
   zayif: { icon: ShieldAlert, glow: 'shadow-orange-500/30', bgBar: 'bg-orange-500', borderColor: 'border-orange-500/30', badgeBg: 'bg-orange-500/15' },
   orta: { icon: Shield, glow: 'shadow-yellow-500/30', bgBar: 'bg-yellow-500', borderColor: 'border-yellow-500/30', badgeBg: 'bg-yellow-500/15' },

@@ -334,7 +334,7 @@ export function useTableSync<T extends { id: string }>(
       const existing = await db.allDocs({ keys: ids, include_docs: true });
 
       const docs = updates.map(u => {
-        const row = existing.rows.find((r: any) => r.id === u.id && !r.error);
+        const row = existing.rows.find((r: any) => r.id === u.id && !r.error) as any;
         const old = oldItems.get(u.id) || {} as any;
         const merged = { ...old, ...u.changes };
         const dbRow = toDbRef.current ? toDbRef.current(merged) : merged;

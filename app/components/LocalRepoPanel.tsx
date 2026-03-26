@@ -290,7 +290,7 @@ export function LocalRepoPanel() {
     setTestingCloud(true);
     try {
       const result = await testCloudConnection();
-      if (result.connected) {
+      if (result.ok) {
         toast.success(`Bulut bağlantısı başarılı! ${result.keyCount} kayıt, ${result.latencyMs}ms gecikme`);
       } else {
         toast.error(`Bulut bağlantısı başarısız: ${result.error || 'Bilinmeyen hata'}`);

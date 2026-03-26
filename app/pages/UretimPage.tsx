@@ -351,15 +351,7 @@ function StokSearchSelect({ value, onSelect, stokList }: {
 
   const handleOpen = () => {
     if (isOpen) { setIsOpen(false); return; }
-    if (containerRef.current) {
-      const rect = containerRef.current.getBoundingClientRect();
-      const spaceBelow = window.innerHeight - rect.bottom;
-      const spaceAbove = rect.top;
-      const goUpward = spaceBelow < 300 && spaceAbove > spaceBelow;
-      setOpenUpward(goUpward);
-      const available = (goUpward ? spaceAbove : spaceBelow) - 16;
-      setDropdownMaxH(Math.min(window.innerHeight * 0.65, Math.max(220, available)));
-    }
+    updatePosition();
     setIsOpen(true);
   };
 
@@ -487,11 +479,15 @@ function CiktiUrunSelect({ value, onChange, stokList, hammaddeAdi }: {
     const spaceBelow = window.innerHeight - rect.bottom;
     const spaceAbove = rect.top;
     const goUpward = spaceBelow < 300 && spaceAbove > spaceBelow;
-    setOpenUpward(goUpward);
-    const available = (goUpward ? spaceAbove : spaceBelow) - 16;
-    setDropdownMaxH(Math.min(window.innerHeight * 0.65, Math.max(220, available)));
-    setIsOpen(true);
-  };
+    const maxH = Math.min(window.innerHeight * 0.65, Math.max(220, (goUpward ? spaceAbove : spaceBelow) - 16));
+    setDropdownStyle(goUpward ? {
+      position: 'fixed', bottom: window.innerHeight - rect.top + 8,
+      left: rect.left, width: rect.width, maxHeight: maxH, zIndex: 9999,
+    } : {
+      position: 'fixed', top: rect.bottom + 8,
+      left: rect.left, width: rect.width, maxHeight: maxH, zIndex: 9999,
+    });
+  }, []);
 
   // Mevcut stok ürünlerini filtrele (isimsizleri hariç tut)
   const suggestions = useMemo(() => {
@@ -606,7 +602,7 @@ function CiktiUrunSelect({ value, onChange, stokList, hammaddeAdi }: {
         <input
           value={isOpen ? search : value}
           onChange={e => { setSearch(e.target.value); onChange(e.target.value); }}
-          onFocus={() => { setSearch(value || ''); openMenu(); }}
+          onFocus={() => { setSearch(value || ''); updatePosition(); setIsOpen(true); }}
           className="w-full pl-9 pr-4 py-3 bg-card border border-border rounded-xl text-white text-sm placeholder-muted-foreground/50 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-500/50 transition-corporate focus-corporate"
           placeholder={t('uretim.labels.output_placeholder') || 'Urun adi yazin veya stoktan secin...'}
         />
@@ -996,6 +992,14 @@ export function UretimPage() {
       .filter(k => k.profileId === '__hizli_isleme__')
       .slice(0, 5);
   }, [kayitlar]);
+
+  // ─── Kıyma Karışım State ─────────────────────────────────────────
+  const [kiymaKalemler, setKiymaKalemler] = useState<KiymaKalem[]>([
+    { id: crypto.randomUUID(), name: '', stokId: '', kg: 0, birimFiyat: 0, useStokFiyat: true, stokOrtMaliyet: 0 }
+  ]);
+  const [kiymaOzelMarj, setKiymaOzelMarj] = useState(20);
+  const [kiymaReceteAdi, setKiymaReceteAdi] = useState('');
+  const [kiymaReceteler, setKiymaReceteler] = useState<Array<{ id: string; name: string; kalemler: KiymaKalem[] }>>([]);
 
   // Kayıt listesi filtreleme
   const [kayitFilter, setKayitFilter] = useState('');
@@ -4527,7 +4531,7 @@ export function UretimPage() {
                         <div className="border-t border-border/20 px-2.5 md:px-4 pb-2 md:pb-3 pt-1.5 md:pt-2">
                           <p className="text-[9px] md:text-[10px] text-muted-foreground/70 uppercase tracking-wider font-bold mb-1.5 md:mb-2">Urun Detay</p>
                           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-1.5 md:gap-2">
-                            {Object.entries(data.urunler)
+                            {(Object.entries(data.urunler) as [string, any][])
                               .sort(([, a], [, b]) => b.totalKg - a.totalKg)
                               .map(([urunName, urunData]) => {
                                 const urunVerim = urunData.totalKg > 0 ? ((urunData.totalCikti / urunData.totalKg) * 100) : 0;
@@ -4571,7 +4575,7 @@ export function UretimPage() {
               <h2 className="text-sm md:text-lg font-bold text-white">Aylik Trend</h2>
             </div>
             <div className="space-y-1.5 md:space-y-3">
-              {Object.entries(analytics.monthlyMap)
+              {(Object.entries(analytics.monthlyMap) as [string, any][])
                 .sort(([a], [b]) => b.localeCompare(a))
                 .map(([month, data], i) => (
                 <motion.div key={month} initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.06 }}

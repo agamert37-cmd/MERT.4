@@ -48,7 +48,7 @@ export function NotificationPanel() {
     // Önce okunmamışlar
     if (a.read !== b.read) return a.read ? 1 : -1;
     // Sonra önceliğe göre
-    const priorityOrder = { high: 0, medium: 1, low: 2 };
+    const priorityOrder: Record<string, number> = { high: 0, medium: 1, low: 2 };
     if (a.priority !== b.priority) return priorityOrder[a.priority] - priorityOrder[b.priority];
     // Son olarak tarihe göre - ensure timestamps are Date objects
     const timeA = a.timestamp instanceof Date ? a.timestamp.getTime() : new Date(a.timestamp).getTime();

@@ -23,15 +23,22 @@ export const StorageKey = {
   ARAC_KM_LOGS: 'arac_km_logs',
   URETIM_DATA: 'uretim_data',
   URETIM_PROFILES: 'uretim_profiles',
+  URETIM_DEFAULTS: 'uretim_defaults',
   FATURALAR: 'faturalar',
   FATURA_STOK: 'fatura_stok',
   CATEGORIES: 'categories',
+  STOK_CATEGORIES: 'stok_categories',
   POS_DEVICES: 'pos_devices',
+  POS_DATA: 'pos_data',
   CURRENT_EMPLOYEE: 'current_employee',
   SETTINGS: 'settings',
+  SYSTEM_SETTINGS: 'system_settings',
+  PAZARLAMA_CONTENT: 'pazarlama_content',
+  LOGIN_CONTENT: 'login_content',
   DELETED_FISLER: 'deleted_fisler',
   BACKUPS: 'local_backups',
   VITRIN_ANALYTICS: 'vitrin_analytics',
+  USER_ACTIVITY_LOG: 'user_activity_log',
 } as const;
 
 // ─── Okuma/Yazma ─────────────────────────────────────────────────────────────

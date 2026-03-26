@@ -97,6 +97,7 @@ export function MobileBottomNav() {
   const { currentEmployee } = useEmployee();
   const [isMoreOpen, setIsMoreOpen] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [search, setSearch] = useState('');
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const sheetRef = useRef<HTMLDivElement>(null);
   const startY = useRef(0);
