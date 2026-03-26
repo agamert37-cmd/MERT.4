@@ -242,7 +242,7 @@ export function StokHareketPage() {
         startY: nextY + 8,
         ...tableStyles,
         columnStyles: {
-          ...tableStyles.columnStyles,
+          ...((tableStyles as any).columnStyles || {}),
           4: { halign: 'right' },
           5: { halign: 'right', fontStyle: 'bold' },
         },
