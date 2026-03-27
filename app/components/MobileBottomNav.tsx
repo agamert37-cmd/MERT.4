@@ -13,7 +13,7 @@ import {
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useEmployee } from '../contexts/EmployeeContext';
-import { forceSync } from '../utils/storage';
+import { startAllSync } from '../lib/pouchdb';
 import { toast } from 'sonner';
 
 interface NavItem {
@@ -144,7 +144,7 @@ export function MobileBottomNav() {
     setIsSyncing(true);
     haptic('medium');
     try {
-      await forceSync();
+      startAllSync();
       toast.success('Veriler güncellendi', { id: 'mobile-sync', duration: 2000 });
     } catch {
       toast.error('Senkronizasyon başarısız', { id: 'mobile-sync', duration: 2000 });

@@ -41,17 +41,15 @@ const errorTranslations: Record<string, Record<string, string>> = {
 
 export function ErrorPage() {
   const error = useRouteError() as any;
-  let lang = 'tr';
-  try {
-    const ctx = useLanguage();
-    if (ctx?.lang) lang = ctx.lang;
-  } catch {
-    // LanguageContext may not be available in error boundary
+  // useLanguage must be called at top level (Rules of Hooks)
+  const langCtx = useLanguage();
+  const lang = langCtx?.lang || (() => {
     try {
       const saved = localStorage.getItem('isleyen_et_language');
-      if (saved && ['tr', 'en', 'ru', 'uz'].includes(saved)) lang = saved;
+      if (saved && ['tr', 'en', 'ru', 'uz'].includes(saved)) return saved;
     } catch {}
-  }
+    return 'tr';
+  })();
 
   const txt = errorTranslations[lang] || errorTranslations.tr;
 

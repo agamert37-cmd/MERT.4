@@ -8,7 +8,8 @@ import { SupabaseStatusBadge } from './SupabaseStatus';
 import { NodeStatusBadge } from './NodeStatusPanel';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import * as Tooltip from '@radix-ui/react-tooltip';
-import { createSystemBackup, getFromStorage, StorageKey } from '../utils/storage';
+import { getFromStorage, StorageKey } from '../utils/storage';
+import { createPouchBackup, downloadBackup } from '../lib/pouchdb-backup';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   LayoutDashboard, 
@@ -382,11 +383,16 @@ export function MainLayout() {
     navigate('/login');
   }, [logout, navigate, t]);
 
-  const handleBackup = useCallback(() => {
+  const handleBackup = useCallback(async () => {
     try {
-      createSystemBackup();
-      toast.success(t('backups.createBackup') + ' ✓');
-    } catch (error) {
+      const result = await createPouchBackup();
+      if (result.ok && result.backup) {
+        downloadBackup(result.backup);
+        toast.success(`Yedek oluşturuldu: ${result.totalDocs} kayıt`);
+      } else {
+        toast.error('Yedek alınamadı: ' + (result.error || 'Bilinmeyen hata'));
+      }
+    } catch {
       toast.error(t('common.error'));
     }
   }, [t]);
