@@ -11,9 +11,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import * as Dialog from '@radix-ui/react-dialog';
-import { getFromStorage, setInStorage, StorageKey } from '../utils/storage';
 import { generateDetailedExcelBackup, generatePDFBackup } from '../utils/exportGenerator';
-import { kvGet, kvSet } from '../lib/pouchdb-kv';
 import { useAuth } from '../contexts/AuthContext';
 import { useEmployee } from '../contexts/EmployeeContext';
 import { useLanguage } from '../contexts/LanguageContext';
@@ -106,17 +104,28 @@ export function YedeklerPage() {
   const fetchSyncHealth = useCallback(async () => {
     setSyncHealthLoading(true);
     try {
-      const { getDb } = await import('../lib/pouchdb');
-      const tables = ['fisler', 'stok', 'cari', 'kasa', 'personel'];
+      const { getDb, testCouchDbConnection } = await import('../lib/pouchdb');
+      const { TABLE_NAMES } = await import('../lib/db-config');
+      const t0 = performance.now();
       const tableStats: Record<string, { ok: boolean; count: number }> = {};
-      for (const t of tables) {
+      for (const t of TABLE_NAMES) {
         try {
           const db = getDb(t);
           const info = await db.info();
           tableStats[t] = { ok: true, count: info.doc_count };
         } catch { tableStats[t] = { ok: false, count: 0 }; }
       }
-      setSyncHealth({ healthy: true, latencyMs: 0, totalKeys: Object.values(tableStats).reduce((s, v) => s + v.count, 0), timestamp: new Date().toISOString(), tables: tableStats });
+      const latencyMs = Math.round(performance.now() - t0);
+      const couchResult = await testCouchDbConnection();
+      const totalKeys = Object.values(tableStats).reduce((s, v) => s + v.count, 0);
+      setSyncHealth({
+        healthy: couchResult.ok,
+        couchDb: couchResult,
+        latencyMs,
+        totalKeys,
+        timestamp: new Date().toISOString(),
+        tables: tableStats,
+      });
     } catch { setSyncHealth(null); }
     setSyncHealthLoading(false);
   }, []);
@@ -130,19 +139,25 @@ export function YedeklerPage() {
     toast.success('localStorage yedeği indirildi');
   }, []);
   const handleRestoreTableBackup = useCallback(async (backupId: string) => {
+    if (!canBackup) { toast.error('Geri yükleme yetkiniz yok.'); return; }
+    if (!window.confirm('Bu yedekten geri yüklenecek. Mevcut veriler üzerine yazılacak. Devam edilsin mi?')) return;
     setRestoringId(backupId);
+    setRestoreProgress('Yedek verisi okunuyor...');
     try {
-      const backupList = getBackupMetaList();
-      const meta = backupList.find(b => b.id === backupId);
-      if (!meta) { toast.error('Yedek bulunamadı'); return; }
-      const kvData = await kvGet<any>(`backup_${backupId}`);
-      if (!kvData) { toast.error('Yedek verisi bulunamadı'); return; }
-      const result = await restoreSelectedTables(kvData, Object.keys(kvData.tables || {}));
-      if (result.ok > 0) toast.success('Geri yükleme tamamlandı');
-      else toast.error('Geri yükleme başarısız: ' + (result.errors?.join(', ') || ''));
+      const raw = localStorage.getItem(`pouchdb_backup_data_${backupId}`);
+      if (!raw) { toast.error('Yedek verisi bulunamadı. Lütfen dosyadan geri yükleyin.'); return; }
+      const backup: PouchBackupData = JSON.parse(raw);
+      setRestoreProgress('PouchDB tablolarına yazılıyor...');
+      const result = await restoreSelectedTables(backup, Object.keys(backup.tables || {}));
+      if (result.ok > 0) {
+        toast.success(`Geri yükleme tamamlandı: ${result.ok} kayıt, ${result.tables.length} tablo`, { duration: 5000 });
+        setTimeout(() => window.location.reload(), 2000);
+      } else {
+        toast.error('Geri yükleme başarısız: ' + (result.errors?.join(', ') || 'Veri yok'));
+      }
     } catch (e: any) { toast.error('Geri yükleme hatası: ' + e.message); }
-    setRestoringId(null);
-  }, []);
+    finally { setRestoringId(null); setRestoreProgress(''); }
+  }, [canBackup]);
 
   const fetchLocalBackups = useCallback(() => {
     setLocalBackups(getBackupMetaList());
@@ -587,7 +602,7 @@ export function YedeklerPage() {
                           {new Date(b.timestamp).toLocaleDateString('tr-TR')} {new Date(b.timestamp).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}
                           {isTableBackup && <span className="ml-2 text-[9px] px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-400 border border-emerald-500/20">Tablo Yedeği</span>}
                         </p>
-                        <p className="text-[10px] text-muted-foreground/50">{b.keysCount} satır • {b.dataSize ? `${(b.dataSize / 1024).toFixed(0)} KB` : '-'} • {b.type}</p>
+                        <p className="text-[10px] text-muted-foreground/50">{b.totalDocs} kayıt • {b.sizeKB ? `${b.sizeKB} KB` : '-'} • {b.type}</p>
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
@@ -600,7 +615,7 @@ export function YedeklerPage() {
                           Geri Yükle
                         </button>
                       )}
-                      <button onClick={() => { const updated = localBackups.filter(x => x.id !== b.id); setInStorage(StorageKey.BACKUPS, updated); kvSet('backups', updated).catch(() => {}); setLocalBackups(updated); toast.success('Silindi'); }}
+                      <button onClick={() => handleDeleteLocalBackup(b.id)}
                         className="p-2 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 transition-all active:scale-95">
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
@@ -662,7 +677,7 @@ export function YedeklerPage() {
                 </div>
               )}
 
-              <button onClick={saveAutoBackupConfig}
+              <button onClick={saveAutoBackupConfigHandler}
                 className="w-full py-3 rounded-xl text-sm font-bold bg-gradient-to-r from-amber-600/80 to-orange-600/80 hover:from-amber-500 hover:to-orange-500 text-white transition-all active:scale-[0.98]">
                 Ayarları Kaydet
               </button>
@@ -705,10 +720,12 @@ export function YedeklerPage() {
                   </div>
                   <div>
                     <p className={`text-sm font-bold ${syncHealth.healthy ? 'text-emerald-400' : 'text-red-400'}`}>
-                      {syncHealth.healthy ? 'Sistem Sağlıklı' : 'Bağlantı Sorunu'}
+                      {syncHealth.healthy ? 'CouchDB Bağlantısı Sağlıklı' : 'CouchDB Bağlantı Sorunu'}
+                      {syncHealth.couchDb?.version && <span className="ml-2 text-[10px] font-normal text-muted-foreground/50">v{syncHealth.couchDb.version}</span>}
                     </p>
                     <p className="text-xs text-muted-foreground/50">
                       Gecikme: {syncHealth.latencyMs}ms • Toplam: {syncHealth.totalKeys} kayıt • {new Date(syncHealth.timestamp).toLocaleTimeString('tr-TR')}
+                      {!syncHealth.healthy && syncHealth.couchDb?.error && <span className="ml-1 text-red-400/70">— {syncHealth.couchDb.error}</span>}
                     </p>
                   </div>
                 </div>
@@ -848,8 +865,8 @@ export function YedeklerPage() {
                 {restoreFileContent && (
                   <>
                     <div className="flex justify-between"><span className="text-muted-foreground/60">Uygulama:</span><span className="text-white">{restoreFileContent.appName || 'Bilinmiyor'}</span></div>
-                    <div className="flex justify-between"><span className="text-muted-foreground/60">Tarih:</span><span className="text-white">{restoreFileContent.timestamp ? new Date(restoreFileContent.timestamp).toLocaleString('tr-TR') : '-'}</span></div>
-                    <div className="flex justify-between"><span className="text-muted-foreground/60">Kayıt:</span><span className="text-white">{restoreFileContent.keysCount || Object.keys(restoreFileContent.data || {}).length}</span></div>
+                    <div className="flex justify-between"><span className="text-muted-foreground/60">Tarih:</span><span className="text-white">{restoreFileContent.createdAt ? new Date(restoreFileContent.createdAt).toLocaleString('tr-TR') : '-'}</span></div>
+                    <div className="flex justify-between"><span className="text-muted-foreground/60">Kayıt:</span><span className="text-white">{restoreFileContent.meta?.totalDocs ?? Object.values(restoreFileContent.tables || {}).reduce((s: number, a: any) => s + (a?.length ?? 0), 0)}</span></div>
                   </>
                 )}
               </div>
