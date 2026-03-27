@@ -19,6 +19,22 @@ export interface VersionEntry {
 
 export const CHANGELOG: VersionEntry[] = [
   {
+    version: '4.5',
+    codename: 'KALKAN',
+    date: '27 Mart 2026',
+    summary: 'PouchDB/CouchDB çoklu veritabanı senkronizasyonu & Üretim karışım özelliği',
+    changes: [
+      { type: 'yenilik',     text: 'Supabase tamamen PouchDB/CouchDB ile değiştirildi. Veriler yerel PouchDB\'de; CouchDB ile çift yönlü otomatik senkronizasyon.' },
+      { type: 'yenilik',     text: 'docker-compose.yml: CouchDB 3.3 container\'ı eklendi; nginx /couchdb/ proxy ile CORS sorunu yok.' },
+      { type: 'yenilik',     text: 'GlobalTableSyncProvider: 15 tablo uygulama genelinde otomatik senkronize.' },
+      { type: 'yenilik',     text: 'Üretim sayfasına Karışım/Kıyma sekmesi eklendi — birden fazla hammadde karıştırarak çıktı üretme.' },
+      { type: 'düzeltme',    text: 'DashboardPage liveCounter ve useIsMobile eksik değişkenleri giderildi.' },
+      { type: 'düzeltme',    text: 'StorageKey\'e 7 yeni anahtar eklendi (POS_DATA, SYSTEM_SETTINGS, LOGIN_CONTENT vb.).' },
+      { type: 'düzeltme',    text: '20+ TypeScript derleme ve çalışma zamanı hatası giderildi; @types/pouchdb kuruldu.' },
+      { type: 'güvenlik',    text: 'Tuzsuz SHA-256 → tuzlu SHA-256 şifre migration otomatik yürütülüyor.' },
+    ],
+  },
+  {
     version: '4.4',
     codename: 'KALKAN',
     date: '22 Mart 2026',

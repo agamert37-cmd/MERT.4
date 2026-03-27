@@ -18,12 +18,65 @@ export interface UpdateNote {
 }
 
 // Mevcut uygulama versiyonu — her yeni sürümde burası güncellenir
-export const CURRENT_VERSION = 'v4.2.2';
+export const CURRENT_VERSION = 'v4.5.0';
 
 // localStorage anahtarı — kullanıcının en son gördüğü versiyon
 export const SEEN_VERSION_KEY = 'isleyen_et_last_seen_version';
 
 export const UPDATE_NOTES: UpdateNote[] = [
+  // ─── v4.5.0 ──────────────────────────────────────────────────────────────
+  {
+    id: 'u-017', version: 'v4.5.0', date: '2026-03-27', category: 'feature',
+    title: 'PouchDB/CouchDB Çoklu Veritabanı Senkronizasyonu',
+    description: 'Supabase tamamen kaldırıldı. Veriler yerel PouchDB\'de saklanıyor, CouchDB ile çift yönlü otomatik senkronizasyon sağlanıyor.',
+    details: [
+      'docker-compose: CouchDB 3.3 container\'ı eklendi',
+      'Nginx /couchdb/ yolu üzerinden proxy — CORS sorunu yok',
+      'useTableSync: PouchDB changes feed ile gerçek zamanlı güncelleme',
+      'GlobalTableSyncProvider: 15 tablo uygulama genelinde sync',
+      'pouchdb-kv: anahtar-değer deposu (oturum, yapılandırma)',
+      'Çevrimdışı-first mimari — internet kesilse bile çalışır',
+    ],
+    impact: 'high', isNew: true, emoji: '🔄',
+  },
+  {
+    id: 'u-018', version: 'v4.5.0', date: '2026-03-27', category: 'bugfix',
+    title: 'TypeScript & Çalışma Zamanı Hata Düzeltmeleri',
+    description: 'PouchDB geçişi sonrasında oluşan 20+ TypeScript derleme ve çalışma zamanı hatası giderildi.',
+    details: [
+      'DashboardPage: liveCounter ve useIsMobile eksik değişkenler eklendi',
+      'StorageKey\'e 7 yeni anahtar eklendi (POS_DATA, SYSTEM_SETTINGS, vb.)',
+      'KasaPage BankWidget import eksikliği giderildi',
+      'MobileBottomNav search/setSearch state eklendi',
+      'Record<string,...> tip dönüşümleri 8 bileşende düzeltildi',
+      'YedeklerPage bulut yedekleme stub fonksiyonları eklendi',
+      '@types/pouchdb devDependency kuruldu',
+    ],
+    impact: 'high', isNew: true, emoji: '🐛',
+  },
+  {
+    id: 'u-019', version: 'v4.5.0', date: '2026-03-27', category: 'feature',
+    title: 'Üretim Karışım/Kıyma Sekmesi',
+    description: 'Üretim sayfasına birden fazla hammaddeyi karıştırarak tek çıktı üreten Kıyma/Karışım sekmesi eklendi.',
+    details: [
+      'Birden fazla hammadde seçimi ve oran ayarı',
+      'Otomatik maliyet hesaplama (hammadde oranına göre)',
+      'Özel marj ve reçete adı tanımlama',
+      'Reçete kaydetme ve yeniden kullanma',
+    ],
+    impact: 'medium', isNew: true, emoji: '🍖',
+  },
+  {
+    id: 'u-020', version: 'v4.5.0', date: '2026-03-27', category: 'security',
+    title: 'Güvenlik & Oturum Güçlendirmesi',
+    description: 'Personel şifre migration sistemi ve çapraz cihaz zorla oturum kapatma güçlendirildi.',
+    details: [
+      'Tuzsuz SHA-256 → tuzlu SHA-256 otomatik migration',
+      'KV tabanlı cross-device force logout',
+      'CURRENT_EMPLOYEE güvenlik doğrulaması güçlendirildi',
+    ],
+    impact: 'medium', isNew: true, emoji: '🔐',
+  },
   // ─── v4.2.2 ──────────────────────────────────────────────────────────────
   {
     id: 'u-013', version: 'v4.2.2', date: '2026-03-22', category: 'ui',
