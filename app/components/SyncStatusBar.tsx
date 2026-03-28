@@ -23,6 +23,7 @@ import {
   Activity,
 } from 'lucide-react';
 import { useSyncContext } from '../contexts/SyncContext';
+import { useGlobalSyncTables } from '../contexts/GlobalTableSyncContext';
 import { toast } from 'sonner';
 
 interface SyncStatusBarProps {
@@ -75,6 +76,7 @@ export function SyncStatusBar({ tableName }: SyncStatusBarProps) {
     setupStatus, isChecking, lastChecked, recheckTables, isSupabaseConfigured,
     pendingCount, isSyncing: isCloudSyncing, lastSyncAt, isOnline: cloudOnline, syncError,
   } = useSyncContext();
+  const { tables: globalTables } = useGlobalSyncTables();
   const [isExpanded, setIsExpanded] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncProgress, setSyncProgress] = useState('');
@@ -137,11 +139,41 @@ export function SyncStatusBar({ tableName }: SyncStatusBarProps) {
 
   const isConnected = setupStatus.isConnected;
   const extStatus = setupStatus as any;
-  const tables: Array<{ table: string; displayName: string; rowCount: number; icon: string }> = extStatus.tables ?? [];
   const latencyMs: number | undefined = extStatus.latencyMs;
   const kvTotalKeys: number | undefined = extStatus.kvTotalKeys;
-  const totalRecords = tables.reduce((sum, t) => sum + t.rowCount, 0);
-  const tablesWithData = tables.filter(t => t.rowCount > 0).length;
+
+  // Tablo görüntüleme adları ve ikonları
+  const TABLE_DISPLAY: Record<string, { displayName: string; icon: string }> = {
+    fisler: { displayName: 'Fişler', icon: '🧾' },
+    urunler: { displayName: 'Ürünler', icon: '🥩' },
+    cari_hesaplar: { displayName: 'Cari', icon: '👥' },
+    kasa_islemleri: { displayName: 'Kasa', icon: '💰' },
+    personeller: { displayName: 'Personel', icon: '👤' },
+    bankalar: { displayName: 'Bankalar', icon: '🏦' },
+    cekler: { displayName: 'Çekler', icon: '📋' },
+    araclar: { displayName: 'Araçlar', icon: '🚛' },
+    arac_shifts: { displayName: 'Araç Vardiya', icon: '🔄' },
+    arac_km_logs: { displayName: 'KM Logs', icon: '📍' },
+    uretim_profilleri: { displayName: 'Üretim Profil', icon: '⚙️' },
+    uretim_kayitlari: { displayName: 'Üretim', icon: '🏭' },
+    faturalar: { displayName: 'Faturalar', icon: '📄' },
+    fatura_stok: { displayName: 'Fatura Stok', icon: '📦' },
+    tahsilatlar: { displayName: 'Tahsilatlar', icon: '💳' },
+  };
+
+  // GlobalTableSyncContext verisini JSX'in beklediği formata dönüştür
+  const tables = globalTables.map(t => ({
+    table: t.name,
+    displayName: TABLE_DISPLAY[t.name]?.displayName ?? t.name,
+    rowCount: t.docCount,
+    icon: TABLE_DISPLAY[t.name]?.icon ?? '📊',
+    syncState: t.syncState,
+    lastSyncAt: t.lastSyncAt,
+  }));
+
+  // Gerçek per-tablo verisi GlobalTableSyncContext'ten
+  const totalRecords = globalTables.reduce((sum, t) => sum + t.docCount, 0);
+  const tablesWithData = globalTables.filter(t => t.docCount > 0).length;
 
   return (
     <div className="mb-4">
@@ -428,6 +460,7 @@ export function SyncStatusBar({ tableName }: SyncStatusBarProps) {
  */
 export function SyncBadge({ tableName }: { tableName: string }) {
   const { setupStatus, isChecking } = useSyncContext();
+  const { tables: globalTables } = useGlobalSyncTables();
 
   if (!setupStatus) {
     return (
@@ -438,7 +471,7 @@ export function SyncBadge({ tableName }: { tableName: string }) {
     );
   }
 
-  const table = (setupStatus as any).tables?.find((t: any) => t.table === tableName);
+  const table = globalTables.find(t => t.name === tableName);
   if (!table) return null;
 
   if (!setupStatus.isConnected) {
@@ -457,7 +490,7 @@ export function SyncBadge({ tableName }: { tableName: string }) {
       className="inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-950/40 text-emerald-400 text-xs rounded-full border border-emerald-700/30"
     >
       <CheckCircle2 className="w-2.5 h-2.5" />
-      {isChecking ? 'Senkron ediliyor' : `${table.rowCount} kayıt`}
+      {isChecking ? 'Senkron ediliyor' : `${table.docCount} kayıt`}
     </motion.span>
   );
 }

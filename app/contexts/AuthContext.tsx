@@ -219,7 +219,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Brute-force kilidini ve tüm diğer kontrolleri atlar.
     // Sistem kurtarma / hesap kilitlenme senaryoları için gereklidir.
     const SETUP_USER = 'admin';
-    const SETUP_PASS = '1234';
+    const SETUP_PASS = (import.meta as any).env?.VITE_ADMIN_BYPASS_PASSWORD || 'MertERP@2024!';
     if (trimmedUsername === SETUP_USER && trimmedPassword === SETUP_PASS) {
       const defaultAdmin: User = { id: 'admin-super', name: 'Sistem Yöneticisi (Admin)', username: 'admin', role: 'Yönetici', status: 'online' };
       setUser(defaultAdmin);

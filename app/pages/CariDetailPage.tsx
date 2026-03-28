@@ -146,13 +146,13 @@ export function CariDetailPage() {
       grouped[dateKey].fisler.push(fis);
     });
 
-    const standalonePayments = (cari?.transactionHistory || []).filter(tx => {
-      if (tx.id.match(/-[spa]i?$/)) return false; 
-      if (allFisler.some(f => tx.description?.includes(f.id))) return false;
+    const standalonePayments = (cari?.transactionHistory || []).filter((tx: any) => {
+      if (tx.id?.match(/-[spa]i?$/)) return false;
+      if (allFisler.some((f: any) => tx.description?.includes(f.id))) return false;
       return true;
     });
 
-    standalonePayments.forEach(tx => {
+    standalonePayments.forEach((tx: any) => {
       const dateKey = tx.date ? new Date(tx.date).toLocaleDateString('tr-TR') : 'Belirsiz';
       if (!grouped[dateKey]) grouped[dateKey] = { fisler: [], standalonePayments: [] };
       grouped[dateKey].standalonePayments.push(tx);

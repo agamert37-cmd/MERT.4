@@ -535,7 +535,7 @@ export function LoginPage() {
         {/* Alt trust bar */}
         <div className="flex-shrink-0 border-t border-white/[0.05] bg-black/50 backdrop-blur-sm px-5 py-3 flex items-center justify-center gap-4"
           style={{ paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))' }}>
-          {loginConfig.trustBar.map((item, i) => (
+          {(loginConfig.trustBar as { icon: string; text: string }[]).map((item, i) => (
             <React.Fragment key={i}>
               {i > 0 && <span className="w-px h-3 bg-white/10" />}
               <span className="flex items-center gap-1 text-[10px] text-white/25 font-medium whitespace-nowrap">
@@ -581,7 +581,7 @@ export function LoginPage() {
             <div className="flex-1 flex flex-col justify-center py-10">
               <p className="text-red-400/60 text-xs font-bold uppercase tracking-[0.2em] mb-4">{loginConfig.tagline}</p>
               <h2 className="text-4xl xl:text-5xl font-black text-white leading-[1.1] mb-5">
-                {loginConfig.headline.split('\n').map((line, i, arr) => (
+                {(loginConfig.headline as string).split('\n').map((line: string, i: number, arr: string[]) => (
                   <React.Fragment key={i}>
                     {i === 1
                       ? <span className="text-transparent bg-clip-text bg-gradient-to-r from-red-400 to-orange-400">{line}</span>
@@ -612,7 +612,7 @@ export function LoginPage() {
 
             {/* Alt trust bar */}
             <div className="flex items-center gap-5 pt-6 border-t border-white/[0.06] flex-shrink-0">
-              {loginConfig.trustBar.map((item, i) => (
+              {(loginConfig.trustBar as { icon: string; text: string }[]).map((item, i) => (
                 <React.Fragment key={i}>
                   {i > 0 && <span className="w-px h-3 bg-white/8 flex-shrink-0" />}
                   <span className="flex items-center gap-1.5 text-[11px] text-white/25 font-medium whitespace-nowrap">
