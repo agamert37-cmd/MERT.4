@@ -53,7 +53,7 @@ function vehicleFromDb(row: any): Vehicle {
 export function AracPage() {
   const { user } = useAuth();
   const { currentEmployee } = useEmployee();
-  const { language } = useLanguage();
+  const { lang: language } = useLanguage();
   const { emit } = useModuleBus();
   
   // Güvenlik kontrolleri (RBAC) - merkezi utility

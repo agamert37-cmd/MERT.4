@@ -811,7 +811,7 @@ export function UretimPage() {
 
   const [defaults, setDefaults] = useState<UretimDefaults>(DEFAULT_URETIM_DEFAULTS);
 
-  const [activeView, setActiveView] = useState<'kayitlar' | 'yeni' | 'hizli' | 'karisim' | 'profiller' | 'analiz'>('kayitlar');
+  const [activeView, setActiveView] = useState<'kayitlar' | 'yeni' | 'hizli' | 'karisim' | 'profiller' | 'analiz' | 'kiyma'>('kayitlar');
   const [currentStep, setCurrentStep] = useState(0);
   const [selectedProfile, setSelectedProfile] = useState<UretimProfile | null>(null);
   const [showProfileModal, setShowProfileModal] = useState(false);

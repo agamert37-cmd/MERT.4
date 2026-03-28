@@ -339,7 +339,7 @@ export function StokPage() {
     });
 
     const unsub7 = on('stok:updated', (payload) => {
-      console.log('[StokPage] Stok güncellendi (kaynak:', payload.source, ')');
+      console.log('[StokPage] Stok güncellendi (kaynak:', payload.source ?? payload.productName, ')');
       refreshProducts();
     });
 

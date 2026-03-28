@@ -99,7 +99,7 @@ export function FilesPage() {
   const { currentEmployee } = useEmployee();
   const { user } = useAuth();
   const [exportingSection, setExportingSection] = useState<string | null>(null);
-  const { language } = useLanguage();
+  const { lang: language } = useLanguage();
   const { emit } = useModuleBus();
   const { canView } = getPagePermissions(user, currentEmployee, 'dosyalar');
 

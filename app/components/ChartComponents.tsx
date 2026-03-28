@@ -240,7 +240,7 @@ interface AnimatedCounterProps {
 export function AnimatedCounter({ value, prefix = '', suffix = '', duration = 1500, className = '', decimals = 0 }: AnimatedCounterProps) {
   const [display, setDisplay] = useState(0);
   const prevValue = useRef(0);
-  const frameRef = useRef<number>();
+  const frameRef = useRef<number | undefined>(undefined);
 
   useEffect(() => {
     const start = prevValue.current;
