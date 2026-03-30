@@ -175,7 +175,7 @@ export function SettingsPage() {
       const existingSettings = getFromStorage<any>(StorageKey.SYSTEM_SETTINGS) || {};
       const updatedBranding = { ...existingSettings, loginBranding: { images: updated } };
       setInStorage(StorageKey.SYSTEM_SETTINGS, updatedBranding);
-      kvSet('system_settings', updatedBranding).catch(() => {});
+      kvSet('system_settings', updatedBranding).catch(() => { toast.warning('Çapraz cihaz senkronizasyonu başarısız.'); });
       setNewImageTitle(''); setNewImageSubtitle(''); setSelectedFile(null); setUploadPreview(null);
       if (fileInputRef.current) fileInputRef.current.value = '';
       toast.success('Görsel yüklendi!');
@@ -191,7 +191,7 @@ export function SettingsPage() {
     const existingSettings = getFromStorage<any>(StorageKey.SYSTEM_SETTINGS) || {};
     const updatedBranding = { ...existingSettings, loginBranding: { images: updated } };
     setInStorage(StorageKey.SYSTEM_SETTINGS, updatedBranding);
-    kvSet('system_settings', updatedBranding).catch(() => {});
+    kvSet('system_settings', updatedBranding).catch(() => { toast.warning('Çapraz cihaz senkronizasyonu başarısız.'); });
     toast.success('Görsel kaldırıldı!');
   };
 
