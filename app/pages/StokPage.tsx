@@ -503,6 +503,31 @@ export function StokPage() {
     }).slice(0, 8);
   }, [safeCariList, partySearch, movementTypeForFilter]);
 
+  // ─── Maliyet hesaplama fonksiyonları (useMemo'dan ÖNCE tanımlanmalı) ──────
+  const calculateWeightedAverage = (product: Product): number => {
+    const additions = product.movements.filter(m => ['ALIS', 'URETIM_GIRIS', 'FATURA_ALIS'].includes(m.type));
+    if (additions.length === 0) return 0;
+    const totalQty = additions.reduce((sum, e) => sum + e.quantity, 0);
+    const totalCost = additions.reduce((sum, e) => sum + e.totalAmount, 0);
+    return totalQty > 0 ? totalCost / totalQty : 0;
+  };
+
+  const calculateWeightedAverageWithKdv = (product: Product): number => {
+    const additions = product.movements.filter(m => ['ALIS', 'URETIM_GIRIS', 'FATURA_ALIS'].includes(m.type));
+    if (additions.length === 0) return 0;
+    const totalQty = additions.reduce((sum, e) => sum + e.quantity, 0);
+    const totalGross = additions.reduce((sum, e) => sum + (e.grossAmount || e.totalAmount), 0);
+    return totalQty > 0 ? totalGross / totalQty : 0;
+  };
+
+  const calculateAverageSellPrice = (product: Product): number => {
+    const sales = product.movements.filter(m => m.type === 'SATIS');
+    if (sales.length === 0) return 0;
+    const totalQty = sales.reduce((sum, e) => sum + e.quantity, 0);
+    const totalRev = sales.reduce((sum, e) => sum + e.totalAmount, 0);
+    return totalQty > 0 ? totalRev / totalQty : 0;
+  };
+
   // Sorting & filtering
   const filteredProducts = useMemo(() => {
     let list = safeProducts.filter(p => {
@@ -524,31 +549,6 @@ export function StokPage() {
 
     return list;
   }, [safeProducts, searchTerm, selectedCategoryFilter, sortKey, sortDir]);
-
-  const calculateWeightedAverage = (product: Product): number => {
-    const additions = product.movements.filter(m => ['ALIS', 'URETIM_GIRIS', 'FATURA_ALIS'].includes(m.type));
-    if (additions.length === 0) return 0;
-    const totalQty = additions.reduce((sum, e) => sum + e.quantity, 0);
-    const totalCost = additions.reduce((sum, e) => sum + e.totalAmount, 0);
-    return totalQty > 0 ? totalCost / totalQty : 0;
-  };
-
-  // KDV dahil maliyet hesabı
-  const calculateWeightedAverageWithKdv = (product: Product): number => {
-    const additions = product.movements.filter(m => ['ALIS', 'URETIM_GIRIS', 'FATURA_ALIS'].includes(m.type));
-    if (additions.length === 0) return 0;
-    const totalQty = additions.reduce((sum, e) => sum + e.quantity, 0);
-    const totalGross = additions.reduce((sum, e) => sum + (e.grossAmount || e.totalAmount), 0);
-    return totalQty > 0 ? totalGross / totalQty : 0;
-  };
-
-  const calculateAverageSellPrice = (product: Product): number => {
-    const sales = product.movements.filter(m => m.type === 'SATIS');
-    if (sales.length === 0) return 0;
-    const totalQty = sales.reduce((sum, e) => sum + e.quantity, 0);
-    const totalRev = sales.reduce((sum, e) => sum + e.totalAmount, 0);
-    return totalQty > 0 ? totalRev / totalQty : 0;
-  };
 
   const formatAmount = (val: number) => `₺${(val || 0).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   const formatStock = (val: number, unit: string) => {
