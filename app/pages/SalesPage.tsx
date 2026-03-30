@@ -1722,7 +1722,7 @@ export function SalesPage() {
                     onClick={() => {
                       // Ödeme bilgisi opsiyonel - sadece ödeme yöntemi seçildiyse validate et
                       if (paymentInfo?.method) {
-                        if ((paymentInfo?.amount ?? 0) <= 0) {
+                        if (isNaN(paymentInfo?.amount ?? NaN) || (paymentInfo?.amount ?? 0) <= 0) {
                           toast.error(t('salesPage.enterPaymentAmount'));
                           return;
                         }

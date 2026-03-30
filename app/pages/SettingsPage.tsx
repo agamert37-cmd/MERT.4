@@ -146,7 +146,7 @@ export function SettingsPage() {
     const updatedSettings = { ...existingSettings, companyInfo };
     setInStorage(StorageKey.SYSTEM_SETTINGS, updatedSettings);
     // BUG FIX [AJAN-2]: Şirket bilgileri KV store'a da yaz — çapraz cihaz sync
-    kvSet('system_settings', updatedSettings).catch(e => console.error('[Settings] kv sync:', e));
+    kvSet('system_settings', updatedSettings).catch(() => toast.warning('Çapraz cihaz senkronizasyonu başarısız. Değişiklikler yalnızca bu cihazda kaydedildi.'));
     logActivity('settings_change', 'Şirket bilgileri güncellendi', { employeeName: user?.name, page: 'Ayarlar', description: `Şirket bilgileri güncellendi: ${companyInfo.companyName}` });
     toast.success('Şirket bilgileri kaydedildi!');
   };

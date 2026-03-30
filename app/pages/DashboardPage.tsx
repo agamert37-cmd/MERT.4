@@ -159,8 +159,9 @@ export function DashboardPage() {
   const handleRefresh = useCallback(() => {
     setIsRefreshing(true);
     setRefreshCounter(c => c + 1);
-    setTimeout(() => setIsRefreshing(false), 800);
+    const tid = setTimeout(() => setIsRefreshing(false), 800);
     toast.success('Veriler güncellendi');
+    return () => clearTimeout(tid);
   }, []);
   
   const now = new Date();

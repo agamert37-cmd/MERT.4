@@ -13,6 +13,7 @@ import html2canvas from 'html2canvas';
 import { useAuth } from '../contexts/AuthContext';
 import { useLanguage } from '../contexts/LanguageContext';
 import { logActivity } from '../utils/activityLogger';
+import { toast } from 'sonner';
 import {
   BarChart, Bar, AreaChart, Area, LineChart, Line,
   PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid,
@@ -354,7 +355,7 @@ function ChartCard({ response }: { response: AIResponse }) {
       pdf.addImage(imgData, 'PNG', 14, 40, pdfWidth, pdfHeight);
       pdf.save(`Rapor_${new Date().getTime()}.pdf`);
     } catch (err) {
-      console.error('PDF oluşturulamadı:', err);
+      toast.error('PDF oluşturulurken hata oluştu. Lütfen tekrar deneyin.');
     } finally {
       setIsExporting(false);
     }

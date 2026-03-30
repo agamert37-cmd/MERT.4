@@ -20,7 +20,7 @@ import { analyzePasswordStrength, getSecurityPolicy, checkRateLimit, generateCSR
 import { useSecurityMonitor } from '../hooks/useSecurityMonitor';
 import { PasswordStrengthBar } from '../components/PasswordStrengthBar';
 import {
-  AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
+  AreaChart, Area, XAxis, Tooltip, ResponsiveContainer
 } from 'recharts';
 
 interface Personnel {

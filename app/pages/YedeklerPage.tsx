@@ -192,7 +192,7 @@ export function YedeklerPage() {
       // Yedek verisini localStorage'a kaydet (geri yükleme için)
       try {
         localStorage.setItem(`pouchdb_backup_data_${meta.id}`, JSON.stringify(result.backup));
-      } catch { /* Büyük veri sığmayabilir — sadece indirme yapılır */ }
+      } catch { toast.warning('Yedek localStorage\'a kaydedilemedi (kota dolmuş olabilir). Dosya indirme devam ediyor.'); }
 
       setCreateProgress('İndirme başlatılıyor...');
       downloadBackup(result.backup);
