@@ -911,7 +911,7 @@ export function PazarlamaPage() {
 
   const addItem = <T extends { id: string }>(key: keyof PazarlamaContent, newItem: T) => {
     if (!checkEditPerm('add')) return;
-    updateContent({ [key]: [...(content[key] as T[]), newItem] } as any);
+    updateContent({ [key]: [...(content[key] as unknown as T[]), newItem] } as any);
     sec.auditLog('pazarlama_item_add', newItem.id, String(key));
     logActivity('custom', `Pazarlama öğesi eklendi: ${key}`, { employeeName: user?.name, page: 'Pazarlama' });
   };
@@ -925,7 +925,7 @@ export function PazarlamaPage() {
   };
   const updateItem = <T extends { id: string }>(key: keyof PazarlamaContent, id: string, updates: Partial<T>) => {
     if (!canEdit) { toast.error('Düzenleme için yönetici yetkisi gereklidir.'); return; }
-    updateContent({ [key]: (content[key] as T[]).map((i: any) => i.id === id ? { ...i, ...updates } : i) } as any);
+    updateContent({ [key]: (content[key] as unknown as T[]).map((i: any) => i.id === id ? { ...i, ...updates } : i) } as any);
   };
   const moveItem = (key: keyof PazarlamaContent, id: string, direction: 'up' | 'down') => {
     if (!checkEditPerm('move')) return;

@@ -136,8 +136,9 @@ export function SyncStatusBar({ tableName }: SyncStatusBarProps) {
   }
 
   const isConnected = setupStatus.isConnected;
-  const totalRecords = setupStatus.tables.reduce((sum, t) => sum + t.rowCount, 0);
-  const tablesWithData = setupStatus.tables.filter(t => t.rowCount > 0).length;
+  const tables = setupStatus.tables ?? [];
+  const totalRecords = tables.reduce((sum: number, t: { rowCount: number }) => sum + t.rowCount, 0);
+  const tablesWithData = tables.filter((t: { rowCount: number }) => t.rowCount > 0).length;
 
   return (
     <div className="mb-4">
@@ -204,7 +205,7 @@ export function SyncStatusBar({ tableName }: SyncStatusBarProps) {
                 animate={{ opacity: 1, scale: 1 }}
                 className="text-[10px] text-white/30 font-mono"
               >
-                {totalRecords} kayıt · {tablesWithData}/{setupStatus.tables.length} tablo
+                {totalRecords} kayıt · {tablesWithData}/{tables.length} tablo
               </motion.span>
             )}
             {setupStatus.latencyMs && isConnected && (
@@ -243,7 +244,7 @@ export function SyncStatusBar({ tableName }: SyncStatusBarProps) {
 
         {/* Tablo dots */}
         <div className="flex items-center gap-0.5 flex-shrink-0" onClick={e => e.stopPropagation()}>
-          {setupStatus.tables.map((t, i) => (
+          {tables.map((t, i) => (
             <motion.div
               key={t.table}
               title={`${t.displayName}: ${t.rowCount} kayıt`}
@@ -349,7 +350,7 @@ export function SyncStatusBar({ tableName }: SyncStatusBarProps) {
               {/* Tablo grid */}
               <div className="p-3">
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
-                  {setupStatus.tables.map((t, i) => (
+                  {tables.map((t, i) => (
                     <motion.div
                       key={t.table}
                       initial={{ opacity: 0, y: 8, scale: 0.95 }}
@@ -434,7 +435,7 @@ export function SyncBadge({ tableName }: { tableName: string }) {
     );
   }
 
-  const table = setupStatus.tables.find(t => t.table === tableName);
+  const table = (setupStatus.tables ?? []).find(t => t.table === tableName);
   if (!table) return null;
 
   if (!setupStatus.isConnected) {

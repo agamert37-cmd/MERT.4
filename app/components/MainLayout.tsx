@@ -9,7 +9,7 @@ import { NodeStatusBadge } from './NodeStatusPanel';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import * as Tooltip from '@radix-ui/react-tooltip';
 import { createSystemBackup, getFromStorage, StorageKey } from '../utils/storage';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion, AnimatePresence, type Variants } from 'motion/react';
 import { 
   LayoutDashboard, 
   Package, 
@@ -125,7 +125,7 @@ const springConfig = {
   mass: 1.0
 };
 
-const pageVariants = {
+const pageVariants: Variants = {
   initial: {
     opacity: 0,
     y: 20,

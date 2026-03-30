@@ -94,7 +94,7 @@ export function YedeklerPage() {
   const [cloudBackups] = useState<BackupMeta[]>([]);
   const [filteredCloudBackups] = useState<BackupMeta[]>([]);
   const [verifyingId, setVerifyingId] = useState<string | null>(null);
-  const [verifyResult] = useState<{ ok: boolean; message: string } | null>(null);
+  const [verifyResult] = useState<{ ok: boolean; message: string; id?: string; verified?: boolean } | null>(null);
   const fetchCloudBackups = useCallback(() => { toast.info('Bulut yedekleme henüz yapılandırılmadı (CouchDB gerekli)'); }, []);
   const handleCreateCloudBackup = useCallback(() => { toast.info('Bulut yedekleme için CouchDB yapılandırın'); }, []);
   const handleVerifyBackup = useCallback((_id: string) => { toast.info('Doğrulama için CouchDB gerekli'); }, []);
@@ -503,9 +503,9 @@ export function YedeklerPage() {
                           )}
                         </div>
                         <div className="flex items-center gap-3 text-[11px] text-muted-foreground/60">
-                          <span className="tech-number">{backup.totalKeys} kayıt</span>
+                          <span className="tech-number">{backup.totalDocs} kayıt</span>
                           <span>•</span>
-                          <span className="tech-number">{(backup.dataSizeBytes / 1024).toFixed(0)} KB</span>
+                          <span className="tech-number">{backup.sizeKB.toFixed(0)} KB</span>
                           <span>•</span>
                           <span className="font-mono text-[9px] text-muted-foreground/40 truncate max-w-[120px]" title={backup.checksum}>
                             SHA: {backup.checksum?.substring(0, 12)}...
@@ -530,7 +530,7 @@ export function YedeklerPage() {
                           className="p-2 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 transition-all active:scale-95 disabled:opacity-50">
                           {isVerifying ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ShieldCheck className="w-3.5 h-3.5" />}
                         </button>
-                        <button onClick={() => handleDownloadCloudBackup(backup)} title="İndir"
+                        <button onClick={() => handleDownloadCloudBackup(backup.id)} title="İndir"
                           className="p-2 rounded-lg bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 transition-all active:scale-95">
                           <Download className="w-3.5 h-3.5" />
                         </button>
@@ -587,7 +587,7 @@ export function YedeklerPage() {
                           {new Date(b.timestamp).toLocaleDateString('tr-TR')} {new Date(b.timestamp).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}
                           {isTableBackup && <span className="ml-2 text-[9px] px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-400 border border-emerald-500/20">Tablo Yedeği</span>}
                         </p>
-                        <p className="text-[10px] text-muted-foreground/50">{b.keysCount} satır • {b.dataSize ? `${(b.dataSize / 1024).toFixed(0)} KB` : '-'} • {b.type}</p>
+                        <p className="text-[10px] text-muted-foreground/50">{b.totalDocs} satır • {b.sizeKB ? `${b.sizeKB.toFixed(0)} KB` : '-'} • {b.type}</p>
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
@@ -662,7 +662,7 @@ export function YedeklerPage() {
                 </div>
               )}
 
-              <button onClick={saveAutoBackupConfig}
+              <button onClick={saveAutoBackupConfigHandler}
                 className="w-full py-3 rounded-xl text-sm font-bold bg-gradient-to-r from-amber-600/80 to-orange-600/80 hover:from-amber-500 hover:to-orange-500 text-white transition-all active:scale-[0.98]">
                 Ayarları Kaydet
               </button>
@@ -752,9 +752,9 @@ export function YedeklerPage() {
                 <div className="flex items-center gap-3">
                   <div className={`w-2.5 h-2.5 rounded-full ${isLocalHealthy() ? 'bg-emerald-400 animate-pulse' : 'bg-red-400'}`} />
                   <span className="text-xs text-muted-foreground/60">
-                    {isLocalHealthy() ? `Bağlı — ${lc.url}` : `Bağlantı Kopuk — ${lc.url}`}
+                    {isLocalHealthy() ? `Bağlı — ${(lc as any).url ?? ''}` : `Bağlantı Kopuk — ${(lc as any).url ?? ''}`}
                   </span>
-                  {lc.lastSyncToCloud && <span className="text-[9px] text-muted-foreground/40">Son sync: {new Date(lc.lastSyncToCloud).toLocaleString('tr-TR')}</span>}
+                  {(lc as any).lastSyncToCloud && <span className="text-[9px] text-muted-foreground/40">Son sync: {new Date((lc as any).lastSyncToCloud).toLocaleString('tr-TR')}</span>}
                 </div>
               ) : (
                 <p className="text-xs text-muted-foreground/40">Yerel Supabase devre dışı. Ayarlar sayfasından yapılandırabilirsiniz.</p>
@@ -848,8 +848,8 @@ export function YedeklerPage() {
                 {restoreFileContent && (
                   <>
                     <div className="flex justify-between"><span className="text-muted-foreground/60">Uygulama:</span><span className="text-white">{restoreFileContent.appName || 'Bilinmiyor'}</span></div>
-                    <div className="flex justify-between"><span className="text-muted-foreground/60">Tarih:</span><span className="text-white">{restoreFileContent.timestamp ? new Date(restoreFileContent.timestamp).toLocaleString('tr-TR') : '-'}</span></div>
-                    <div className="flex justify-between"><span className="text-muted-foreground/60">Kayıt:</span><span className="text-white">{restoreFileContent.keysCount || Object.keys(restoreFileContent.data || {}).length}</span></div>
+                    <div className="flex justify-between"><span className="text-muted-foreground/60">Tarih:</span><span className="text-white">{restoreFileContent.createdAt ? new Date(restoreFileContent.createdAt).toLocaleString('tr-TR') : '-'}</span></div>
+                    <div className="flex justify-between"><span className="text-muted-foreground/60">Kayıt:</span><span className="text-white">{restoreFileContent.meta?.totalDocs ?? Object.keys(restoreFileContent.tables || {}).length}</span></div>
                   </>
                 )}
               </div>
