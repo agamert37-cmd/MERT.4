@@ -57,8 +57,17 @@ export function setInStorage<T>(key: string, value: T): void {
     localStorage.setItem(STORAGE_PREFIX + key, JSON.stringify(value));
     // storage_update event yayınla (DashboardPage vb. dinleyiciler için)
     setTimeout(() => window.dispatchEvent(new Event('storage_update')), 0);
-  } catch (e) {
-    console.error('Storage write error:', e);
+  } catch (e: any) {
+    const isQuota = e?.name === 'QuotaExceededError' || e?.code === 22 || e?.code === 1014;
+    if (isQuota) {
+      console.error('[Storage] Depolama kotası aşıldı:', key);
+      // Dinamik import ile toast göster — storage.ts React bağımlılığı taşımaz
+      import('sonner').then(({ toast }) => {
+        toast.error('Depolama alanı doldu! Eski yedekleri silerek yer açın.', { id: 'storage-quota' });
+      }).catch(() => {});
+    } else {
+      console.error('Storage write error:', e);
+    }
   }
 }
 
