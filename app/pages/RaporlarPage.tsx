@@ -707,7 +707,7 @@ export function RaporlarPage() {
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-4 sm:mb-6">
               <div className="flex items-center gap-3">
                 <div className="p-2 sm:p-2.5 rounded-xl bg-blue-500/10 text-blue-400"><DollarSign className="w-4 h-4 sm:w-5 sm:h-5"/></div>
-                <div><h2 className="font-bold text-base sm:text-lg">Finansal Özet</h2><p className="text-[10px] sm:text-xs text-gray-500">Gelir, Gider ve Net Kâr karşılaştırması</p></div>
+                <div><h2 className="font-bold text-base sm:text-lg">{t('reports.financialSummary')}</h2><p className="text-[10px] sm:text-xs text-gray-500">{t('reports.financialSubtitle')}</p></div>
               </div>
               <PdfButton onClick={() => { generateFinancialPDF(incomeData, expenseData, dateRange.start, dateRange.end, currentEmployee?.name || 'Admin'); logActivity('report_export', 'Finans raporu PDF indirildi', { employeeName: user?.name, page: 'Raporlar' }); toast.success('PDF indirildi.'); }} />
             </div>
@@ -725,22 +725,22 @@ export function RaporlarPage() {
                 {netProfit >= 0 ? <TrendingUp className="w-5 h-5" /> : <TrendingDown className="w-5 h-5" />}
               </div>
               <div>
-                <p className="text-xs text-gray-400">Dönem Sonucu</p>
+                <p className="text-xs text-gray-400">{t('reports.periodResult')}</p>
                 <p className={`text-lg font-black ${netProfit >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                  {netProfit >= 0 ? '+' : '-'}₺{Math.abs(netProfit).toLocaleString('tr-TR')} {netProfit >= 0 ? 'KÂR' : 'ZARAR'}
+                  {netProfit >= 0 ? '+' : '-'}₺{Math.abs(netProfit).toLocaleString('tr-TR')} {netProfit >= 0 ? t('reports.profit') : t('reports.loss')}
                 </p>
               </div>
             </div>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
             <div className="p-4 sm:p-6 rounded-2xl sm:rounded-3xl bg-[#111] border border-white/5">
-              <div className="flex justify-between items-center mb-3"><h2 className="text-lg sm:text-xl font-bold text-emerald-400 flex items-center gap-2"><ArrowUpRight className="w-4 h-4 sm:w-5 sm:h-5"/> Gelirler</h2></div>
+              <div className="flex justify-between items-center mb-3"><h2 className="text-lg sm:text-xl font-bold text-emerald-400 flex items-center gap-2"><ArrowUpRight className="w-4 h-4 sm:w-5 sm:h-5"/> {t('reports.incomes')}</h2></div>
               {incomeCategories.length > 1 && <div className="mb-3"><CategoryFilter categories={incomeCategories} selected={incomeCategoryFilter} onChange={setIncomeCategoryFilter} /></div>}
               <DynamicTable data={filteredIncome} columns={[
                 { key: 'date', label: t('reports.date'), render: i => <span className="font-mono text-xs text-gray-400">{i.date}</span> },
                 { key: 'category', label: t('reports.category'), render: i => <StatusBadge status="success" label={i.category} /> },
                 { key: 'description', label: t('reports.description'), render: i => <span className="font-medium text-sm">{i.description}</span> },
-                { key: 'amount', label: 'Tutar', align: 'right', render: i => <span className="font-black text-emerald-400">+₺{i.amount.toLocaleString('tr-TR')}</span> },
+                { key: 'amount', label: t('reports.amount'), align: 'right', render: i => <span className="font-black text-emerald-400">+₺{i.amount.toLocaleString('tr-TR')}</span> },
               ]} pageSize={10} searchable searchPlaceholder="Gelir ara..." emptyMessage="Gelir kaydı yok." accentColor="#10b981"
                 footer={filteredIncome.length > 0 ? (
                   <tr className="border-t-2 border-emerald-500/30 bg-emerald-500/5">
@@ -753,13 +753,13 @@ export function RaporlarPage() {
               />
             </div>
             <div className="p-4 sm:p-6 rounded-2xl sm:rounded-3xl bg-[#111] border border-white/5">
-              <div className="flex justify-between items-center mb-3"><h2 className="text-lg sm:text-xl font-bold text-red-400 flex items-center gap-2"><ArrowDownRight className="w-4 h-4 sm:w-5 sm:h-5"/> Giderler</h2></div>
+              <div className="flex justify-between items-center mb-3"><h2 className="text-lg sm:text-xl font-bold text-red-400 flex items-center gap-2"><ArrowDownRight className="w-4 h-4 sm:w-5 sm:h-5"/> {t('reports.expenses')}</h2></div>
               {expenseCategories.length > 1 && <div className="mb-3"><CategoryFilter categories={expenseCategories} selected={expenseCategoryFilter} onChange={setExpenseCategoryFilter} /></div>}
               <DynamicTable data={filteredExpense} columns={[
                 { key: 'date', label: t('reports.date'), render: i => <span className="font-mono text-xs text-gray-400">{i.date}</span> },
                 { key: 'category', label: t('reports.category'), render: i => <StatusBadge status="danger" label={i.category} /> },
                 { key: 'description', label: t('reports.description'), render: i => <span className="font-medium text-sm">{i.description}</span> },
-                { key: 'amount', label: 'Tutar', align: 'right', render: i => <span className="font-black text-red-400">-₺{i.amount.toLocaleString('tr-TR')}</span> },
+                { key: 'amount', label: t('reports.amount'), align: 'right', render: i => <span className="font-black text-red-400">-₺{i.amount.toLocaleString('tr-TR')}</span> },
               ]} pageSize={10} searchable searchPlaceholder="Gider ara..." emptyMessage="Gider kaydı yok." accentColor="#ef4444"
                 footer={filteredExpense.length > 0 ? (
                   <tr className="border-t-2 border-red-500/30 bg-red-500/5">
@@ -803,7 +803,7 @@ export function RaporlarPage() {
                 <div className="flex gap-1.5">
                   {(['all', 'critical', 'ok'] as const).map(s => (
                     <button key={s} onClick={() => setStockStatusFilter(s)} className={`px-3 py-1.5 rounded-lg text-[10px] font-bold transition-all ${stockStatusFilter === s ? (s === 'critical' ? 'bg-red-600 text-white' : s === 'ok' ? 'bg-emerald-600 text-white' : 'bg-blue-600 text-white') : 'bg-white/5 text-gray-400 hover:bg-white/10'}`}>
-                      {s === 'all' ? 'Tümü' : s === 'critical' ? `Kritik (${stockData.filter(x => x.stock <= x.minStock).length})` : `Normal (${stockData.filter(x => x.stock > x.minStock).length})`}
+                      {s === 'all' ? t('reports.all') : s === 'critical' ? `${t('reports.critical')} (${stockData.filter(x => x.stock <= x.minStock).length})` : `${t('reports.normal')} (${stockData.filter(x => x.stock > x.minStock).length})`}
                     </button>
                   ))}
                 </div>
@@ -828,9 +828,9 @@ export function RaporlarPage() {
                     );
                   }},
                   { key: 'status', label: t('reports.status'), align: 'center', render: i => (
-                    i.stock <= 0 ? <StatusBadge status="danger" label="TÜKENDİ" />
-                    : i.stock <= i.minStock ? <StatusBadge status="warning" label="KRİTİK" />
-                    : <StatusBadge status="success" label="YETERLİ" />
+                    i.stock <= 0 ? <StatusBadge status="danger" label={t('reports.depleted')} />
+                    : i.stock <= i.minStock ? <StatusBadge status="warning" label={t('reports.critical')} />
+                    : <StatusBadge status="success" label={t('reports.sufficient')} />
                   )},
                   { key: 'buyPrice', label: t('reports.buyPrice'), align: 'right', render: i => <span className="text-xs text-gray-400">₺{i.buyPrice.toLocaleString('tr-TR')}</span> },
                   { key: 'price', label: t('reports.sellPrice'), align: 'right', render: i => <span className="text-xs font-bold text-gray-300">₺{i.price.toLocaleString('tr-TR')}</span> },
@@ -902,10 +902,10 @@ export function RaporlarPage() {
             {/* Personel Özet */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
               {[
-                { label: 'Toplam Personel', value: `${personelPerformansData.length}`, color: '#06b6d4' },
+                { label: t('reports.totalPersonnel'), value: `${personelPerformansData.length}`, color: '#06b6d4' },
                 { label: t('reports.totalSales'), value: `₺${personelPerformansData.reduce((s: number, p: any) => s + p.salesTotal, 0).toLocaleString('tr-TR')}`, color: '#10b981' },
-                { label: 'Toplam İade', value: `₺${personelPerformansData.reduce((s: number, p: any) => s + p.returnTotal, 0).toLocaleString('tr-TR')}`, color: '#f59e0b' },
-                { label: 'Ort. Performans', value: `₺${personelPerformansData.length > 0 ? Math.round(personelPerformansData.reduce((s: number, p: any) => s + p.netSales, 0) / personelPerformansData.length).toLocaleString('tr-TR') : '0'}`, color: '#3b82f6' },
+                { label: t('reports.totalReturns'), value: `₺${personelPerformansData.reduce((s: number, p: any) => s + p.returnTotal, 0).toLocaleString('tr-TR')}`, color: '#f59e0b' },
+                { label: t('reports.avgPerformance'), value: `₺${personelPerformansData.length > 0 ? Math.round(personelPerformansData.reduce((s: number, p: any) => s + p.netSales, 0) / personelPerformansData.length).toLocaleString('tr-TR') : '0'}`, color: '#3b82f6' },
               ].map((s, i) => (
                 <div key={i} className="p-3 rounded-xl bg-black/30 border border-white/5">
                   <p className="text-[10px] text-gray-500 font-bold uppercase tracking-wider">{s.label}</p>
@@ -917,7 +917,7 @@ export function RaporlarPage() {
 
             <div className="p-4 sm:p-6 rounded-2xl sm:rounded-3xl bg-[#111] border border-white/5">
               <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-4">
-                <h2 className="text-lg sm:text-xl font-bold flex items-center gap-2"><UserCheck className="w-5 h-5 text-cyan-400" /> Personel Performans</h2>
+                <h2 className="text-lg sm:text-xl font-bold flex items-center gap-2"><UserCheck className="w-5 h-5 text-cyan-400" /> {t('reports.personnelPerformance')}</h2>
                 <PdfButton onClick={() => {
                   const pdfData: PersonelPerformansPDFData = {
                     dateRange: `${dateRange.start} - ${dateRange.end}`,
@@ -945,19 +945,19 @@ export function RaporlarPage() {
                   { key: 'fisCount', label: t('reports.transactions'), align: 'center', render: (i: any) => (
                     <span className="px-2.5 py-1 bg-white/5 rounded-lg text-xs font-mono font-bold">{i.fisCount}</span>
                   )},
-                  { key: 'salesTotal', label: 'Brüt Satış', align: 'right', render: (i: any) => (
+                  { key: 'salesTotal', label: t('reports.grossSales'), align: 'right', render: (i: any) => (
                     <span className="text-emerald-400 font-bold text-sm">₺{i.salesTotal.toLocaleString('tr-TR')}</span>
                   )},
-                  { key: 'returnTotal', label: 'İade', align: 'right', render: (i: any) => (
+                  { key: 'returnTotal', label: t('reports.return'), align: 'right', render: (i: any) => (
                     <span className="text-orange-400 text-xs">-₺{i.returnTotal.toLocaleString('tr-TR')}</span>
                   )},
-                  { key: 'netSales', label: 'Net Performans', align: 'right', render: (i: any) => (
+                  { key: 'netSales', label: t('reports.netPerformance'), align: 'right', render: (i: any) => (
                     <div className="flex flex-col items-end gap-1">
                       <span className="font-black text-sm text-blue-400">₺{i.netSales.toLocaleString('tr-TR')}</span>
                       <div className="w-20"><InlineBar value={Math.max(i.netSales, 0)} max={maxPersonelSales} color="#3b82f6" /></div>
                     </div>
                   )},
-                  { key: 'share', label: 'Pay', align: 'center', render: (i: any) => {
+                  { key: 'share', label: t('reports.share'), align: 'center', render: (i: any) => {
                     const totalNet = personelPerformansData.reduce((s: number, p: any) => s + p.netSales, 0);
                     const pct = totalNet > 0 ? (i.netSales / totalNet * 100) : 0;
                     return <span className="text-xs font-bold text-purple-400">%{pct.toFixed(1)}</span>;
@@ -999,10 +999,10 @@ export function RaporlarPage() {
           <div className="space-y-4 sm:space-y-6">
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
               {[
-                { label: 'Toplam Log', value: `${securityLogs.length}`, color: '#3b82f6', icon: Activity },
-                { label: 'Giriş Logları', value: `${securityLogs.filter(l => l.action.includes('login')).length}`, color: '#10b981', icon: LogIn },
-                { label: 'Silme İşlemleri', value: `${securityLogs.filter(l => l.action.includes('delete')).length}`, color: '#ef4444', icon: Trash2 },
-                { label: 'Dışa Aktarım', value: `${securityLogs.filter(l => l.action.includes('export')).length}`, color: '#f59e0b', icon: Download },
+                { label: t('reports.totalLogs'), value: `${securityLogs.length}`, color: '#3b82f6', icon: Activity },
+                { label: t('reports.loginLogs'), value: `${securityLogs.filter(l => l.action.includes('login')).length}`, color: '#10b981', icon: LogIn },
+                { label: t('reports.deletionLogs'), value: `${securityLogs.filter(l => l.action.includes('delete')).length}`, color: '#ef4444', icon: Trash2 },
+                { label: t('reports.exportLogs'), value: `${securityLogs.filter(l => l.action.includes('export')).length}`, color: '#f59e0b', icon: Download },
               ].map((s, i) => (
                 <div key={i} className="p-3 rounded-xl bg-black/30 border border-white/5 flex items-center gap-3">
                   <div className="p-2 rounded-lg" style={{ background: `${s.color}15` }}>
@@ -1019,21 +1019,21 @@ export function RaporlarPage() {
             <div className="p-4 sm:p-6 rounded-2xl sm:rounded-3xl bg-[#111] border border-white/5">
               <div className="flex items-center gap-3 mb-4">
                 <div className="p-2.5 rounded-xl bg-red-500/10 text-red-400"><Shield className="w-5 h-5" /></div>
-                <div><h2 className="font-bold text-lg">Güvenlik ve Aktivite Logları</h2><p className="text-[10px] text-gray-500">Sistem üzerinde yapılan tüm işlemler</p></div>
+                <div><h2 className="font-bold text-lg">{t('reports.securityTitle')}</h2><p className="text-[10px] text-gray-500">{t('reports.securitySubtitle')}</p></div>
               </div>
               <DynamicTable
                 data={securityLogs}
                 columns={[
-                  { key: 'time', label: 'Zaman', render: i => <span className="font-mono text-[10px] text-gray-500">{i.time}</span> },
-                  { key: 'user', label: 'Kullanıcı', render: i => <span className="font-bold text-sm">{i.user}</span> },
-                  { key: 'action', label: 'İşlem', render: i => (
+                  { key: 'time', label: t('reports.time'), render: i => <span className="font-mono text-[10px] text-gray-500">{i.time}</span> },
+                  { key: 'user', label: t('reports.user'), render: i => <span className="font-bold text-sm">{i.user}</span> },
+                  { key: 'action', label: t('reports.transactions'), render: i => (
                     <StatusBadge
                       status={i.level as any}
                       label={i.action.replace(/_/g, ' ').toUpperCase().slice(0, 20)}
                     />
                   )},
-                  { key: 'detail', label: 'Detay', render: i => <span className="text-xs text-gray-400 line-clamp-1 max-w-[200px]">{i.detail}</span> },
-                  { key: 'page', label: 'Sayfa', align: 'center', render: i => (
+                  { key: 'detail', label: t('reports.detail'), render: i => <span className="text-xs text-gray-400 line-clamp-1 max-w-[200px]">{i.detail}</span> },
+                  { key: 'page', label: t('reports.page'), align: 'center', render: i => (
                     <span className="px-2 py-0.5 bg-white/5 rounded text-[10px] text-gray-400">{i.page}</span>
                   )},
                 ]}
@@ -1095,10 +1095,10 @@ export function RaporlarPage() {
                 {/* Özet kartlar */}
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                   {[
-                    { label: 'Tahmini Toplam Kâr', value: `₺${totalEstProfit.toLocaleString('tr-TR', { maximumFractionDigits: 0 })}`, color: '#10b981' },
-                    { label: 'Ort. Kâr Marjı', value: `%${avgMargin.toFixed(1)}`, color: '#3b82f6' },
-                    { label: 'Analiz Edilen Ürün', value: `${karData.length}`, color: '#8b5cf6' },
-                    { label: 'Kârsız Ürün', value: `${karData.filter((p: any) => p.margin !== null && p.margin <= 0).length}`, color: '#ef4444' },
+                    { label: t('reports.estimatedTotalProfit'), value: `₺${totalEstProfit.toLocaleString('tr-TR', { maximumFractionDigits: 0 })}`, color: '#10b981' },
+                    { label: t('reports.avgProfitMargin'), value: `%${avgMargin.toFixed(1)}`, color: '#3b82f6' },
+                    { label: t('reports.analyzedProducts'), value: `${karData.length}`, color: '#8b5cf6' },
+                    { label: t('reports.unprofitableProducts'), value: `${karData.filter((p: any) => p.margin !== null && p.margin <= 0).length}`, color: '#ef4444' },
                   ].map((s, i) => (
                     <div key={i} className="p-3 rounded-xl bg-black/30 border border-white/5">
                       <p className="text-[10px] text-gray-500 font-bold uppercase tracking-wider">{s.label}</p>
@@ -1111,23 +1111,23 @@ export function RaporlarPage() {
                   <div className="flex items-center gap-3 mb-5">
                     <div className="p-2.5 rounded-xl bg-emerald-500/10"><Target className="w-5 h-5 text-emerald-400" /></div>
                     <div>
-                      <h2 className="font-bold text-lg">Ürün Bazlı Kâr Marjı</h2>
-                      <p className="text-[10px] text-gray-500">Ağırlıklı ortalama alış fiyatı × satış fiyatı karşılaştırması</p>
+                      <h2 className="font-bold text-lg">{t('reports.productProfitMargin')}</h2>
+                      <p className="text-[10px] text-gray-500">{t('reports.productProfitSubtitle')}</p>
                     </div>
                   </div>
 
                   {sorted.length === 0 ? (
                     <div className="py-12 text-center">
                       <Target className="w-10 h-10 text-gray-600 mx-auto mb-3" />
-                      <p className="text-sm text-gray-500">Kâr analizi için stok hareketi gerekli</p>
-                      <p className="text-xs text-gray-600 mt-1">Alış ve satış işlemleri yapıldıkça bu grafik dolacaktır</p>
+                      <p className="text-sm text-gray-500">{t('reports.profitAnalysisEmpty')}</p>
+                      <p className="text-xs text-gray-600 mt-1">{t('reports.profitAnalysisEmptyDesc')}</p>
                     </div>
                   ) : (
                     <div className="overflow-x-auto">
                       <table className="w-full text-sm">
                         <thead>
                           <tr className="border-b border-white/5">
-                            {['Ürün', 'Kategori', 'Ort. Alış', 'Satış Fiyatı', 'Birim Kâr', 'Marj %', 'Sat. Miktar', 'Tahmini Kâr'].map(h => (
+                            {[t('reports.product'), t('reports.category'), t('reports.avgBuyPrice'), t('reports.sellPrice'), t('reports.unitProfit'), t('reports.marginPct'), t('reports.soldQty'), t('reports.estimatedProfit')].map(h => (
                               <th key={h} className="text-left py-2 px-3 text-[10px] font-bold text-gray-500 uppercase tracking-wider whitespace-nowrap">{h}</th>
                             ))}
                           </tr>
