@@ -6,24 +6,29 @@ services:
     ports:
       - "5984:5984"
     environment:
-      COUCHDB_USER: admin
-      COUCHDB_PASSWORD: mert2024
+      COUCHDB_USER: ${COUCHDB_USER:-admin}
+      COUCHDB_PASSWORD: ${COUCHDB_PASSWORD:-changeme}
     volumes:
       - couchdb_data:/opt/couchdb/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5984/_up"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
 
   # CouchDB veritabanlarını oluştur (ilk başlatmada)
   couchdb-init:
     image: curlimages/curl:latest
     container_name: mert-couchdb-init
     depends_on:
-      - couchdb
+      couchdb:
+        condition: service_healthy
     restart: "no"
     entrypoint: ["/bin/sh", "-c"]
     command:
       - |
-        echo "CouchDB hazır olana kadar bekleniyor..."
-        sleep 5
-        COUCH="http://admin:mert2024@couchdb:5984"
+        COUCH="http://${COUCHDB_USER:-admin}:${COUCHDB_PASSWORD:-changeme}@couchdb:5984"
         # Sistem veritabanları
         for db in _users _replicator _global_changes; do
           curl -s -X PUT "$$COUCH/$$db" 2>/dev/null || true
@@ -48,7 +53,8 @@ services:
       - "8080:80"
     restart: unless-stopped
     depends_on:
-      - couchdb
+      couchdb:
+        condition: service_healthy
 
 volumes:
   couchdb_data:

@@ -7,6 +7,7 @@ import { DB_PREFIX, KV_DB_NAME, TABLE_NAMES, getCouchDbAuthUrl, getCouchDbConfig
 const instances = new Map<string, PouchDB.Database>();
 const syncs = new Map<string, PouchDB.Replication.Sync<{}>>();
 const peerSyncs = new Map<string, PouchDB.Replication.Sync<{}>>();
+const staggerTimers: ReturnType<typeof setTimeout>[] = [];
 
 /** Tablo için PouchDB instance döndür (yoksa oluştur) */
 export function getDb(tableName: string): PouchDB.Database {
@@ -38,7 +39,21 @@ export function startSync(tableName: string): PouchDB.Replication.Sync<{}> | nul
   const sync = localDb.sync(remoteDb, {
     live: true,
     retry: true,
-  });
+  })
+    .on('error', (err: any) => {
+      console.error(`[PouchDB] Sync hatası — ${dbName}:`, err?.message || err);
+    })
+    .on('denied', (err: any) => {
+      console.warn(`[PouchDB] Sync reddedildi — ${dbName}:`, err?.message || err);
+    })
+    .on('active', () => {
+      console.info(`[PouchDB] Sync yeniden aktif — ${dbName}`);
+    })
+    .on('paused', (err: any) => {
+      if (err) {
+        console.warn(`[PouchDB] Sync duraklatıldı (hata) — ${dbName}:`, err?.message || err);
+      }
+    });
 
   syncs.set(dbName, sync);
   return sync;
@@ -54,16 +69,20 @@ export function stopSync(tableName: string): void {
   }
 }
 
-/** Tüm tabloların CouchDB sync'ini başlat */
+/** Tüm tabloların CouchDB sync'ini kademeli olarak başlat (thundering herd önlemi) */
 export function startAllSync(): void {
-  for (const table of TABLE_NAMES) {
-    startSync(table);
-  }
-  startSync(KV_DB_NAME);
+  const allTables = [...TABLE_NAMES, KV_DB_NAME];
+  allTables.forEach((table, index) => {
+    const timer = setTimeout(() => startSync(table), index * 200);
+    staggerTimers.push(timer);
+  });
 }
 
 /** Tüm sync'leri durdur */
 export function stopAllSync(): void {
+  // Henüz başlamamış bekleyen zamanlayıcıları iptal et
+  staggerTimers.forEach(t => clearTimeout(t));
+  staggerTimers.length = 0;
   for (const [, sync] of syncs) {
     sync.cancel();
   }
@@ -92,7 +111,21 @@ export function startPeerSync(): void {
     const sync = localDb.sync(peerDb, {
       live: true,
       retry: true,
-    });
+    })
+      .on('error', (err: any) => {
+        console.error(`[PouchDB] Peer sync hatası — ${dbName}:`, err?.message || err);
+      })
+      .on('denied', (err: any) => {
+        console.warn(`[PouchDB] Peer sync reddedildi — ${dbName}:`, err?.message || err);
+      })
+      .on('active', () => {
+        console.info(`[PouchDB] Peer sync yeniden aktif — ${dbName}`);
+      })
+      .on('paused', (err: any) => {
+        if (err) {
+          console.warn(`[PouchDB] Peer sync duraklatıldı (hata) — ${dbName}:`, err?.message || err);
+        }
+      });
 
     peerSyncs.set(dbName, sync);
   }

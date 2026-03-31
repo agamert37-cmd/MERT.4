@@ -413,7 +413,7 @@ export function FaturaPage() {
           movements: [movement, ...(stock.movements || [])],
         } as any);
       }
-      emit('stok:updated', { source: 'fatura', faturaId: newFatura.id });
+      emit('stok:updated', { productId: '', productName: '', changes: {}, source: 'fatura', faturaId: newFatura.id });
     }
 
     sec.auditLog('add', newFatura.id, `fatura:${form.type}:${formGrossAmount}`);
@@ -469,7 +469,7 @@ export function FaturaPage() {
           movements: [reverseMovement, ...(stock.movements || [])],
         } as any);
       }
-      emit('stok:updated', { source: 'fatura_iptal', faturaId: id });
+      emit('stok:updated', { productId: '', productName: '', changes: {}, source: 'fatura_iptal', faturaId: id });
     }
 
     if (selectedFatura?.id === id) setSelectedFatura(cancelledFatura);
