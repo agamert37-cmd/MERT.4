@@ -279,11 +279,11 @@ export function RaporlarPage() {
     const lmStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
     const lmEnd = new Date(now.getFullYear(), now.getMonth(), 0);
     return [
-      { label: 'Bugün', start: todayISO, end: todayISO }, { label: 'Bu Hafta', start: wStart.toISOString().split('T')[0], end: todayISO },
-      { label: 'Bu Ay', start: firstDayOfMonth.toISOString().split('T')[0], end: todayISO }, { label: 'Geçen Ay', start: lmStart.toISOString().split('T')[0], end: lmEnd.toISOString().split('T')[0] },
-      { label: 'Tümü', start: '2020-01-01', end: todayISO },
+      { label: t('reports.today'), start: todayISO, end: todayISO }, { label: t('reports.thisWeek'), start: wStart.toISOString().split('T')[0], end: todayISO },
+      { label: t('reports.thisMonth'), start: firstDayOfMonth.toISOString().split('T')[0], end: todayISO }, { label: t('reports.lastMonth'), start: lmStart.toISOString().split('T')[0], end: lmEnd.toISOString().split('T')[0] },
+      { label: t('reports.all'), start: '2020-01-01', end: todayISO },
     ];
-  }, []);
+  }, [t]);
 
   const topProducts = useMemo(() => {
     const grouped: Record<string, { amount: number; qty: number }> = {};
@@ -399,12 +399,12 @@ export function RaporlarPage() {
 
       {/* KPI Stats */}
       <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3 sm:gap-4">
-        <StatCard title="Toplam Satış" numValue={totalSales} icon={TrendingUp} color="blue" trend={12.5} />
-        <StatCard title="Toplam Alış" numValue={totalPurchases} icon={ShoppingCart} color="orange" />
-        <StatCard title="Net Kâr / Zarar" numValue={netProfit} icon={DollarSign} color={netProfit >= 0 ? 'green' : 'red'} />
-        <StatCard title="Stok Değeri" numValue={totalStockValue} icon={Package} color="purple" />
-        <StatCard title="Brüt Marj" numValue={grossMargin} icon={Target} color="cyan" prefix="%" />
-        <StatCard title="Aktif Cari" numValue={activeCariCount} icon={Users} color="orange" prefix="" />
+        <StatCard title={t('reports.totalSales')} numValue={totalSales} icon={TrendingUp} color="blue" trend={12.5} />
+        <StatCard title={t('reports.totalPurchases')} numValue={totalPurchases} icon={ShoppingCart} color="orange" />
+        <StatCard title={t('reports.netProfitLoss')} numValue={netProfit} icon={DollarSign} color={netProfit >= 0 ? 'green' : 'red'} />
+        <StatCard title={t('reports.stockValue')} numValue={totalStockValue} icon={Package} color="purple" />
+        <StatCard title={t('reports.grossMargin')} numValue={grossMargin} icon={Target} color="cyan" prefix="%" />
+        <StatCard title={t('reports.registeredCari')} numValue={activeCariCount} icon={Users} color="orange" prefix="" />
       </div>
 
       {/* Main Charts */}
@@ -412,7 +412,7 @@ export function RaporlarPage() {
         <div className="lg:col-span-2 p-4 sm:p-6 rounded-2xl sm:rounded-3xl bg-[#111] border border-white/5">
           <div className="flex items-center gap-3 mb-4 sm:mb-6">
             <div className="p-2 sm:p-2.5 rounded-xl bg-purple-500/10 text-purple-400"><AreaChart className="w-4 h-4 sm:w-5 sm:h-5"/></div>
-            <div><h2 className="font-bold text-base sm:text-lg">Günlük Satış Trendi</h2><p className="text-[10px] sm:text-xs text-gray-500">Son 14 Günlük Performans</p></div>
+            <div><h2 className="font-bold text-base sm:text-lg">{t('reports.dailySalesTrend')}</h2><p className="text-[10px] sm:text-xs text-gray-500">{t('reports.last14Days')}</p></div>
           </div>
           <div className="h-52 sm:h-72 w-full">
             <ResponsiveContainer width="100%" height="100%">
@@ -425,8 +425,8 @@ export function RaporlarPage() {
                 <XAxis dataKey="day" stroke="#666" tick={{fill: '#666', fontSize: 12}} tickLine={false} axisLine={false} />
                 <YAxis stroke="#666" tick={{fill: '#666', fontSize: 12}} tickLine={false} axisLine={false} tickFormatter={v => `₺${v/1000}k`} />
                 <Tooltip contentStyle={{ backgroundColor: '#000', borderColor: '#333', borderRadius: '12px', color: '#fff' }} />
-                <Area type="monotone" dataKey="satis" stroke="#8b5cf6" strokeWidth={3} fill="url(#colorSatis)" name="Satış" dot={{ r: 3, fill: '#0a0a0a', stroke: '#8b5cf6', strokeWidth: 2 }} activeDot={{ r: 5, fill: '#8b5cf6', stroke: '#0a0a0a', strokeWidth: 2 }} />
-                <Area type="monotone" dataKey="alis" stroke="#f59e0b" strokeWidth={3} fill="url(#colorAlis)" name="Alış" dot={false} />
+                <Area type="monotone" dataKey="satis" stroke="#8b5cf6" strokeWidth={3} fill="url(#colorSatis)" name={t('reports.sales')} dot={{ r: 3, fill: '#0a0a0a', stroke: '#8b5cf6', strokeWidth: 2 }} activeDot={{ r: 5, fill: '#8b5cf6', stroke: '#0a0a0a', strokeWidth: 2 }} />
+                <Area type="monotone" dataKey="alis" stroke="#f59e0b" strokeWidth={3} fill="url(#colorAlis)" name={t('reports.purchase')} dot={false} />
               </ReAreaChart>
             </ResponsiveContainer>
           </div>
@@ -435,7 +435,7 @@ export function RaporlarPage() {
         <div className="p-4 sm:p-6 rounded-2xl sm:rounded-3xl bg-[#111] border border-white/5 flex flex-col">
           <div className="flex items-center gap-3 mb-4 sm:mb-6">
             <div className="p-2 sm:p-2.5 rounded-xl bg-emerald-500/10 text-emerald-400"><PieChart className="w-4 h-4 sm:w-5 sm:h-5"/></div>
-            <div><h2 className="font-bold text-base sm:text-lg">Kategori Dağılımı</h2><p className="text-[10px] sm:text-xs text-gray-500">Stok değerlerine göre</p></div>
+            <div><h2 className="font-bold text-base sm:text-lg">{t('reports.stockValueDistribution')}</h2><p className="text-[10px] sm:text-xs text-gray-500">{t('reports.byCategory')}</p></div>
           </div>
           <div className="flex-1 flex flex-col justify-center">
             <div className="h-48 w-full mb-4">
@@ -466,7 +466,7 @@ export function RaporlarPage() {
         <div className="p-4 sm:p-6 rounded-2xl sm:rounded-3xl bg-[#111] border border-white/5">
           <div className="flex items-center gap-3 mb-4 sm:mb-6">
             <div className="p-2 sm:p-2.5 rounded-xl bg-blue-500/10 text-blue-400"><BarChart3 className="w-4 h-4 sm:w-5 sm:h-5"/></div>
-            <div><h2 className="font-bold text-base sm:text-lg">Aylık Karşılaştırma</h2><p className="text-[10px] sm:text-xs text-gray-500">Satış vs Alış & Kâr</p></div>
+            <div><h2 className="font-bold text-base sm:text-lg">{t('reports.monthlySalesVsPurchases')}</h2><p className="text-[10px] sm:text-xs text-gray-500">{t('reports.comparativeAnalysis')}</p></div>
           </div>
           <div className="h-56 w-full">
             <ResponsiveContainer width="100%" height="100%">
@@ -479,8 +479,8 @@ export function RaporlarPage() {
                 <XAxis dataKey="month" stroke="#555" tick={{fill:'#666', fontSize: 11}} tickLine={false} axisLine={false} />
                 <YAxis stroke="#555" tick={{fill:'#666', fontSize: 11}} tickLine={false} axisLine={false} tickFormatter={v => `₺${(v/1000).toFixed(0)}k`} />
                 <Tooltip content={<PremiumTooltip formatter={v => `₺${v.toLocaleString('tr-TR')}`} />} />
-                <Bar dataKey="satis" name="Satış" fill="url(#barSatis)" radius={[4,4,0,0]} barSize={20} />
-                <Bar dataKey="alis" name="Alış" fill="url(#barAlis)" radius={[4,4,0,0]} barSize={20} />
+                <Bar dataKey="satis" name={t('reports.sales')} fill="url(#barSatis)" radius={[4,4,0,0]} barSize={20} />
+                <Bar dataKey="alis" name={t('reports.purchase')} fill="url(#barAlis)" radius={[4,4,0,0]} barSize={20} />
                 <Line type="monotone" dataKey="kar" name="Kâr" stroke="#10b981" strokeWidth={2.5} dot={{ r: 4, fill: '#111', stroke: '#10b981', strokeWidth: 2 }} />
               </ComposedChart>
             </ResponsiveContainer>
@@ -554,10 +554,10 @@ export function RaporlarPage() {
       <Tabs.Root value={selectedTab} onValueChange={setSelectedTab}>
         <Tabs.List className="flex gap-1.5 sm:gap-2 overflow-x-auto bg-[#111] p-1.5 sm:p-2 rounded-xl sm:rounded-2xl border border-white/5 mb-4 sm:mb-6 no-scrollbar">
           {[
-            { id: 'sales', label: 'Satış & Alış', icon: TrendingUp },
-            { id: 'financial', label: 'Finans', icon: DollarSign },
-            { id: 'stock', label: 'Stok', icon: Package },
-            { id: 'personel', label: 'Personel', icon: UserCheck },
+            { id: 'sales', label: `${t('reports.tabs.sales')} & ${t('reports.tabs.purchases')}`, icon: TrendingUp },
+            { id: 'financial', label: t('reports.tabs.financial'), icon: DollarSign },
+            { id: 'stock', label: t('reports.tabs.stock'), icon: Package },
+            { id: 'personel', label: t('reports.tabs.personnel'), icon: UserCheck },
             { id: 'security', label: 'Güvenlik', icon: Shield },
             { id: 'kar', label: 'Kâr Analizi', icon: Target },
           ].map(tab => (
@@ -573,10 +573,10 @@ export function RaporlarPage() {
             {/* Satış Özet Şeridi */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
               {[
-                { label: 'Toplam Satış', value: `₺${totalSales.toLocaleString('tr-TR')}`, color: '#3b82f6' },
-                { label: 'İşlem Sayısı', value: `${filteredSales.length} Kalem`, color: '#8b5cf6' },
-                { label: 'Ort. Kalem Tutarı', value: `₺${filteredSales.length > 0 ? Math.round(totalSales / filteredSales.length).toLocaleString('tr-TR') : '0'}`, color: '#06b6d4' },
-                { label: 'İade Toplamı', value: `₺${Math.abs(filteredSales.filter(s => s.amount < 0).reduce((s, i) => s + i.amount, 0)).toLocaleString('tr-TR')}`, color: '#ef4444' },
+                { label: t('reports.totalSales'), value: `₺${totalSales.toLocaleString('tr-TR')}`, color: '#3b82f6' },
+                { label: t('reports.totalTransactions'), value: `${filteredSales.length} Kalem`, color: '#8b5cf6' },
+                { label: t('reports.avgTransactionAmount'), value: `₺${filteredSales.length > 0 ? Math.round(totalSales / filteredSales.length).toLocaleString('tr-TR') : '0'}`, color: '#06b6d4' },
+                { label: t('reports.return'), value: `₺${Math.abs(filteredSales.filter(s => s.amount < 0).reduce((s, i) => s + i.amount, 0)).toLocaleString('tr-TR')}`, color: '#ef4444' },
               ].map((s, i) => (
                 <div key={i} className="p-3 rounded-xl bg-black/30 border border-white/5">
                   <p className="text-[10px] text-gray-500 font-bold uppercase tracking-wider">{s.label}</p>
@@ -589,25 +589,25 @@ export function RaporlarPage() {
             {/* Satış Tablosu */}
             <div className="p-4 sm:p-6 rounded-2xl sm:rounded-3xl bg-[#111] border border-white/5">
               <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-3">
-                <h2 className="text-lg sm:text-xl font-bold flex items-center gap-2"><TrendingUp className="w-5 h-5 text-blue-400" /> Satış İşlemleri</h2>
+                <h2 className="text-lg sm:text-xl font-bold flex items-center gap-2"><TrendingUp className="w-5 h-5 text-blue-400" /> {t('reports.salesTransactions')}</h2>
                 <PdfButton onClick={() => { generateSalesPDF(salesData, dateRange.start, dateRange.end, currentEmployee?.name || 'Admin'); logActivity('report_export', 'Satış raporu PDF indirildi', { employeeName: user?.name, page: 'Raporlar', description: `${salesData.length} satış kaydı PDF olarak indirildi.` }); toast.success('PDF indirildi.'); }} />
               </div>
               {salesCategories.length > 1 && <div className="mb-4"><CategoryFilter categories={salesCategories} selected={salesCategoryFilter} onChange={setSalesCategoryFilter} /></div>}
               <DynamicTable
                 data={filteredSales}
                 columns={[
-                  { key: 'date', label: 'Tarih', render: i => <span className="font-mono text-xs text-gray-400">{i.date}</span> },
-                  { key: 'customer', label: 'Müşteri', render: i => <div><p className="font-bold text-sm">{i.customer}</p></div> },
-                  { key: 'product', label: 'Ürün', render: i => (
+                  { key: 'date', label: t('reports.date'), render: i => <span className="font-mono text-xs text-gray-400">{i.date}</span> },
+                  { key: 'customer', label: t('reports.customer'), render: i => <div><p className="font-bold text-sm">{i.customer}</p></div> },
+                  { key: 'product', label: t('reports.product'), render: i => (
                     <div>
                       <p className={`text-sm ${i.amount < 0 ? 'text-red-300' : 'text-gray-200'}`}>{i.product}</p>
                       <p className="text-[10px] text-gray-600">{i.category}</p>
                     </div>
                   )},
-                  { key: 'quantity', label: 'Miktar', align: 'center', render: i => (
+                  { key: 'quantity', label: t('reports.quantity'), align: 'center', render: i => (
                     <span className="px-2 py-0.5 bg-white/5 rounded-md text-xs font-mono text-gray-300">{i.quantity} {i.unit}</span>
                   )},
-                  { key: 'amount', label: 'Tutar', align: 'right', render: i => (
+                  { key: 'amount', label: t('reports.amount'), align: 'right', render: i => (
                     <div className="flex flex-col items-end gap-1">
                       <span className={`font-black text-sm ${i.amount < 0 ? 'text-red-400' : 'text-emerald-400'}`}>
                         {i.amount < 0 ? '-' : ''}₺{Math.abs(i.amount).toLocaleString('tr-TR')}
@@ -615,7 +615,7 @@ export function RaporlarPage() {
                       <div className="w-20"><InlineBar value={Math.abs(i.amount)} max={maxSaleAmount} color={i.amount < 0 ? '#ef4444' : '#10b981'} /></div>
                     </div>
                   )},
-                  { key: 'status', label: 'Durum', align: 'center', render: i => (
+                  { key: 'status', label: t('reports.status'), align: 'center', render: i => (
                     i.amount < 0
                       ? <StatusBadge status="danger" label="İADE" />
                       : <StatusBadge status="success" label="SATIŞ" />
@@ -651,22 +651,22 @@ export function RaporlarPage() {
             {/* Alış Tablosu */}
             <div className="p-4 sm:p-6 rounded-2xl sm:rounded-3xl bg-[#111] border border-white/5">
               <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-3">
-                <h2 className="text-lg sm:text-xl font-bold flex items-center gap-2"><ShoppingCart className="w-5 h-5 text-orange-400" /> Alış İşlemleri</h2>
+                <h2 className="text-lg sm:text-xl font-bold flex items-center gap-2"><ShoppingCart className="w-5 h-5 text-orange-400" /> {t('reports.purchaseTransactions')}</h2>
                 <PdfButton onClick={() => { generatePurchasePDF(purchaseData, dateRange.start, dateRange.end, currentEmployee?.name || 'Admin'); logActivity('report_export', 'Alış raporu PDF indirildi', { employeeName: user?.name, page: 'Raporlar' }); toast.success('PDF indirildi.'); }} />
               </div>
               {purchaseCategories.length > 1 && <div className="mb-4"><CategoryFilter categories={purchaseCategories} selected={purchaseCategoryFilter} onChange={setPurchaseCategoryFilter} /></div>}
               <DynamicTable
                 data={filteredPurchases}
                 columns={[
-                  { key: 'date', label: 'Tarih', render: i => <span className="font-mono text-xs text-gray-400">{i.date}</span> },
-                  { key: 'supplier', label: 'Tedarikçi', render: i => <p className="font-bold text-sm">{i.supplier}</p> },
-                  { key: 'product', label: 'Ürün', render: i => (
+                  { key: 'date', label: t('reports.date'), render: i => <span className="font-mono text-xs text-gray-400">{i.date}</span> },
+                  { key: 'supplier', label: t('reports.supplier'), render: i => <p className="font-bold text-sm">{i.supplier}</p> },
+                  { key: 'product', label: t('reports.product'), render: i => (
                     <div><p className="text-sm text-gray-200">{i.product}</p><p className="text-[10px] text-gray-600">{i.category}</p></div>
                   )},
-                  { key: 'quantity', label: 'Miktar', align: 'center', render: i => (
+                  { key: 'quantity', label: t('reports.quantity'), align: 'center', render: i => (
                     <span className="px-2 py-0.5 bg-white/5 rounded-md text-xs font-mono text-gray-300">{i.quantity} {i.unit}</span>
                   )},
-                  { key: 'amount', label: 'Tutar', align: 'right', render: i => (
+                  { key: 'amount', label: t('reports.amount'), align: 'right', render: i => (
                     <div className="flex flex-col items-end gap-1">
                       <span className="font-black text-sm text-orange-400">₺{Math.abs(i.amount).toLocaleString('tr-TR')}</span>
                       <div className="w-20"><InlineBar value={Math.abs(i.amount)} max={maxSaleAmount} color="#f59e0b" /></div>
@@ -737,9 +737,9 @@ export function RaporlarPage() {
               <div className="flex justify-between items-center mb-3"><h2 className="text-lg sm:text-xl font-bold text-emerald-400 flex items-center gap-2"><ArrowUpRight className="w-4 h-4 sm:w-5 sm:h-5"/> Gelirler</h2></div>
               {incomeCategories.length > 1 && <div className="mb-3"><CategoryFilter categories={incomeCategories} selected={incomeCategoryFilter} onChange={setIncomeCategoryFilter} /></div>}
               <DynamicTable data={filteredIncome} columns={[
-                { key: 'date', label: 'Tarih', render: i => <span className="font-mono text-xs text-gray-400">{i.date}</span> },
-                { key: 'category', label: 'Kategori', render: i => <StatusBadge status="success" label={i.category} /> },
-                { key: 'description', label: 'Açıklama', render: i => <span className="font-medium text-sm">{i.description}</span> },
+                { key: 'date', label: t('reports.date'), render: i => <span className="font-mono text-xs text-gray-400">{i.date}</span> },
+                { key: 'category', label: t('reports.category'), render: i => <StatusBadge status="success" label={i.category} /> },
+                { key: 'description', label: t('reports.description'), render: i => <span className="font-medium text-sm">{i.description}</span> },
                 { key: 'amount', label: 'Tutar', align: 'right', render: i => <span className="font-black text-emerald-400">+₺{i.amount.toLocaleString('tr-TR')}</span> },
               ]} pageSize={10} searchable searchPlaceholder="Gelir ara..." emptyMessage="Gelir kaydı yok." accentColor="#10b981"
                 footer={filteredIncome.length > 0 ? (
@@ -756,9 +756,9 @@ export function RaporlarPage() {
               <div className="flex justify-between items-center mb-3"><h2 className="text-lg sm:text-xl font-bold text-red-400 flex items-center gap-2"><ArrowDownRight className="w-4 h-4 sm:w-5 sm:h-5"/> Giderler</h2></div>
               {expenseCategories.length > 1 && <div className="mb-3"><CategoryFilter categories={expenseCategories} selected={expenseCategoryFilter} onChange={setExpenseCategoryFilter} /></div>}
               <DynamicTable data={filteredExpense} columns={[
-                { key: 'date', label: 'Tarih', render: i => <span className="font-mono text-xs text-gray-400">{i.date}</span> },
-                { key: 'category', label: 'Kategori', render: i => <StatusBadge status="danger" label={i.category} /> },
-                { key: 'description', label: 'Açıklama', render: i => <span className="font-medium text-sm">{i.description}</span> },
+                { key: 'date', label: t('reports.date'), render: i => <span className="font-mono text-xs text-gray-400">{i.date}</span> },
+                { key: 'category', label: t('reports.category'), render: i => <StatusBadge status="danger" label={i.category} /> },
+                { key: 'description', label: t('reports.description'), render: i => <span className="font-medium text-sm">{i.description}</span> },
                 { key: 'amount', label: 'Tutar', align: 'right', render: i => <span className="font-black text-red-400">-₺{i.amount.toLocaleString('tr-TR')}</span> },
               ]} pageSize={10} searchable searchPlaceholder="Gider ara..." emptyMessage="Gider kaydı yok." accentColor="#ef4444"
                 footer={filteredExpense.length > 0 ? (
@@ -780,10 +780,10 @@ export function RaporlarPage() {
             {/* Stok Özet Şeridi */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
               {[
-                { label: 'Toplam Ürün', value: `${stockData.length} Çeşit`, color: '#8b5cf6' },
-                { label: 'Stok Değeri', value: `₺${totalStockValue.toLocaleString('tr-TR')}`, color: '#3b82f6' },
-                { label: 'Kritik Stok', value: `${stockData.filter(s => s.stock <= s.minStock).length} Ürün`, color: '#ef4444' },
-                { label: 'Yeterli Stok', value: `${stockData.filter(s => s.stock > s.minStock).length} Ürün`, color: '#10b981' },
+                { label: t('reports.totalProducts'), value: `${stockData.length} Çeşit`, color: '#8b5cf6' },
+                { label: t('reports.stockValue'), value: `₺${totalStockValue.toLocaleString('tr-TR')}`, color: '#3b82f6' },
+                { label: t('reports.criticalStock'), value: `${stockData.filter(s => s.stock <= s.minStock).length} Ürün`, color: '#ef4444' },
+                { label: t('reports.normalStock'), value: `${stockData.filter(s => s.stock > s.minStock).length} Ürün`, color: '#10b981' },
               ].map((s, i) => (
                 <div key={i} className="p-3 rounded-xl bg-black/30 border border-white/5">
                   <p className="text-[10px] text-gray-500 font-bold uppercase tracking-wider">{s.label}</p>
@@ -811,10 +811,10 @@ export function RaporlarPage() {
               <DynamicTable
                 data={filteredStock}
                 columns={[
-                  { key: 'name', label: 'Ürün', render: i => (
+                  { key: 'name', label: t('reports.product'), render: i => (
                     <div><p className="font-bold text-sm">{i.name}</p><p className="text-[10px] text-gray-600">{i.category}</p></div>
                   )},
-                  { key: 'stock', label: 'Stok Seviyesi', align: 'center', render: i => {
+                  { key: 'stock', label: t('reports.stockLevel'), align: 'center', render: i => {
                     const ratio = i.minStock > 0 ? i.stock / i.minStock : (i.stock > 0 ? 3 : 0);
                     const isCritical = i.stock <= i.minStock;
                     return (
@@ -827,18 +827,18 @@ export function RaporlarPage() {
                       </div>
                     );
                   }},
-                  { key: 'status', label: 'Durum', align: 'center', render: i => (
+                  { key: 'status', label: t('reports.status'), align: 'center', render: i => (
                     i.stock <= 0 ? <StatusBadge status="danger" label="TÜKENDİ" />
                     : i.stock <= i.minStock ? <StatusBadge status="warning" label="KRİTİK" />
                     : <StatusBadge status="success" label="YETERLİ" />
                   )},
-                  { key: 'buyPrice', label: 'Alış', align: 'right', render: i => <span className="text-xs text-gray-400">₺{i.buyPrice.toLocaleString('tr-TR')}</span> },
-                  { key: 'price', label: 'Satış', align: 'right', render: i => <span className="text-xs font-bold text-gray-300">₺{i.price.toLocaleString('tr-TR')}</span> },
-                  { key: 'margin', label: 'Marj', align: 'center', render: i => {
+                  { key: 'buyPrice', label: t('reports.buyPrice'), align: 'right', render: i => <span className="text-xs text-gray-400">₺{i.buyPrice.toLocaleString('tr-TR')}</span> },
+                  { key: 'price', label: t('reports.sellPrice'), align: 'right', render: i => <span className="text-xs font-bold text-gray-300">₺{i.price.toLocaleString('tr-TR')}</span> },
+                  { key: 'margin', label: t('reports.profitMargin'), align: 'center', render: i => {
                     const m = i.price > 0 && i.buyPrice > 0 ? ((i.price - i.buyPrice) / i.price * 100) : 0;
                     return <span className={`text-xs font-bold ${m > 30 ? 'text-emerald-400' : m > 15 ? 'text-amber-400' : 'text-red-400'}`}>{m > 0 ? `%${m.toFixed(0)}` : '-'}</span>;
                   }},
-                  { key: 'value', label: 'Stok Değeri', align: 'right', render: i => (
+                  { key: 'value', label: t('reports.stockValue'), align: 'right', render: i => (
                     <div className="flex flex-col items-end gap-1">
                       <span className="font-black text-sm text-blue-400">₺{(i.stock * i.price).toLocaleString('tr-TR')}</span>
                       <div className="w-16"><InlineBar value={i.stock * i.price} max={maxStockValue} color="#3b82f6" /></div>
@@ -903,7 +903,7 @@ export function RaporlarPage() {
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
               {[
                 { label: 'Toplam Personel', value: `${personelPerformansData.length}`, color: '#06b6d4' },
-                { label: 'Toplam Satış', value: `₺${personelPerformansData.reduce((s: number, p: any) => s + p.salesTotal, 0).toLocaleString('tr-TR')}`, color: '#10b981' },
+                { label: t('reports.totalSales'), value: `₺${personelPerformansData.reduce((s: number, p: any) => s + p.salesTotal, 0).toLocaleString('tr-TR')}`, color: '#10b981' },
                 { label: 'Toplam İade', value: `₺${personelPerformansData.reduce((s: number, p: any) => s + p.returnTotal, 0).toLocaleString('tr-TR')}`, color: '#f59e0b' },
                 { label: 'Ort. Performans', value: `₺${personelPerformansData.length > 0 ? Math.round(personelPerformansData.reduce((s: number, p: any) => s + p.netSales, 0) / personelPerformansData.length).toLocaleString('tr-TR') : '0'}`, color: '#3b82f6' },
               ].map((s, i) => (
@@ -939,10 +939,10 @@ export function RaporlarPage() {
                     const medals = ['🥇', '🥈', '🥉'];
                     return <span className="text-sm font-bold">{idx < 3 ? medals[idx] : `#${idx + 1}`}</span>;
                   }},
-                  { key: 'name', label: 'Personel', render: (i: any) => (
+                  { key: 'name', label: t('reports.personnel'), render: (i: any) => (
                     <div><p className="font-bold text-sm">{i.name}</p><p className="text-[10px] text-gray-600">{i.role !== '-' ? i.role : `${i.customerCount} müşteri`}</p></div>
                   )},
-                  { key: 'fisCount', label: 'İşlem', align: 'center', render: (i: any) => (
+                  { key: 'fisCount', label: t('reports.transactions'), align: 'center', render: (i: any) => (
                     <span className="px-2.5 py-1 bg-white/5 rounded-lg text-xs font-mono font-bold">{i.fisCount}</span>
                   )},
                   { key: 'salesTotal', label: 'Brüt Satış', align: 'right', render: (i: any) => (

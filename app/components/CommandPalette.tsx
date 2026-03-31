@@ -86,7 +86,7 @@ export function CommandPalette({ isOpen, onClose }: CommandPaletteProps) {
     if (query.length < 2) return [];
 
     const results: SearchResult[] = [];
-    const q = query.toLowerCase();
+    const q = query.toLowerCase().trim();
 
     // Search cari
     const cariData = getFromStorage<any[]>(StorageKey.CARI_DATA) || [];
@@ -150,7 +150,7 @@ export function CommandPalette({ isOpen, onClose }: CommandPaletteProps) {
   // Filter pages
   const filteredPages = useMemo(() => {
     if (!query) return PAGES;
-    const q = query.toLowerCase();
+    const q = query.toLowerCase().trim();
     return PAGES.filter(p => 
       p.title.toLowerCase().includes(q) || 
       (p.subtitle || '').toLowerCase().includes(q)
