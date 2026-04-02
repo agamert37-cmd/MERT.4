@@ -408,7 +408,7 @@ function CategoryManagerModal({
                 </motion.div>
                 <div>
                   <Dialog.Title className="text-lg font-bold text-white">Kategori Yönetimi</Dialog.Title>
-                  <p className="text-xs text-gray-500 mt-0.5">Müşteri ve toptancı kategorilerini düzenleyin</p>
+                  <p className="text-xs text-gray-500 mt-0.5">{t('cari.categoryManagementDesc')}</p>
                 </div>
               </div>
               <motion.button
@@ -424,8 +424,8 @@ function CategoryManagerModal({
             {/* Tabs */}
             <div className="flex gap-2 px-6 mb-4">
               {([
-                { key: 'musteri' as const, label: 'Müşteri Kategorileri', icon: Store, color: 'blue' },
-                { key: 'toptanci' as const, label: 'Toptancı Kategorileri', icon: Truck, color: 'purple' },
+                { key: 'musteri' as const, label: t('cari.customerCategories'), icon: Store, color: 'blue' },
+                { key: 'toptanci' as const, label: t('cari.supplierCategories'), icon: Truck, color: 'purple' },
               ]).map(tab => {
                 const Icon = tab.icon;
                 const isActive = activeTab === tab.key;
@@ -1177,7 +1177,7 @@ export function CariPage() {
                         )}
                         {cari.invoiceMode && cari.invoiceMode !== 'yok' && (
                           <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${cari.invoiceMode === 'tam' ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30' : 'bg-amber-500/20 text-amber-400 border border-amber-500/30'}`}>
-                            F {cari.invoiceMode === 'tam' ? 'Tam' : 'Kısmi'}
+                            F {cari.invoiceMode === 'tam' ? t('cari.invoiceFull') : t('cari.invoicePartial')}
                           </span>
                         )}
                       </div>
@@ -1258,7 +1258,7 @@ export function CariPage() {
                         {t('customers.addCustomer')}
                       </Dialog.Title>
                       <p className="text-sm text-gray-500 mt-0.5">
-                        {formStep === 0 ? 'Hesap türünü seçin' : formStep === 1 ? 'Firma bilgilerini girin' : formStep === 2 ? 'İletişim bilgilerini girin' : formStep === 3 ? 'Sınıflandırma' : 'Son adım — Fatura Ayarları'}
+                        {formStep === 0 ? t('cari.stepSubtitle0') : formStep === 1 ? t('cari.stepSubtitle1') : formStep === 2 ? t('cari.stepSubtitle2') : formStep === 3 ? t('cari.stepSubtitle3') : t('cari.stepSubtitle4')}
                       </p>
                     </div>
                   </div>
@@ -1323,7 +1323,7 @@ export function CariPage() {
                       transition={{ type: 'spring', damping: 25, stiffness: 300 }}
                       className="space-y-5"
                     >
-                      <p className="text-sm text-gray-400">Eklemek istediğiniz hesap türünü seçin</p>
+                      <p className="text-sm text-gray-400">{t('cari.selectAccountTypeDesc')}</p>
                       <div className="grid grid-cols-2 gap-4">
                         {([
                           { type: 'Müşteri' as const, icon: Store, desc: 'Restoran, market, otel vb.', gradient: 'from-blue-600 to-cyan-500', glow: 'rgba(59,130,246,0.15)', border: 'border-blue-500/40' },
@@ -1686,13 +1686,13 @@ export function CariPage() {
                       {/* Fatura Modu */}
                       <div>
                         <label className="flex items-center gap-1.5 text-xs text-gray-500 mb-3 font-medium uppercase tracking-wider">
-                          Faturalama Türü
+                          {t('cari.billingType')}
                         </label>
                         <div className="grid grid-cols-3 gap-3">
                           {([
-                            { key: 'tam', label: 'Tam Fatura', desc: 'Tüm işlemler faturaya tabi', icon: '📋', color: 'emerald' },
-                            { key: 'kismi', label: 'Kısmi Fatura', desc: 'Seçili işlemler faturalı', icon: '📄', color: 'amber' },
-                            { key: 'yok', label: 'Fatura Yok', desc: 'Fatura kesilmez', icon: '🚫', color: 'gray' },
+                            { key: 'tam', label: t('cari.invoiceFullLabel'), desc: t('cari.invoiceFullDesc'), icon: '📋', color: 'emerald' },
+                            { key: 'kismi', label: t('cari.invoicePartialLabel'), desc: t('cari.invoicePartialDesc'), icon: '📄', color: 'amber' },
+                            { key: 'yok', label: t('cari.invoiceNoneLabel'), desc: t('cari.invoiceNoneDesc'), icon: '🚫', color: 'gray' },
                           ] as const).map(opt => (
                             <motion.button
                               key={opt.key}

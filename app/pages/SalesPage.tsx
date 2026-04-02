@@ -651,9 +651,9 @@ export function SalesPage() {
             {/* Bugünün Özeti */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3 mb-3 sm:mb-4">
               {[
-                { label: 'Satış', total: todayStats.satisTotal, count: todayStats.satisCount, icon: TrendingUp, color: 'emerald', prefix: '+' },
-                { label: 'Alış', total: todayStats.alisTotal, count: todayStats.alisCount, icon: Package, color: 'blue', prefix: '-' },
-                { label: 'Gider', total: todayStats.giderTotal, count: todayStats.giderCount, icon: TrendingDown, color: 'red', prefix: '-' },
+                { label: t('salesPage.sale'), total: todayStats.satisTotal, count: todayStats.satisCount, icon: TrendingUp, color: 'emerald', prefix: '+' },
+                { label: t('salesPage.purchase'), total: todayStats.alisTotal, count: todayStats.alisCount, icon: Package, color: 'blue', prefix: '-' },
+                { label: t('salesPage.expense'), total: todayStats.giderTotal, count: todayStats.giderCount, icon: TrendingDown, color: 'red', prefix: '-' },
                 { label: 'Net', total: Math.abs(todayStats.totalRevenue), count: todayStats.totalCount, icon: Target, color: todayStats.totalRevenue >= 0 ? 'emerald' : 'red', prefix: todayStats.totalRevenue >= 0 ? '+' : '-', isNet: true },
               ].map((stat, idx) => {
                 const Icon = stat.icon;
@@ -721,9 +721,9 @@ export function SalesPage() {
       {/* ─── Hızlı İşlem Butonları (Mobil) ─── */}
       <div className="grid grid-cols-3 gap-2 sm:hidden">
         {[
-          { mode: 'satis' as FisMode, label: 'Satış', icon: ShoppingCart, gradient: 'from-emerald-600 to-emerald-700', shadow: 'shadow-emerald-600/20', desc: 'Müşteriye satış' },
-          { mode: 'alis' as FisMode, label: 'Alış', icon: Package, gradient: 'from-blue-600 to-blue-700', shadow: 'shadow-blue-600/20', desc: 'Toptancıdan alış' },
-          { mode: 'gider' as FisMode, label: 'Gider', icon: TrendingDown, gradient: 'from-red-600 to-red-700', shadow: 'shadow-red-600/20', desc: 'Gider kaydı' },
+          { mode: 'satis' as FisMode, label: t('salesPage.sale'), icon: ShoppingCart, gradient: 'from-emerald-600 to-emerald-700', shadow: 'shadow-emerald-600/20', desc: 'Müşteriye satış' },
+          { mode: 'alis' as FisMode, label: t('salesPage.purchase'), icon: Package, gradient: 'from-blue-600 to-blue-700', shadow: 'shadow-blue-600/20', desc: 'Toptancıdan alış' },
+          { mode: 'gider' as FisMode, label: t('salesPage.expense'), icon: TrendingDown, gradient: 'from-red-600 to-red-700', shadow: 'shadow-red-600/20', desc: 'Gider kaydı' },
         ].map((item) => {
           const Icon = item.icon;
           return (
@@ -2597,10 +2597,10 @@ export function SalesPage() {
             {/* Tab Filtreleri */}
             <div className="flex gap-0.5 bg-white/5 rounded-lg sm:rounded-xl p-0.5 shrink-0 overflow-x-auto">
               {[
-                { id: 'all' as const, label: 'Tümü', count: fisler.length, color: 'bg-white/10 text-white' },
-                { id: 'satis' as const, label: 'Satış', count: fisler.filter(f => f.mode === 'satis').length, color: 'bg-emerald-600/20 text-emerald-400' },
-                { id: 'alis' as const, label: 'Alış', count: fisler.filter(f => f.mode === 'alis').length, color: 'bg-blue-600/20 text-blue-400' },
-                { id: 'gider' as const, label: 'Gider', count: fisler.filter(f => f.mode === 'gider').length, color: 'bg-red-600/20 text-red-400' },
+                { id: 'all' as const, label: t('salesPage.filterAll'), count: fisler.length, color: 'bg-white/10 text-white' },
+                { id: 'satis' as const, label: t('salesPage.sale'), count: fisler.filter(f => f.mode === 'satis').length, color: 'bg-emerald-600/20 text-emerald-400' },
+                { id: 'alis' as const, label: t('salesPage.purchase'), count: fisler.filter(f => f.mode === 'alis').length, color: 'bg-blue-600/20 text-blue-400' },
+                { id: 'gider' as const, label: t('salesPage.expense'), count: fisler.filter(f => f.mode === 'gider').length, color: 'bg-red-600/20 text-red-400' },
               ].map((tab) => (
                 <button
                   key={tab.id}

@@ -132,7 +132,7 @@ function PermissionGrid({ selected, onToggle, t }: any) {
         }}
         className={`px-4 py-2 rounded-xl text-xs font-bold border transition-all ${allSelected ? 'bg-red-600/20 border-red-500/30 text-red-400 hover:bg-red-600/30' : 'bg-purple-600/20 border-purple-500/30 text-purple-400 hover:bg-purple-600/30'}`}
       >
-        {allSelected ? 'Tümünü Kaldır' : 'Tümünü Seç'}
+        {allSelected ? t('personnel.deselectAll') : t('personnel.selectAll')}
       </button>
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
         {PERMISSIONS.map(perm => {
@@ -552,10 +552,10 @@ export function PersonelPage() {
       {/* Stats & Search */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
         {[
-          { label: 'Toplam Kullanıcı', value: personnelList.length, icon: UserCog, color: 'blue' },
-          { label: 'Aktif / Çevrimiçi', value: onlineCount, icon: Activity, color: 'emerald', pulse: true },
-          { label: 'Çevrimdışı', value: offlineCount, icon: Clock, color: 'gray' },
-          { label: 'Yönetici Yetkili', value: managerCount, icon: Shield, color: 'orange' },
+          { label: t('personnel.totalUsers'), value: personnelList.length, icon: UserCog, color: 'blue' },
+          { label: t('personnel.activeOnline'), value: onlineCount, icon: Activity, color: 'emerald', pulse: true },
+          { label: t('personnel.offlineStatus'), value: offlineCount, icon: Clock, color: 'gray' },
+          { label: t('personnel.adminPrivilege'), value: managerCount, icon: Shield, color: 'orange' },
         ].map((s, i) => (
           <div key={i} className="p-6 rounded-3xl bg-[#111] border border-white/5 relative overflow-hidden group">
             <div className={`absolute top-0 right-0 w-32 h-32 bg-${s.color}-500/10 rounded-bl-full blur-2xl group-hover:bg-${s.color}-500/20 transition-colors`} />
@@ -743,7 +743,7 @@ export function PersonelPage() {
             <div className="flex gap-3 pt-4">
               <Dialog.Close disabled={isSaving} className="flex-1 py-4 bg-white/5 hover:bg-white/10 rounded-xl font-bold transition-all disabled:opacity-50">İptal</Dialog.Close>
               <button type="submit" disabled={isSaving} className="flex-1 py-4 bg-orange-600 hover:bg-orange-500 text-white rounded-xl font-bold transition-all shadow-lg shadow-orange-600/20 disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2">
-                {isSaving ? <><span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />Kaydediliyor...</> : 'Güncelle'}
+                {isSaving ? <><span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />{t('personnel.saving')}</> : t('common.update')}
               </button>
             </div>
           </form>
@@ -765,7 +765,7 @@ export function PersonelPage() {
                     <p className="text-blue-400 font-bold mb-2">@{selectedEmployee.username} • {selectedEmployee.role}</p>
                     <div className="flex items-center gap-4 text-sm text-gray-400">
                       <span className="flex items-center gap-1"><Clock className="w-4 h-4"/> Son görülme: {selectedEmployee.lastLogin}</span>
-                      <span className="flex items-center gap-1"><Activity className="w-4 h-4"/> Durum: <span className={selectedEmployee.status === 'online' ? 'text-emerald-400' : ''}>{selectedEmployee.status === 'online' ? 'Aktif' : 'Çevrimdışı'}</span></span>
+                      <span className="flex items-center gap-1"><Activity className="w-4 h-4"/> Durum: <span className={selectedEmployee.status === 'online' ? 'text-emerald-400' : ''}>{selectedEmployee.status === 'online' ? t('personnel.activeStatus') : t('personnel.offlineStatus')}</span></span>
                     </div>
                   </div>
                 </div>
