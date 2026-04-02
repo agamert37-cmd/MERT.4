@@ -293,7 +293,7 @@ export function LoginPage() {
   }, []);
 
   // ── Giriş sayfası yapılandırması ───────────────────────────────
-  const loginConfig = useMemo(() => {
+  const loginConfig = useMemo((): { headline: string; tagline: string; description: string; formTitle: string; formSubtitle: string; trustBar: { icon: string; text: string }[] } => {
     const defaults = {
       headline: 'Kalite ve\nGüven\nHer Pakette.',
       tagline: 'TÜRKİYE\'NİN GÜVENİLİR ET TEDARİKÇİSİ',
@@ -309,7 +309,7 @@ export function LoginPage() {
     };
     try {
       const paz = getFromStorage<any>(StorageKey.PAZARLAMA_CONTENT);
-      if (paz?.loginPage) return { ...defaults, ...paz.loginPage };
+      if (paz?.loginPage) return { ...defaults, ...(paz.loginPage as Partial<typeof defaults>) };
     } catch {}
     return defaults;
   }, []);

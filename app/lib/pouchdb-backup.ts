@@ -219,6 +219,7 @@ export interface BackupMeta {
   totalDocs: number;
   sizeKB: number;
   tableStats: Record<string, number>;
+  checksum?: string;
 }
 
 const BACKUP_META_KEY = 'isleyen_et_pouchdb_backup_meta';

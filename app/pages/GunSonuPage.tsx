@@ -181,12 +181,13 @@ export function GunSonuPage() {
       });
     });
 
-    // Saate göre sırala
-    return result.sort((a, b) => {
-      if (a.time > b.time) return -1;
-      if (a.time < b.time) return 1;
-      return 0;
-    });
+    // Saate göre sırala — "HH:MM" veya "HH.MM" biçimlerini normalize et
+    const toMinutes = (t: string) => {
+      const parts = t.replace('.', ':').split(':');
+      if (parts.length < 2) return 0;
+      return parseInt(parts[0], 10) * 60 + parseInt(parts[1], 10);
+    };
+    return result.sort((a, b) => toMinutes(b.time) - toMinutes(a.time));
   }, [todayISO, todayTR, refreshCounter]);
 
   const totalSales = transactions
@@ -332,7 +333,7 @@ export function GunSonuPage() {
     };
     localStorage.setItem(GUN_SONU_KEY, JSON.stringify(gunSonuRecord));
     // BUG FIX [AJAN-2]: Gün sonu durumu KV store'a da yaz — çapraz cihaz senkronu
-    kvSet(`gun_sonu_${todayISO}`, gunSonuRecord).catch(e => console.error('[GunSonu] kv sync:', e));
+    kvSet(`gun_sonu_${todayISO}`, gunSonuRecord).catch(() => toast.warning('Gün sonu çapraz cihaz senkronizasyonu başarısız. Diğer cihazlar bu kapatmayı göremeyebilir.'));
     // Diğer sayfaları bilgilendir (SalesPage, KasaPage)
     window.dispatchEvent(new Event('storage_update'));
     setIsCloseDialogOpen(false);
@@ -352,7 +353,7 @@ export function GunSonuPage() {
     localStorage.removeItem(GUN_SONU_KEY);
     // BUG FIX [AJAN-2]: Gün sonu açıldı — KV store'a da yaz
     kvSet(`gun_sonu_${todayISO}`, { closed: false, reopenedAt: new Date().toISOString(), reopenedBy: currentEmployee?.name || 'Bilinmeyen' })
-      .catch(e => console.error('[GunSonu] kv sync:', e));
+      .catch(() => toast.warning('Gün sonu açma çapraz cihaz senkronizasyonu başarısız.'));
     // Diğer sayfaları bilgilendir (SalesPage, KasaPage)
     window.dispatchEvent(new Event('storage_update'));
     setIsReopenDialogOpen(false);

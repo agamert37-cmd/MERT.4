@@ -94,7 +94,7 @@ export function YedeklerPage() {
   const [cloudBackups] = useState<BackupMeta[]>([]);
   const [filteredCloudBackups] = useState<BackupMeta[]>([]);
   const [verifyingId, setVerifyingId] = useState<string | null>(null);
-  const [verifyResult] = useState<{ ok: boolean; message: string } | null>(null);
+  const [verifyResult] = useState<{ ok: boolean; message: string; id?: string; verified?: boolean } | null>(null);
   const fetchCloudBackups = useCallback(() => { toast.info('Bulut yedekleme henüz yapılandırılmadı (CouchDB gerekli)'); }, []);
   const handleCreateCloudBackup = useCallback(() => { toast.info('Bulut yedekleme için CouchDB yapılandırın'); }, []);
   const handleVerifyBackup = useCallback((_id: string) => { toast.info('Doğrulama için CouchDB gerekli'); }, []);
@@ -192,7 +192,7 @@ export function YedeklerPage() {
       // Yedek verisini localStorage'a kaydet (geri yükleme için)
       try {
         localStorage.setItem(`pouchdb_backup_data_${meta.id}`, JSON.stringify(result.backup));
-      } catch { /* Büyük veri sığmayabilir — sadece indirme yapılır */ }
+      } catch { toast.warning('Yedek localStorage\'a kaydedilemedi (kota dolmuş olabilir). Dosya indirme devam ediyor.'); }
 
       setCreateProgress('İndirme başlatılıyor...');
       downloadBackup(result.backup);
@@ -752,9 +752,9 @@ export function YedeklerPage() {
                 <div className="flex items-center gap-3">
                   <div className={`w-2.5 h-2.5 rounded-full ${isLocalHealthy() ? 'bg-emerald-400 animate-pulse' : 'bg-red-400'}`} />
                   <span className="text-xs text-muted-foreground/60">
-                    {isLocalHealthy() ? `Bağlı — ${lc.url}` : `Bağlantı Kopuk — ${lc.url}`}
+                    {isLocalHealthy() ? `Bağlı — ${(lc as any).url ?? ''}` : `Bağlantı Kopuk — ${(lc as any).url ?? ''}`}
                   </span>
-                  {lc.lastSyncToCloud && <span className="text-[9px] text-muted-foreground/40">Son sync: {new Date(lc.lastSyncToCloud).toLocaleString('tr-TR')}</span>}
+                  {(lc as any).lastSyncToCloud && <span className="text-[9px] text-muted-foreground/40">Son sync: {new Date((lc as any).lastSyncToCloud).toLocaleString('tr-TR')}</span>}
                 </div>
               ) : (
                 <p className="text-xs text-muted-foreground/40">Yerel Supabase devre dışı. Ayarlar sayfasından yapılandırabilirsiniz.</p>
@@ -849,6 +849,7 @@ export function YedeklerPage() {
                   <>
                     <div className="flex justify-between"><span className="text-muted-foreground/60">Uygulama:</span><span className="text-white">{restoreFileContent.appName || 'Bilinmiyor'}</span></div>
                     <div className="flex justify-between"><span className="text-muted-foreground/60">Tarih:</span><span className="text-white">{restoreFileContent.createdAt ? new Date(restoreFileContent.createdAt).toLocaleString('tr-TR') : '-'}</span></div>
+                    <div className="flex justify-between"><span className="text-muted-foreground/60">Kayıt:</span><span className="text-white">{restoreFileContent.meta?.totalDocs ?? Object.keys(restoreFileContent.tables || {}).length}</span></div>
                     <div className="flex justify-between"><span className="text-muted-foreground/60">Kayıt:</span><span className="text-white">{restoreFileContent.meta?.totalDocs || Object.keys(restoreFileContent.tables || {}).length}</span></div>
                   </>
                 )}

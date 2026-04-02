@@ -147,6 +147,8 @@ export function CariDetailPage() {
     });
 
     const standalonePayments = (cari?.transactionHistory || []).filter((tx: any) => {
+      if (tx.id.match(/-[spa]i?$/)) return false; 
+      if (allFisler.some(f => tx.description?.includes(f.id))) return false;
       if (tx.id?.match(/-[spa]i?$/)) return false;
       if (allFisler.some((f: any) => tx.description?.includes(f.id))) return false;
       return true;
@@ -380,10 +382,10 @@ export function CariDetailPage() {
   }, [cariNotes]);
 
   const priorityConfig: Record<string, { label: string; color: string; bg: string; icon: any }> = {
-    low: { label: 'Düşük', color: '#6b7280', bg: 'bg-gray-500/10 text-gray-400 border-gray-500/20', icon: Info },
-    normal: { label: 'Normal', color: '#3b82f6', bg: 'bg-blue-500/10 text-blue-400 border-blue-500/20', icon: MessageSquare },
-    high: { label: 'Yüksek', color: '#f59e0b', bg: 'bg-amber-500/10 text-amber-400 border-amber-500/20', icon: AlertTriangle },
-    urgent: { label: 'Acil', color: '#ef4444', bg: 'bg-red-500/10 text-red-400 border-red-500/20', icon: AlertCircle },
+    low: { label: t('cari.priorityLow'), color: '#6b7280', bg: 'bg-gray-500/10 text-gray-400 border-gray-500/20', icon: Info },
+    normal: { label: t('cari.priorityNormal'), color: '#3b82f6', bg: 'bg-blue-500/10 text-blue-400 border-blue-500/20', icon: MessageSquare },
+    high: { label: t('cari.priorityHigh'), color: '#f59e0b', bg: 'bg-amber-500/10 text-amber-400 border-amber-500/20', icon: AlertTriangle },
+    urgent: { label: t('cari.priorityUrgent'), color: '#ef4444', bg: 'bg-red-500/10 text-red-400 border-red-500/20', icon: AlertCircle },
   };
 
   const noteCategories = ['Genel', 'Ödeme', 'Sipariş', 'Şikayet', 'İade', 'Hatırlatma', 'Anlaşma', 'Diğer'];
@@ -465,7 +467,7 @@ export function CariDetailPage() {
               Müşteri Cari Özeti
               {cari.invoiceMode && cari.invoiceMode !== 'yok' && (
                 <span className={`ml-2 px-2 py-0.5 rounded-full text-[10px] font-bold ${cari.invoiceMode === 'tam' ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30' : 'bg-amber-500/20 text-amber-400 border border-amber-500/30'}`}>
-                  {cari.invoiceMode === 'tam' ? '📋 Tam Fatura' : '📄 Kısmi Fatura'} • KDV %{cari.defaultKdvRate || 20}
+                  {cari.invoiceMode === 'tam' ? `📋 ${t('cari.invoiceFullLabel')}` : `📄 ${t('cari.invoicePartialLabel')}`} • KDV %{cari.defaultKdvRate || 20}
                 </span>
               )}
             </p>
@@ -733,7 +735,7 @@ export function CariDetailPage() {
                   <div className="flex justify-between items-start">
                     <div>
                       <p className={`text-xs font-bold tracking-widest uppercase mb-1 ${isAlis ? 'text-orange-400' : 'text-blue-400'}`}>
-                        {isAlis ? 'Alış Fişi' : 'Satış Fişi'}
+                        {isAlis ? t('salesPage.purchaseReceipt') : t('salesPage.saleReceipt')}
                       </p>
                       <h2 className="text-3xl font-black text-white">{selectedFis.id.split('-')[0].toUpperCase()}</h2>
                     </div>

@@ -18,12 +18,100 @@ export interface UpdateNote {
 }
 
 // Mevcut uygulama versiyonu — her yeni sürümde burası güncellenir
-export const CURRENT_VERSION = 'v4.2.2';
+export const CURRENT_VERSION = 'v4.4';
 
 // localStorage anahtarı — kullanıcının en son gördüğü versiyon
 export const SEEN_VERSION_KEY = 'isleyen_et_last_seen_version';
 
 export const UPDATE_NOTES: UpdateNote[] = [
+  // ─── v4.4 ────────────────────────────────────────────────────────────────
+  {
+    id: 'u-020', version: 'v4.4', date: '2026-03-30', category: 'feature',
+    title: 'PouchDB Offline-First Veritabanı',
+    description: 'Supabase bağımlılığı kaldırıldı. Tüm veriler artık tarayıcıdaki PouchDB\'de tutulur; CouchDB ile opsiyonel senkronizasyon desteklenir.',
+    details: [
+      'PouchDB yerel veritabanı tüm modüllerde aktif',
+      'Çift-yazma stratejisi: localStorage + PouchDB KV store',
+      'Otomatik yedek oluşturma ve indirme',
+      'CouchDB endpoint yapılandırması (Ayarlar > Senkronizasyon)',
+      'SyncStatusBar ile gerçek zamanlı sync durumu',
+    ],
+    impact: 'high', isNew: true, emoji: '🗄️',
+  },
+  {
+    id: 'u-021', version: 'v4.4', date: '2026-03-30', category: 'security',
+    title: 'Sayfa Bazlı RBAC & Güvenlik İzleme',
+    description: 'Her sayfaya rol tabanlı erişim kontrolü ve gerçek zamanlı güvenlik izleme eklendi.',
+    details: [
+      'getPagePermissions() ile merkezi RBAC yönetimi',
+      'usePageSecurity hook: rate limiting ve audit logging',
+      'Güvenlik tehdidi tespiti ve log zinciri',
+      'Personel sayfasında şifre güçlüğü analizi (PasswordStrengthBar)',
+    ],
+    impact: 'high', isNew: true, emoji: '🛡️',
+  },
+  {
+    id: 'u-022', version: 'v4.4', date: '2026-03-30', category: 'feature',
+    title: 'Modül Olay Yolu (Module Bus)',
+    description: 'Sayfalar ve modüller arası iletişim için EventEmitter tabanlı güvenli olay sistemi.',
+    details: [
+      'ModuleEventMap ile tip-güvenli olaylar',
+      'Çek, fatura, stok, üretim modülleri arası anlık bildirim',
+      'useModuleBus hook ile kolay abonelik yönetimi',
+    ],
+    impact: 'medium', isNew: true, emoji: '🔗',
+  },
+  {
+    id: 'u-023', version: 'v4.4', date: '2026-03-30', category: 'bugfix',
+    title: 'TypeScript Tip Güvenliği İyileştirmeleri',
+    description: '80 TypeScript derleme hatası giderildi. @types/react kurulumu ile tip kontrol sistemi güçlendirildi.',
+    details: [
+      '@types/react ve @types/react-dom eklendi',
+      'ModuleEventMap eksik olay tipleri tamamlandı',
+      'SyncContext setupStatus tip genişletmesi',
+      'LanguageContext destructuring düzeltmeleri',
+      'Framer Motion Variants tip anotasyonları',
+    ],
+    impact: 'medium', isNew: true, emoji: '🔧',
+  },
+
+  // ─── v4.3 ────────────────────────────────────────────────────────────────
+  {
+    id: 'u-017', version: 'v4.3', date: '2026-03-25', category: 'feature',
+    title: 'AI Chat Asistanı',
+    description: 'OpenAI GPT entegrasyonu ile ERP verilerinizi doğal dilde sorgulayın.',
+    details: [
+      'Türkçe sorgu desteği (satış, stok, kasa analizi)',
+      'Dinamik grafik oluşturma (Bar, Line, Area, Pie)',
+      'Sistem prompt özelleştirme',
+      'Cihaza göre yanıt boyutu adaptasyonu',
+    ],
+    impact: 'high', emoji: '🤖',
+  },
+  {
+    id: 'u-018', version: 'v4.3', date: '2026-03-25', category: 'feature',
+    title: 'Araç Takip Modülü',
+    description: 'Şirket araçları için kilometre, yakıt, bakım ve masraf takibi.',
+    details: [
+      'Araç kayıt ve durum yönetimi',
+      'Yakıt tüketimi ve km analizi',
+      'Bakım hatırlatıcı sistemi',
+      'PDF masraf raporu',
+    ],
+    impact: 'medium', emoji: '🚗',
+  },
+  {
+    id: 'u-019', version: 'v4.3', date: '2026-03-24', category: 'ui',
+    title: 'UBL-TR Fatura Desteği',
+    description: 'E-fatura formatına uyumlu UBL-TR XML çıktısı ve tevkifatlı fatura desteği.',
+    details: [
+      'UBL-TR 2.1 formatında XML üretimi',
+      'Tevkifat hesaplama (KDV stopaj)',
+      'E-arşiv uyumlu fiş numaralandırma',
+    ],
+    impact: 'high', emoji: '📄',
+  },
+
   // ─── v4.2.2 ──────────────────────────────────────────────────────────────
   {
     id: 'u-013', version: 'v4.2.2', date: '2026-03-22', category: 'ui',

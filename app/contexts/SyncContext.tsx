@@ -7,8 +7,20 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { testCouchDbConnection } from '../lib/pouchdb';
 
+interface TableStatus {
+  table: string;
+  displayName: string;
+  rowCount: number;
+  icon: string;
+}
+
 interface SyncContextValue {
-  setupStatus: { isConnected: boolean } | null;
+  setupStatus: {
+    isConnected: boolean;
+    tables?: TableStatus[];
+    latencyMs?: number;
+    kvTotalKeys?: number;
+  } | null;
   isChecking: boolean;
   lastChecked: Date | null;
   recheckTables: () => Promise<void>;

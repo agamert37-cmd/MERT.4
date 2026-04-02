@@ -13,6 +13,7 @@ import html2canvas from 'html2canvas';
 import { useAuth } from '../contexts/AuthContext';
 import { useLanguage } from '../contexts/LanguageContext';
 import { logActivity } from '../utils/activityLogger';
+import { toast } from 'sonner';
 import {
   BarChart, Bar, AreaChart, Area, LineChart, Line,
   PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid,
@@ -354,7 +355,7 @@ function ChartCard({ response }: { response: AIResponse }) {
       pdf.addImage(imgData, 'PNG', 14, 40, pdfWidth, pdfHeight);
       pdf.save(`Rapor_${new Date().getTime()}.pdf`);
     } catch (err) {
-      console.error('PDF oluşturulamadı:', err);
+      toast.error('PDF oluşturulurken hata oluştu. Lütfen tekrar deneyin.');
     } finally {
       setIsExporting(false);
     }
@@ -394,6 +395,7 @@ function ChartCard({ response }: { response: AIResponse }) {
               <XAxis dataKey={response.chartConfig?.xKey || 'date'} stroke="#94a3b8" />
               <YAxis stroke="#94a3b8" />
               <Tooltip contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #475569', borderRadius: '8px' }} labelStyle={{ color: '#e2e8f0' }} />
+              <Area key="area-gpt" type="monotone" dataKey={response.chartConfig?.yKey || 'value'} stroke={response.chartConfig?.color || '#3b82f6'} fill={response.chartConfig?.color || '#3b82f6'} fillOpacity={0.15} />
               <Area type="monotone" dataKey={response.chartConfig?.yKey || 'value'} stroke={response.chartConfig?.color || '#3b82f6'} fill={response.chartConfig?.color || '#3b82f6'} fillOpacity={0.15} />
             </AreaChart>
           ) : response.chartType === 'line' ? (
@@ -402,6 +404,12 @@ function ChartCard({ response }: { response: AIResponse }) {
               <XAxis dataKey={response.chartConfig?.xKey || 'date'} stroke="#94a3b8" />
               <YAxis stroke="#94a3b8" />
               <Tooltip contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #475569', borderRadius: '8px' }} labelStyle={{ color: '#e2e8f0' }} />
+              <Line key="line-gpt" type="monotone" dataKey={response.chartConfig?.yKey || 'value'} stroke={response.chartConfig?.color || '#3b82f6'} strokeWidth={2} />
+            </LineChart>
+          ) : response.chartType === 'pie' ? (
+            <PieChart key="ai-gpt-pie-chart">
+              <Pie key="pie-gpt" data={response.data} dataKey={response.chartConfig?.valueKey || 'value'} nameKey={response.chartConfig?.nameKey || 'name'} cx="50%" cy="50%" outerRadius={100} label>
+                {response.data.map((_entry, index) => (
               <Line type="monotone" dataKey={response.chartConfig?.yKey || 'value'} stroke={response.chartConfig?.color || '#3b82f6'} strokeWidth={2} />
             </LineChart>
           ) : (
@@ -413,6 +421,14 @@ function ChartCard({ response }: { response: AIResponse }) {
               </Pie>
               <Tooltip contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #475569', borderRadius: '8px' }} />
             </PieChart>
+          ) : (
+            <BarChart key="ai-gpt-bar-chart" data={response.data}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
+              <XAxis dataKey={response.chartConfig?.xKey || 'name'} stroke="#94a3b8" />
+              <YAxis stroke="#94a3b8" />
+              <Tooltip contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #475569', borderRadius: '8px' }} labelStyle={{ color: '#e2e8f0' }} />
+              <Bar key="bar-gpt" dataKey={response.chartConfig?.yKey || 'value'} fill={response.chartConfig?.color || '#3b82f6'} radius={[8, 8, 0, 0]} />
+            </BarChart>
           )}
         </ResponsiveContainer>
         </div>

@@ -270,7 +270,7 @@ export function TahsilatPage() {
       category: 'Tahsilat',
       description: descParts.join(' '),
       amount: paymentAmount,
-      date: new Date().toLocaleDateString('tr-TR'),
+      date: new Date().toISOString().split('T')[0],
       time: new Date().toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' }),
     };
     addKasaSync(newKasaEntry);
