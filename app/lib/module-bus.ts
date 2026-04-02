@@ -22,6 +22,7 @@ export type ModuleEventMap = {
   // Stok modulu
   'stok:added': { productId: string; productName: string; quantity: number };
   'stok:updated': { productId?: string; productName?: string; changes?: Record<string, any>; source?: string; faturaId?: string };
+  'stok:updated': { productId: string; productName: string; changes: Record<string, any>; source?: string; faturaId?: string };
   'stok:deleted': { productId: string; productName: string };
   'stok:batch_updated': { count: number };
   'stok:movement': { productId: string; productName: string; type: string; quantity: number; partyName?: string };

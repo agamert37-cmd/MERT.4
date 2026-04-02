@@ -121,10 +121,17 @@ export function useTableSync<T extends { id: string }>(
   }, [sortData]);
 
   // ─── localStorage write-through (DashboardPage vb. için) ─────────────────
+  // Debounce: rapid changes collapse into a single write (500ms)
+  const storageWriteTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
-    if (storageKey && data.length > 0) {
+    if (!storageKey || data.length === 0) return;
+    if (storageWriteTimer.current) clearTimeout(storageWriteTimer.current);
+    storageWriteTimer.current = setTimeout(() => {
       setInStorage(storageKey, data);
-    }
+    }, 500);
+    return () => {
+      if (storageWriteTimer.current) clearTimeout(storageWriteTimer.current);
+    };
   }, [data, storageKey]);
 
   // ─── PouchDB'den tüm veriyi oku ───────────────────────────────────────────
@@ -346,7 +353,22 @@ export function useTableSync<T extends { id: string }>(
       });
 
       if (docs.length > 0) {
-        await db.bulkDocs(docs);
+        const results = await db.bulkDocs(docs);
+        // Kısmi hataları kontrol et
+        const errors = (results as any[]).filter((r: any) => r.error);
+        if (errors.length > 0) {
+          const nonConflicts = errors.filter((r: any) => r.status !== 409);
+          if (nonConflicts.length > 0) {
+            // Gerçek hata — rollback
+            console.error(`[batchUpdate] ${tableName}: ${nonConflicts.length} kritik hata`, nonConflicts);
+            setDataState(prev =>
+              prev.map(item => oldItems.get(item.id) || item)
+            );
+          } else {
+            // Sadece 409 conflict — normal çok-tab senaryosu
+            console.warn(`[batchUpdate] ${tableName}: ${errors.length} conflict (409) — yok sayıldı`);
+          }
+        }
       }
     } catch (e: any) {
       console.error(`[batchUpdate] ${tableName}:`, e.message);

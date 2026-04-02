@@ -83,13 +83,22 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
     return () => clearInterval(interval);
   }, [recheckTables]);
 
-  // Online/offline takibi
+  // Online/offline takibi — debounce ile hızlı ağ değişimlerinde çoklu recheck'i önle
   useEffect(() => {
-    const onOnline = () => { setIsOnline(true); recheckTables(); };
-    const onOffline = () => { setIsOnline(false); };
+    let recheckTimer: ReturnType<typeof setTimeout> | null = null;
+    const onOnline = () => {
+      setIsOnline(true);
+      if (recheckTimer) clearTimeout(recheckTimer);
+      recheckTimer = setTimeout(() => recheckTables(), 1000);
+    };
+    const onOffline = () => {
+      if (recheckTimer) clearTimeout(recheckTimer);
+      setIsOnline(false);
+    };
     window.addEventListener('online', onOnline);
     window.addEventListener('offline', onOffline);
     return () => {
+      if (recheckTimer) clearTimeout(recheckTimer);
       window.removeEventListener('online', onOnline);
       window.removeEventListener('offline', onOffline);
     };

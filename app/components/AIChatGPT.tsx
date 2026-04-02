@@ -378,13 +378,25 @@ function ChartCard({ response }: { response: AIResponse }) {
         <h3 className="text-white font-semibold mb-4 text-center">Grafiksel Rapor</h3>
         <div className="w-full min-h-[300px]">
         <ResponsiveContainer width="100%" height={300}>
-          {response.chartType === 'area' ? (
+          {response.chartType === 'bar' ? (
+            <BarChart key="ai-gpt-bar-chart" data={response.data}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
+              <XAxis dataKey={response.chartConfig?.xKey || 'name'} stroke="#94a3b8" />
+              <YAxis stroke="#94a3b8" />
+              <Tooltip
+                contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #475569', borderRadius: '8px' }}
+                labelStyle={{ color: '#e2e8f0' }}
+              />
+              <Bar dataKey={response.chartConfig?.yKey || 'value'} fill={response.chartConfig?.color || '#3b82f6'} radius={[8, 8, 0, 0]} />
+            </BarChart>
+          ) : response.chartType === 'area' ? (
             <AreaChart key="ai-gpt-area-chart" data={response.data}>
               <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
               <XAxis dataKey={response.chartConfig?.xKey || 'date'} stroke="#94a3b8" />
               <YAxis stroke="#94a3b8" />
               <Tooltip contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #475569', borderRadius: '8px' }} labelStyle={{ color: '#e2e8f0' }} />
               <Area key="area-gpt" type="monotone" dataKey={response.chartConfig?.yKey || 'value'} stroke={response.chartConfig?.color || '#3b82f6'} fill={response.chartConfig?.color || '#3b82f6'} fillOpacity={0.15} />
+              <Area type="monotone" dataKey={response.chartConfig?.yKey || 'value'} stroke={response.chartConfig?.color || '#3b82f6'} fill={response.chartConfig?.color || '#3b82f6'} fillOpacity={0.15} />
             </AreaChart>
           ) : response.chartType === 'line' ? (
             <LineChart key="ai-gpt-line-chart" data={response.data}>
@@ -398,6 +410,12 @@ function ChartCard({ response }: { response: AIResponse }) {
             <PieChart key="ai-gpt-pie-chart">
               <Pie key="pie-gpt" data={response.data} dataKey={response.chartConfig?.valueKey || 'value'} nameKey={response.chartConfig?.nameKey || 'name'} cx="50%" cy="50%" outerRadius={100} label>
                 {response.data.map((_entry, index) => (
+              <Line type="monotone" dataKey={response.chartConfig?.yKey || 'value'} stroke={response.chartConfig?.color || '#3b82f6'} strokeWidth={2} />
+            </LineChart>
+          ) : (
+            <PieChart key="ai-gpt-pie-chart">
+              <Pie data={response.data} dataKey={response.chartConfig?.valueKey || 'value'} nameKey={response.chartConfig?.nameKey || 'name'} cx="50%" cy="50%" outerRadius={100} label>
+                {response.data.map((entry, index) => (
                   <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                 ))}
               </Pie>

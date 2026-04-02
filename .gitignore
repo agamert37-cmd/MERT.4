@@ -3,6 +3,7 @@ dist/
 .env.local
 .env
 *.local
+docker.env
 .mert4_backups/
 __pycache__/
 *.pyc

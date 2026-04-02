@@ -149,6 +149,8 @@ export function CariDetailPage() {
     const standalonePayments = (cari?.transactionHistory || []).filter((tx: any) => {
       if (tx.id.match(/-[spa]i?$/)) return false; 
       if (allFisler.some(f => tx.description?.includes(f.id))) return false;
+      if (tx.id?.match(/-[spa]i?$/)) return false;
+      if (allFisler.some((f: any) => tx.description?.includes(f.id))) return false;
       return true;
     });
 

@@ -480,7 +480,7 @@ export function YedeklerPage() {
               {filteredCloudBackups.map((backup, idx) => {
                 const dateObj = new Date(backup.timestamp);
                 const isVerifying = verifyingId === backup.id;
-                const vr = verifyResult?.id === backup.id ? verifyResult : null;
+                const vr = verifyResult ? verifyResult : null;
 
                 return (
                   <motion.div key={backup.id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: idx * 0.03 }}
@@ -497,8 +497,8 @@ export function YedeklerPage() {
                             {backup.type === 'auto' ? 'Oto' : 'Manuel'}
                           </span>
                           {vr && (
-                            <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${vr.verified ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-red-500/10 text-red-400 border border-red-500/20'}`}>
-                              {vr.verified ? '✓ Doğrulandı' : '✗ Bozuk'}
+                            <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${vr.ok ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-red-500/10 text-red-400 border border-red-500/20'}`}>
+                              {vr.ok ? '✓ Doğrulandı' : '✗ Bozuk'}
                             </span>
                           )}
                         </div>
@@ -507,8 +507,8 @@ export function YedeklerPage() {
                           <span>•</span>
                           <span className="tech-number">{backup.sizeKB.toFixed(0)} KB</span>
                           <span>•</span>
-                          <span className="font-mono text-[9px] text-muted-foreground/40 truncate max-w-[120px]" title={backup.checksum}>
-                            SHA: {backup.checksum?.substring(0, 12)}...
+                          <span className="font-mono text-[9px] text-muted-foreground/40 truncate max-w-[120px]" title={backup.id}>
+                            ID: {backup.id.substring(0, 12)}...
                           </span>
                         </div>
                         {/* Table breakdown */}
@@ -747,7 +747,7 @@ export function YedeklerPage() {
               <h4 className="text-xs font-bold text-white">Yerel Depo (Dual Supabase)</h4>
             </div>
             {(() => {
-              const lc = getLocalRepoConfig();
+              const lc = getLocalRepoConfig() as any;
               return lc.enabled ? (
                 <div className="flex items-center gap-3">
                   <div className={`w-2.5 h-2.5 rounded-full ${isLocalHealthy() ? 'bg-emerald-400 animate-pulse' : 'bg-red-400'}`} />
@@ -850,6 +850,7 @@ export function YedeklerPage() {
                     <div className="flex justify-between"><span className="text-muted-foreground/60">Uygulama:</span><span className="text-white">{restoreFileContent.appName || 'Bilinmiyor'}</span></div>
                     <div className="flex justify-between"><span className="text-muted-foreground/60">Tarih:</span><span className="text-white">{restoreFileContent.createdAt ? new Date(restoreFileContent.createdAt).toLocaleString('tr-TR') : '-'}</span></div>
                     <div className="flex justify-between"><span className="text-muted-foreground/60">Kayıt:</span><span className="text-white">{restoreFileContent.meta?.totalDocs ?? Object.keys(restoreFileContent.tables || {}).length}</span></div>
+                    <div className="flex justify-between"><span className="text-muted-foreground/60">Kayıt:</span><span className="text-white">{restoreFileContent.meta?.totalDocs || Object.keys(restoreFileContent.tables || {}).length}</span></div>
                   </>
                 )}
               </div>
