@@ -16,24 +16,51 @@
  *   uretim_kayitlari, faturalar, fatura_stok, tahsilatlar, arac_km_logs
  */
 
-import React, { useEffect } from 'react';
+import React, { useEffect, useContext, createContext, useState, useCallback } from 'react';
 import { useTableSync } from '../hooks/useTableSync';
+import type { SyncState } from '../hooks/useTableSync';
 import { cariFromDb, cariToDb } from '../pages/CariPage';
 import { productFromDb, productToDb } from '../pages/StokPage';
 import { StorageKey } from '../utils/storage';
 import { startAllSync, stopAllSync } from '../lib/pouchdb';
+
+// ─── Per-tablo sync durumu context ────────────────────────────────────────────
+
+export interface TableSyncStatus {
+  name: string;
+  syncState: SyncState;
+  lastSyncAt: Date | null;
+  docCount: number;
+}
+
+interface GlobalSyncTablesContextValue {
+  tables: TableSyncStatus[];
+  registerTable: (status: TableSyncStatus) => void;
+}
+
+const GlobalSyncTablesContext = createContext<GlobalSyncTablesContextValue>({
+  tables: [],
+  registerTable: () => {},
+});
+
+export function useGlobalSyncTables() {
+  return useContext(GlobalSyncTablesContext);
+}
 
 // ─── Alt bileşenler (her biri bir tablo için useTableSync çalıştırır) ────────
 // Not: Hook kuralları gereği her useTableSync ayrı bir bileşende olmalıdır,
 // yoksa koşullu render durumlarında sorun çıkabilir.
 
 function FislerSync() {
-  useTableSync({ tableName: 'fisler', storageKey: StorageKey.FISLER, orderBy: 'tarih', orderAsc: false });
+  const { registerTable } = useGlobalSyncTables();
+  const { data, syncState, lastSync } = useTableSync({ tableName: 'fisler', storageKey: StorageKey.FISLER, orderBy: 'tarih', orderAsc: false });
+  useEffect(() => { registerTable({ name: 'fisler', syncState, lastSyncAt: lastSync, docCount: data.length }); }, [syncState, lastSync, data.length, registerTable]);
   return null;
 }
 
 function UrunlerSync() {
-  useTableSync({
+  const { registerTable } = useGlobalSyncTables();
+  const { data, syncState, lastSync } = useTableSync({
     tableName: 'urunler',
     storageKey: StorageKey.STOK_DATA,
     orderBy: 'ad',
@@ -41,11 +68,13 @@ function UrunlerSync() {
     fromDb: productFromDb,
     toDb: productToDb,
   });
+  useEffect(() => { registerTable({ name: 'urunler', syncState, lastSyncAt: lastSync, docCount: data.length }); }, [syncState, lastSync, data.length, registerTable]);
   return null;
 }
 
 function CariSync() {
-  useTableSync({
+  const { registerTable } = useGlobalSyncTables();
+  const { data, syncState, lastSync } = useTableSync({
     tableName: 'cari_hesaplar',
     storageKey: StorageKey.CARI_DATA,
     orderBy: 'ad',
@@ -53,66 +82,91 @@ function CariSync() {
     fromDb: cariFromDb,
     toDb: cariToDb,
   });
+  useEffect(() => { registerTable({ name: 'cari_hesaplar', syncState, lastSyncAt: lastSync, docCount: data.length }); }, [syncState, lastSync, data.length, registerTable]);
   return null;
 }
 
 function KasaSync() {
-  useTableSync({ tableName: 'kasa_islemleri', storageKey: StorageKey.KASA_DATA, orderBy: 'tarih', orderAsc: false });
+  const { registerTable } = useGlobalSyncTables();
+  const { data, syncState, lastSync } = useTableSync({ tableName: 'kasa_islemleri', storageKey: StorageKey.KASA_DATA, orderBy: 'tarih', orderAsc: false });
+  useEffect(() => { registerTable({ name: 'kasa_islemleri', syncState, lastSyncAt: lastSync, docCount: data.length }); }, [syncState, lastSync, data.length, registerTable]);
   return null;
 }
 
 function PersonelSync() {
-  useTableSync({ tableName: 'personeller', storageKey: StorageKey.PERSONEL_DATA, orderBy: 'ad', orderAsc: true });
+  const { registerTable } = useGlobalSyncTables();
+  const { data, syncState, lastSync } = useTableSync({ tableName: 'personeller', storageKey: StorageKey.PERSONEL_DATA, orderBy: 'ad', orderAsc: true });
+  useEffect(() => { registerTable({ name: 'personeller', syncState, lastSyncAt: lastSync, docCount: data.length }); }, [syncState, lastSync, data.length, registerTable]);
   return null;
 }
 
 function BankaSync() {
-  useTableSync({ tableName: 'bankalar', storageKey: StorageKey.BANK_DATA, orderBy: 'ad', orderAsc: true });
+  const { registerTable } = useGlobalSyncTables();
+  const { data, syncState, lastSync } = useTableSync({ tableName: 'bankalar', storageKey: StorageKey.BANK_DATA, orderBy: 'ad', orderAsc: true });
+  useEffect(() => { registerTable({ name: 'bankalar', syncState, lastSyncAt: lastSync, docCount: data.length }); }, [syncState, lastSync, data.length, registerTable]);
   return null;
 }
 
 function CeklerSync() {
-  useTableSync({ tableName: 'cekler', storageKey: StorageKey.CEKLER_DATA, orderBy: 'created_at', orderAsc: false });
+  const { registerTable } = useGlobalSyncTables();
+  const { data, syncState, lastSync } = useTableSync({ tableName: 'cekler', storageKey: StorageKey.CEKLER_DATA, orderBy: 'created_at', orderAsc: false });
+  useEffect(() => { registerTable({ name: 'cekler', syncState, lastSyncAt: lastSync, docCount: data.length }); }, [syncState, lastSync, data.length, registerTable]);
   return null;
 }
 
 function AraclarSync() {
-  useTableSync({ tableName: 'araclar', storageKey: StorageKey.ARAC_DATA, orderBy: 'plaka', orderAsc: true });
+  const { registerTable } = useGlobalSyncTables();
+  const { data, syncState, lastSync } = useTableSync({ tableName: 'araclar', storageKey: StorageKey.ARAC_DATA, orderBy: 'plaka', orderAsc: true });
+  useEffect(() => { registerTable({ name: 'araclar', syncState, lastSyncAt: lastSync, docCount: data.length }); }, [syncState, lastSync, data.length, registerTable]);
   return null;
 }
 
 function AracShiftsSync() {
-  useTableSync({ tableName: 'arac_shifts', storageKey: StorageKey.ARAC_SHIFTS, orderBy: 'created_at', orderAsc: false });
+  const { registerTable } = useGlobalSyncTables();
+  const { data, syncState, lastSync } = useTableSync({ tableName: 'arac_shifts', storageKey: StorageKey.ARAC_SHIFTS, orderBy: 'created_at', orderAsc: false });
+  useEffect(() => { registerTable({ name: 'arac_shifts', syncState, lastSyncAt: lastSync, docCount: data.length }); }, [syncState, lastSync, data.length, registerTable]);
   return null;
 }
 
 function AracKmLogsSync() {
-  useTableSync({ tableName: 'arac_km_logs', storageKey: StorageKey.ARAC_KM_LOGS, orderBy: 'created_at', orderAsc: false });
+  const { registerTable } = useGlobalSyncTables();
+  const { data, syncState, lastSync } = useTableSync({ tableName: 'arac_km_logs', storageKey: StorageKey.ARAC_KM_LOGS, orderBy: 'created_at', orderAsc: false });
+  useEffect(() => { registerTable({ name: 'arac_km_logs', syncState, lastSyncAt: lastSync, docCount: data.length }); }, [syncState, lastSync, data.length, registerTable]);
   return null;
 }
 
 function UretimProfillerSync() {
-  useTableSync({ tableName: 'uretim_profilleri', storageKey: StorageKey.URETIM_PROFILES, orderBy: 'ad', orderAsc: true });
+  const { registerTable } = useGlobalSyncTables();
+  const { data, syncState, lastSync } = useTableSync({ tableName: 'uretim_profilleri', storageKey: StorageKey.URETIM_PROFILES, orderBy: 'ad', orderAsc: true });
+  useEffect(() => { registerTable({ name: 'uretim_profilleri', syncState, lastSyncAt: lastSync, docCount: data.length }); }, [syncState, lastSync, data.length, registerTable]);
   return null;
 }
 
 function UretimKayitlariSync() {
-  useTableSync({ tableName: 'uretim_kayitlari', storageKey: StorageKey.URETIM_DATA, orderBy: 'created_at', orderAsc: false });
+  const { registerTable } = useGlobalSyncTables();
+  const { data, syncState, lastSync } = useTableSync({ tableName: 'uretim_kayitlari', storageKey: StorageKey.URETIM_DATA, orderBy: 'created_at', orderAsc: false });
+  useEffect(() => { registerTable({ name: 'uretim_kayitlari', syncState, lastSyncAt: lastSync, docCount: data.length }); }, [syncState, lastSync, data.length, registerTable]);
   return null;
 }
 
 function FaturalarSync() {
-  useTableSync({ tableName: 'faturalar', storageKey: StorageKey.FATURALAR, orderBy: 'tarih', orderAsc: false });
+  const { registerTable } = useGlobalSyncTables();
+  const { data, syncState, lastSync } = useTableSync({ tableName: 'faturalar', storageKey: StorageKey.FATURALAR, orderBy: 'tarih', orderAsc: false });
+  useEffect(() => { registerTable({ name: 'faturalar', syncState, lastSyncAt: lastSync, docCount: data.length }); }, [syncState, lastSync, data.length, registerTable]);
   return null;
 }
 
 function FaturaStokSync() {
-  useTableSync({ tableName: 'fatura_stok', storageKey: StorageKey.FATURA_STOK, orderBy: 'created_at', orderAsc: false });
+  const { registerTable } = useGlobalSyncTables();
+  const { data, syncState, lastSync } = useTableSync({ tableName: 'fatura_stok', storageKey: StorageKey.FATURA_STOK, orderBy: 'created_at', orderAsc: false });
+  useEffect(() => { registerTable({ name: 'fatura_stok', syncState, lastSyncAt: lastSync, docCount: data.length }); }, [syncState, lastSync, data.length, registerTable]);
   return null;
 }
 
 function TahsilatlarSync() {
-  useTableSync({ tableName: 'tahsilatlar', storageKey: 'tahsilatlar_data', orderBy: 'tarih', orderAsc: false });
+  const { registerTable } = useGlobalSyncTables();
+  const { data, syncState, lastSync } = useTableSync({ tableName: 'tahsilatlar', storageKey: 'tahsilatlar_data', orderBy: 'tarih', orderAsc: false });
+  useEffect(() => { registerTable({ name: 'tahsilatlar', syncState, lastSyncAt: lastSync, docCount: data.length }); }, [syncState, lastSync, data.length, registerTable]);
   return null;
 }
 
@@ -130,14 +184,26 @@ interface GlobalTableSyncProviderProps {
  * Supabase tablolarından okunur ve storage_update eventi yayınlanır.
  */
 export function GlobalTableSyncProvider({ children }: GlobalTableSyncProviderProps) {
-  // PouchDB ↔ CouchDB continuous sync başlat
+  const [tables, setTables] = useState<TableSyncStatus[]>([]);
+
+  const registerTable = useCallback((status: TableSyncStatus) => {
+    setTables(prev => {
+      const idx = prev.findIndex(t => t.name === status.name);
+      if (idx === -1) return [...prev, status];
+      const next = [...prev];
+      next[idx] = status;
+      return next;
+    });
+  }, []);
+
+  // PouchDB ↔ CouchDB continuous sync başlat (kademeli — 200ms aralık)
   useEffect(() => {
     startAllSync();
     return () => stopAllSync();
   }, []);
 
   return (
-    <>
+    <GlobalSyncTablesContext.Provider value={{ tables, registerTable }}>
       {/* Her tablo için ayrı senkronizasyon bileşeni */}
       <FislerSync />
       <UrunlerSync />
@@ -155,6 +221,6 @@ export function GlobalTableSyncProvider({ children }: GlobalTableSyncProviderPro
       <FaturaStokSync />
       <TahsilatlarSync />
       {children}
-    </>
+    </GlobalSyncTablesContext.Provider>
   );
 }

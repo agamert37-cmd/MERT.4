@@ -651,9 +651,9 @@ export function SalesPage() {
             {/* Bugünün Özeti */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3 mb-3 sm:mb-4">
               {[
-                { label: 'Satış', total: todayStats.satisTotal, count: todayStats.satisCount, icon: TrendingUp, color: 'emerald', prefix: '+' },
-                { label: 'Alış', total: todayStats.alisTotal, count: todayStats.alisCount, icon: Package, color: 'blue', prefix: '-' },
-                { label: 'Gider', total: todayStats.giderTotal, count: todayStats.giderCount, icon: TrendingDown, color: 'red', prefix: '-' },
+                { label: t('salesPage.sale'), total: todayStats.satisTotal, count: todayStats.satisCount, icon: TrendingUp, color: 'emerald', prefix: '+' },
+                { label: t('salesPage.purchase'), total: todayStats.alisTotal, count: todayStats.alisCount, icon: Package, color: 'blue', prefix: '-' },
+                { label: t('salesPage.expense'), total: todayStats.giderTotal, count: todayStats.giderCount, icon: TrendingDown, color: 'red', prefix: '-' },
                 { label: 'Net', total: Math.abs(todayStats.totalRevenue), count: todayStats.totalCount, icon: Target, color: todayStats.totalRevenue >= 0 ? 'emerald' : 'red', prefix: todayStats.totalRevenue >= 0 ? '+' : '-', isNet: true },
               ].map((stat, idx) => {
                 const Icon = stat.icon;
@@ -721,9 +721,9 @@ export function SalesPage() {
       {/* ─── Hızlı İşlem Butonları (Mobil) ─── */}
       <div className="grid grid-cols-3 gap-2 sm:hidden">
         {[
-          { mode: 'satis' as FisMode, label: 'Satış', icon: ShoppingCart, gradient: 'from-emerald-600 to-emerald-700', shadow: 'shadow-emerald-600/20', desc: 'Müşteriye satış' },
-          { mode: 'alis' as FisMode, label: 'Alış', icon: Package, gradient: 'from-blue-600 to-blue-700', shadow: 'shadow-blue-600/20', desc: 'Toptancıdan alış' },
-          { mode: 'gider' as FisMode, label: 'Gider', icon: TrendingDown, gradient: 'from-red-600 to-red-700', shadow: 'shadow-red-600/20', desc: 'Gider kaydı' },
+          { mode: 'satis' as FisMode, label: t('salesPage.sale'), icon: ShoppingCart, gradient: 'from-emerald-600 to-emerald-700', shadow: 'shadow-emerald-600/20', desc: 'Müşteriye satış' },
+          { mode: 'alis' as FisMode, label: t('salesPage.purchase'), icon: Package, gradient: 'from-blue-600 to-blue-700', shadow: 'shadow-blue-600/20', desc: 'Toptancıdan alış' },
+          { mode: 'gider' as FisMode, label: t('salesPage.expense'), icon: TrendingDown, gradient: 'from-red-600 to-red-700', shadow: 'shadow-red-600/20', desc: 'Gider kaydı' },
         ].map((item) => {
           const Icon = item.icon;
           return (
@@ -1599,7 +1599,7 @@ export function SalesPage() {
                           </label>
                           <select
                             value={paymentInfo?.bankName || ''}
-                            onChange={(e) => setPaymentInfo({ ...paymentInfo, bankName: e.target.value })}
+                            onChange={(e) => setPaymentInfo(prev => ({ ...(prev ?? {} as PaymentInfo), bankName: e.target.value }))}
                             className="w-full px-3 sm:px-4 py-2.5 sm:py-3 bg-secondary/50 border border-border rounded-xl sm:rounded-lg text-white text-sm focus:outline-none focus:border-blue-500"
                           >
                             <option value="">{t('salesPage.selectBank')}</option>
@@ -1618,10 +1618,10 @@ export function SalesPage() {
                             type="file"
                             accept="image/*"
                             capture="environment"
-                            onChange={(e) => handlePhotoUpload(e, (photo) => setPaymentInfo({ ...paymentInfo, slipPhoto: photo }))}
+                            onChange={(e) => handlePhotoUpload(e, (photo) => setPaymentInfo(prev => ({ ...(prev ?? {} as PaymentInfo), slipPhoto: photo })))}
                             className="w-full px-3 sm:px-4 py-2.5 sm:py-3 bg-secondary/50 border border-border rounded-xl sm:rounded-lg text-white text-sm file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-blue-600 file:text-white cursor-pointer"
                           />
-                          {paymentInfo.slipPhoto && (
+                          {paymentInfo?.slipPhoto && (
                             <p className="text-green-400 text-xs sm:text-sm mt-1.5 sm:mt-2">✓ {t('salesPage.photoUploaded')}</p>
                           )}
                         </div>
@@ -1637,7 +1637,7 @@ export function SalesPage() {
                           </label>
                           <select
                             value={paymentInfo?.receiverEmployee || ''}
-                            onChange={(e) => setPaymentInfo({ ...paymentInfo, receiverEmployee: e.target.value })}
+                            onChange={(e) => setPaymentInfo(prev => ({ ...(prev ?? {} as PaymentInfo), receiverEmployee: e.target.value }))}
                             className="w-full px-3 sm:px-4 py-2.5 sm:py-3 bg-secondary/50 border border-border rounded-xl sm:rounded-lg text-white text-sm focus:outline-none focus:border-blue-500"
                           >
                             <option value="">{t('salesPage.selectEmployee')}</option>
@@ -1654,7 +1654,7 @@ export function SalesPage() {
                           </label>
                           <select
                             value={paymentInfo?.receiverBank || ''}
-                            onChange={(e) => setPaymentInfo({ ...paymentInfo, receiverBank: e.target.value })}
+                            onChange={(e) => setPaymentInfo(prev => ({ ...(prev ?? {} as PaymentInfo), receiverBank: e.target.value }))}
                             className="w-full px-3 sm:px-4 py-2.5 sm:py-3 bg-secondary/50 border border-border rounded-xl sm:rounded-lg text-white text-sm focus:outline-none focus:border-blue-500"
                           >
                             <option value="">{t('salesPage.selectBank')}</option>
@@ -1673,10 +1673,10 @@ export function SalesPage() {
                             type="file"
                             accept="image/*"
                             capture="environment"
-                            onChange={(e) => handlePhotoUpload(e, (photo) => setPaymentInfo({ ...paymentInfo, receiptPhoto: photo }))}
+                            onChange={(e) => handlePhotoUpload(e, (photo) => setPaymentInfo(prev => ({ ...(prev ?? {} as PaymentInfo), receiptPhoto: photo })))}
                             className="w-full px-3 sm:px-4 py-2.5 sm:py-3 bg-secondary/50 border border-border rounded-xl sm:rounded-lg text-white text-sm file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-blue-600 file:text-white cursor-pointer"
                           />
-                          {paymentInfo.receiptPhoto && (
+                          {paymentInfo?.receiptPhoto && (
                             <p className="text-green-400 text-xs sm:text-sm mt-1.5 sm:mt-2">✓ {t('salesPage.photoUploaded')}</p>
                           )}
                         </div>
@@ -1693,7 +1693,7 @@ export function SalesPage() {
                           <input
                             type="date"
                             value={paymentInfo?.dueDate || ''}
-                            onChange={(e) => setPaymentInfo({ ...paymentInfo, dueDate: e.target.value })}
+                            onChange={(e) => setPaymentInfo(prev => ({ ...(prev ?? {} as PaymentInfo), dueDate: e.target.value }))}
                             className="w-full px-3 sm:px-4 py-2.5 sm:py-3 bg-secondary/50 border border-border rounded-xl sm:rounded-lg text-white text-sm focus:outline-none focus:border-blue-500"
                           />
                         </div>
@@ -1705,10 +1705,10 @@ export function SalesPage() {
                             type="file"
                             accept="image/*"
                             capture="environment"
-                            onChange={(e) => handlePhotoUpload(e, (photo) => setPaymentInfo({ ...paymentInfo, checkPhoto: photo }))}
+                            onChange={(e) => handlePhotoUpload(e, (photo) => setPaymentInfo(prev => ({ ...(prev ?? {} as PaymentInfo), checkPhoto: photo })))}
                             className="w-full px-3 sm:px-4 py-2.5 sm:py-3 bg-secondary/50 border border-border rounded-xl sm:rounded-lg text-white text-sm file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-blue-600 file:text-white cursor-pointer"
                           />
-                          {paymentInfo.checkPhoto && (
+                          {paymentInfo?.checkPhoto && (
                             <p className="text-green-400 text-xs sm:text-sm mt-1.5 sm:mt-2">✓ {t('salesPage.photoUploaded')}</p>
                           )}
                         </div>
@@ -1722,26 +1722,26 @@ export function SalesPage() {
                     onClick={() => {
                       // Ödeme bilgisi opsiyonel - sadece ödeme yöntemi seçildiyse validate et
                       if (paymentInfo?.method) {
-                        if ((paymentInfo?.amount ?? 0) <= 0) {
+                        if (isNaN(paymentInfo?.amount ?? NaN) || (paymentInfo?.amount ?? 0) <= 0) {
                           toast.error(t('salesPage.enterPaymentAmount'));
                           return;
                         }
 
                         // Method-specific validation
-                        if (paymentInfo.method === 'kredi-karti') {
-                          if (!paymentInfo.bankName || !paymentInfo.slipPhoto) {
+                        if (paymentInfo!.method === 'kredi-karti') {
+                          if (!paymentInfo!.bankName || !paymentInfo!.slipPhoto) {
                             toast.error(t('salesPage.creditCardRequired'));
                             return;
                           }
                         }
-                        if (paymentInfo.method === 'havale') {
-                          if (!paymentInfo.receiverEmployee || !paymentInfo.receiverBank || !paymentInfo.receiptPhoto) {
+                        if (paymentInfo!.method === 'havale') {
+                          if (!paymentInfo!.receiverEmployee || !paymentInfo!.receiverBank || !paymentInfo!.receiptPhoto) {
                             toast.error(t('salesPage.transferRequired'));
                             return;
                           }
                         }
-                        if (paymentInfo.method === 'cek') {
-                          if (!paymentInfo.dueDate || !paymentInfo.checkPhoto) {
+                        if (paymentInfo!.method === 'cek') {
+                          if (!paymentInfo!.dueDate || !paymentInfo!.checkPhoto) {
                             toast.error(t('salesPage.checkRequired'));
                             return;
                           }
@@ -1953,27 +1953,30 @@ export function SalesPage() {
                           category: kasaCategory,
                           description: `${methodNames[paymentInfo.method] || paymentInfo.method} - ${selectedCari?.companyName || t('salesPage.cash')}`,
                           amount: paymentInfo.amount,
+                          date: new Date().toISOString().split('T')[0],
+                          description: `${methodNames[paymentInfo!.method] || paymentInfo!.method} - ${selectedCari?.companyName || t('salesPage.cash')}`,
+                          amount: paymentInfo!.amount,
                           date: new Date().toLocaleDateString('tr-TR'),
                           time: new Date().toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' }),
                         };
                         addKasaSync(newKasaEntry);
 
                         // Çek ödemesi ise çek kaydı oluştur
-                        if (paymentInfo.method === 'cek' && paymentInfo.dueDate) {
+                        if (paymentInfo!.method === 'cek' && paymentInfo!.dueDate) {
                           const bankList = getFromStorage<any[]>(StorageKey.BANK_DATA) || [];
                           const newCek: CekData = {
                             id: `cek-fis-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
                             direction: 'alinan',
-                            amount: paymentInfo.amount,
+                            amount: paymentInfo!.amount,
                             bankName: t('salesPage.notSpecified'),
-                            dueDate: paymentInfo.dueDate,
+                            dueDate: paymentInfo!.dueDate,
                             issueDate: new Date().toISOString().split('T')[0],
                             sourceType: selectedCari?.type === 'Toptancı' ? 'toptanci' : 'musteri',
                             sourceName: selectedCari?.companyName || t('salesPage.unknown'),
                             sourceId: selectedCari?.id || '',
                             relatedFisId: fisData.id,
                             relatedFisDescription: `${selectedMode === 'satis' ? t('salesPage.sale') : t('salesPage.purchase')} ${t('salesPage.receipt')} #${fisData.id.slice(-6)}`,
-                            photoFront: paymentInfo.checkPhoto || null,
+                            photoFront: paymentInfo!.checkPhoto || null,
                             photoBack: null,
                             status: 'beklemede',
                             createdAt: new Date().toISOString(),
@@ -1995,9 +1998,9 @@ export function SalesPage() {
                       } else if (isPartialPayment) {
                         paymentDescription = `${t('salesPage.paid')}: ₺${paidAmount.toLocaleString('tr-TR')} - ${t('salesPage.remaining')}: ₺${(totalAmount - paidAmount).toLocaleString('tr-TR')} ${t('salesPage.creditLower')}`;
                       } else {
-                        const methodName = paymentInfo.method === 'nakit' ? t('salesPage.payMethod.cash') : 
-                                          paymentInfo.method === 'kredi-karti' ? t('salesPage.payMethod.creditCard') : 
-                                          paymentInfo.method === 'havale' ? t('salesPage.payMethod.transfer') : t('salesPage.payMethod.check');
+                        const methodName = paymentInfo?.method === 'nakit' ? t('salesPage.payMethod.cash') :
+                                          paymentInfo?.method === 'kredi-karti' ? t('salesPage.payMethod.creditCard') :
+                                          paymentInfo?.method === 'havale' ? t('salesPage.payMethod.transfer') : t('salesPage.payMethod.check');
                         paymentDescription = `${t('salesPage.total')}: ₺${totalAmount.toLocaleString('tr-TR')} - ${methodName} (${t('salesPage.fullPayment')})`;
                       }
                       
@@ -2318,57 +2321,57 @@ export function SalesPage() {
                           >
                             <p className="text-[11px] text-gray-400 font-semibold uppercase tracking-wider">{t('salesPage.paymentDetails')}</p>
                             
-                            {paymentInfo.method === 'kredi-karti' && (
+                            {paymentInfo?.method === 'kredi-karti' && (
                               <>
                                 <div>
                                   <label className="block text-xs font-medium text-foreground/80 mb-1.5">{t('salesPage.bank')} *</label>
-                                  <select value={paymentInfo.bankName || ''} onChange={(e) => setPaymentInfo({ ...paymentInfo, bankName: e.target.value })} className="w-full px-3 py-2 bg-secondary/50 border border-border rounded-lg text-white text-sm focus:outline-none focus:border-red-500">
+                                  <select value={paymentInfo?.bankName || ''} onChange={(e) => setPaymentInfo(prev => ({ ...(prev ?? {} as PaymentInfo), bankName: e.target.value }))} className="w-full px-3 py-2 bg-secondary/50 border border-border rounded-lg text-white text-sm focus:outline-none focus:border-red-500">
                                     <option value="">{t('salesPage.selectBank')}</option>
                                     {banks.map((bank: any, idx: number) => <option key={idx} value={bank.name}>{bank.name} {bank.branch && `- ${bank.branch}`}</option>)}
                                   </select>
                                 </div>
                                 <div>
                                   <label className="block text-xs font-medium text-foreground/80 mb-1.5">{t('salesPage.receiptPhoto')} *</label>
-                                  <input type="file" accept="image/*" onChange={(e) => handlePhotoUpload(e, (photo) => setPaymentInfo({ ...paymentInfo, slipPhoto: photo }))} className="w-full px-3 py-2 bg-secondary/50 border border-border rounded-lg text-white text-xs" />
-                                  {paymentInfo.slipPhoto && <p className="text-green-400 text-xs mt-1.5">✓ {t('salesPage.receiptPhotoUploaded')}</p>}
+                                  <input type="file" accept="image/*" onChange={(e) => handlePhotoUpload(e, (photo) => setPaymentInfo(prev => ({ ...(prev ?? {} as PaymentInfo), slipPhoto: photo })))} className="w-full px-3 py-2 bg-secondary/50 border border-border rounded-lg text-white text-xs" />
+                                  {paymentInfo?.slipPhoto && <p className="text-green-400 text-xs mt-1.5">✓ {t('salesPage.receiptPhotoUploaded')}</p>}
                                 </div>
                               </>
                             )}
 
-                            {paymentInfo.method === 'havale' && (
+                            {paymentInfo?.method === 'havale' && (
                               <>
                                 <div>
                                   <label className="block text-xs font-medium text-foreground/80 mb-1.5">{t('salesPage.receiverEmployee')} *</label>
-                                  <select value={paymentInfo.receiverEmployee || ''} onChange={(e) => setPaymentInfo({ ...paymentInfo, receiverEmployee: e.target.value })} className="w-full px-3 py-2 bg-secondary/50 border border-border rounded-lg text-white text-sm focus:outline-none focus:border-red-500">
+                                  <select value={paymentInfo?.receiverEmployee || ''} onChange={(e) => setPaymentInfo(prev => ({ ...(prev ?? {} as PaymentInfo), receiverEmployee: e.target.value }))} className="w-full px-3 py-2 bg-secondary/50 border border-border rounded-lg text-white text-sm focus:outline-none focus:border-red-500">
                                     <option value="">{t('salesPage.selectEmployee')}</option>
                                     {personelList.map((person: any) => <option key={person.id} value={person.name}>{person.name} - {person.position}</option>)}
                                   </select>
                                 </div>
                                 <div>
                                   <label className="block text-xs font-medium text-foreground/80 mb-1.5">{t('salesPage.destinationBank')} *</label>
-                                  <select value={paymentInfo.receiverBank || ''} onChange={(e) => setPaymentInfo({ ...paymentInfo, receiverBank: e.target.value })} className="w-full px-3 py-2 bg-secondary/50 border border-border rounded-lg text-white text-sm focus:outline-none focus:border-red-500">
+                                  <select value={paymentInfo?.receiverBank || ''} onChange={(e) => setPaymentInfo(prev => ({ ...(prev ?? {} as PaymentInfo), receiverBank: e.target.value }))} className="w-full px-3 py-2 bg-secondary/50 border border-border rounded-lg text-white text-sm focus:outline-none focus:border-red-500">
                                     <option value="">{t('salesPage.selectBank')}</option>
                                     {banks.map((bank: any, idx: number) => <option key={idx} value={bank.name}>{bank.name} {bank.branch && `- ${bank.branch}`}</option>)}
                                   </select>
                                 </div>
                                 <div>
                                   <label className="block text-xs font-medium text-foreground/80 mb-1.5">{t('salesPage.receiptPhoto')} *</label>
-                                  <input type="file" accept="image/*" onChange={(e) => handlePhotoUpload(e, (photo) => setPaymentInfo({ ...paymentInfo, receiptPhoto: photo }))} className="w-full px-3 py-2 bg-secondary/50 border border-border rounded-lg text-white text-xs" />
-                                  {paymentInfo.receiptPhoto && <p className="text-green-400 text-xs mt-1.5">✓ {t('salesPage.receiptPhotoUploaded')}</p>}
+                                  <input type="file" accept="image/*" onChange={(e) => handlePhotoUpload(e, (photo) => setPaymentInfo(prev => ({ ...(prev ?? {} as PaymentInfo), receiptPhoto: photo })))} className="w-full px-3 py-2 bg-secondary/50 border border-border rounded-lg text-white text-xs" />
+                                  {paymentInfo?.receiptPhoto && <p className="text-green-400 text-xs mt-1.5">✓ {t('salesPage.receiptPhotoUploaded')}</p>}
                                 </div>
                               </>
                             )}
 
-                            {paymentInfo.method === 'cek' && (
+                            {paymentInfo?.method === 'cek' && (
                               <>
                                 <div>
                                   <label className="block text-xs font-medium text-foreground/80 mb-1.5">{t('salesPage.dueDate')} *</label>
-                                  <input type="date" value={paymentInfo.dueDate || ''} onChange={(e) => setPaymentInfo({ ...paymentInfo, dueDate: e.target.value })} className="w-full px-3 py-2 bg-secondary/50 border border-border rounded-lg text-white text-sm focus:outline-none focus:border-red-500" />
+                                  <input type="date" value={paymentInfo?.dueDate || ''} onChange={(e) => setPaymentInfo(prev => ({ ...(prev ?? {} as PaymentInfo), dueDate: e.target.value }))} className="w-full px-3 py-2 bg-secondary/50 border border-border rounded-lg text-white text-sm focus:outline-none focus:border-red-500" />
                                 </div>
                                 <div>
                                   <label className="block text-xs font-medium text-foreground/80 mb-1.5">{t('salesPage.checkPhoto')} *</label>
-                                  <input type="file" accept="image/*" onChange={(e) => handlePhotoUpload(e, (photo) => setPaymentInfo({ ...paymentInfo, checkPhoto: photo }))} className="w-full px-3 py-2 bg-secondary/50 border border-border rounded-lg text-white text-xs" />
-                                  {paymentInfo.checkPhoto && <p className="text-green-400 text-xs mt-1.5">✓ {t('salesPage.checkPhotoUploaded')}</p>}
+                                  <input type="file" accept="image/*" onChange={(e) => handlePhotoUpload(e, (photo) => setPaymentInfo(prev => ({ ...(prev ?? {} as PaymentInfo), checkPhoto: photo })))} className="w-full px-3 py-2 bg-secondary/50 border border-border rounded-lg text-white text-xs" />
+                                  {paymentInfo?.checkPhoto && <p className="text-green-400 text-xs mt-1.5">✓ {t('salesPage.checkPhotoUploaded')}</p>}
                                 </div>
                               </>
                             )}
@@ -2453,20 +2456,20 @@ export function SalesPage() {
                       }
 
                       // Ödeme yöntemi detay validasyonu
-                      if (paymentInfo.method === 'kredi-karti') {
-                        if (!paymentInfo.bankName || !paymentInfo.slipPhoto) {
+                      if (paymentInfo!.method === 'kredi-karti') {
+                        if (!paymentInfo!.bankName || !paymentInfo!.slipPhoto) {
                           toast.error(t('salesPage.creditCardBankRequired'));
                           return;
                         }
                       }
-                      if (paymentInfo.method === 'havale') {
-                        if (!paymentInfo.receiverEmployee || !paymentInfo.receiverBank || !paymentInfo.receiptPhoto) {
+                      if (paymentInfo!.method === 'havale') {
+                        if (!paymentInfo!.receiverEmployee || !paymentInfo!.receiverBank || !paymentInfo!.receiptPhoto) {
                           toast.error(t('salesPage.transferDetailsRequired'));
                           return;
                         }
                       }
-                      if (paymentInfo.method === 'cek') {
-                        if (!paymentInfo.dueDate || !paymentInfo.checkPhoto) {
+                      if (paymentInfo!.method === 'cek') {
+                        if (!paymentInfo!.dueDate || !paymentInfo!.checkPhoto) {
                           toast.error(t('salesPage.checkDetailsRequired'));
                           return;
                         }
@@ -2500,7 +2503,7 @@ export function SalesPage() {
                         category: giderCategory,
                         amount: giderAmount,
                         description: giderDescription,
-                        date: new Date().toLocaleDateString('tr-TR'),
+                        date: new Date().toISOString().split('T')[0],
                         time: new Date().toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' }),
                         employee: currentEmployee?.name,
                         receiptNo: giderFisData.id
@@ -2597,10 +2600,10 @@ export function SalesPage() {
             {/* Tab Filtreleri */}
             <div className="flex gap-0.5 bg-white/5 rounded-lg sm:rounded-xl p-0.5 shrink-0 overflow-x-auto">
               {[
-                { id: 'all' as const, label: 'Tümü', count: fisler.length, color: 'bg-white/10 text-white' },
-                { id: 'satis' as const, label: 'Satış', count: fisler.filter(f => f.mode === 'satis').length, color: 'bg-emerald-600/20 text-emerald-400' },
-                { id: 'alis' as const, label: 'Alış', count: fisler.filter(f => f.mode === 'alis').length, color: 'bg-blue-600/20 text-blue-400' },
-                { id: 'gider' as const, label: 'Gider', count: fisler.filter(f => f.mode === 'gider').length, color: 'bg-red-600/20 text-red-400' },
+                { id: 'all' as const, label: t('salesPage.filterAll'), count: fisler.length, color: 'bg-white/10 text-white' },
+                { id: 'satis' as const, label: t('salesPage.sale'), count: fisler.filter(f => f.mode === 'satis').length, color: 'bg-emerald-600/20 text-emerald-400' },
+                { id: 'alis' as const, label: t('salesPage.purchase'), count: fisler.filter(f => f.mode === 'alis').length, color: 'bg-blue-600/20 text-blue-400' },
+                { id: 'gider' as const, label: t('salesPage.expense'), count: fisler.filter(f => f.mode === 'gider').length, color: 'bg-red-600/20 text-red-400' },
               ].map((tab) => (
                 <button
                   key={tab.id}

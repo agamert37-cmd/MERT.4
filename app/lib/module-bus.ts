@@ -21,7 +21,8 @@
 export type ModuleEventMap = {
   // Stok modulu
   'stok:added': { productId: string; productName: string; quantity: number };
-  'stok:updated': { productId: string; productName: string; changes: Record<string, any> };
+  'stok:updated': { productId?: string; productName?: string; changes?: Record<string, any>; source?: string; faturaId?: string };
+  'stok:updated': { productId: string; productName: string; changes: Record<string, any>; source?: string; faturaId?: string };
   'stok:deleted': { productId: string; productName: string };
   'stok:batch_updated': { count: number };
   'stok:movement': { productId: string; productName: string; type: string; quantity: number; partyName?: string };
@@ -64,8 +65,16 @@ export type ModuleEventMap = {
 
   // Cek modulu
   'cek:added': { cekId: string; amount: number };
-  'cek:status_changed': { cekId: string; newStatus: string; bankName?: string };
+  'cek:created': { cekId: string; direction: string; amount: number };
+  'cek:status_changed': { cekId: string; newStatus: string; bankName?: string; direction?: string };
   'cek:deleted': { cekId: string; bankName?: string };
+
+  // Fatura modulu
+  'fatura:added': { faturaId: string; type: string; amount: number; items: number };
+  'fatura:cancelled': { faturaId: string; type: string; amount: number };
+  'fatura:deleted': { faturaId: string };
+  'faturaStok:added': { id: string; name: string };
+  'faturaStok:deleted': { id: string; name?: string };
 
   // Gun sonu modulu
   'gunsonu:closed': { date: string; totalSales: number };

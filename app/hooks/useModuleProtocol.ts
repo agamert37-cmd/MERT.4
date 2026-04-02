@@ -73,7 +73,7 @@ export interface ModuleProtocol {
   // Contexts
   user: any;
   currentEmployee: any;
-  t: (key: string, params?: Record<string, any>) => string;
+  t: (key: string, defaultText?: string) => string;
   language: string;
 
   // Permissions

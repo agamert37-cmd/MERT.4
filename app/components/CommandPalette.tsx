@@ -22,7 +22,13 @@ import {
   Building2,
   BarChart3,
   CalendarCheck,
-  FileCheck
+  FileCheck,
+  CreditCard,
+  Factory,
+  TrendingUp,
+  Shield,
+  Bell,
+  MapPin,
 } from 'lucide-react';
 import { getFromStorage, StorageKey } from '../utils/storage';
 
@@ -55,6 +61,12 @@ const PAGES: SearchResult[] = [
   { id: 'p-yedekler', type: 'page', title: 'Yedekler', subtitle: 'Sistem yedekleri', icon: Database, path: '/yedekler', color: 'text-muted-foreground' },
   { id: 'p-chat', type: 'page', title: 'AI Asistan', subtitle: 'Yapay zeka destekli asistan', icon: MessageSquare, path: '/chat', color: 'text-violet-400' },
   { id: 'p-settings', type: 'page', title: 'Ayarlar', subtitle: 'Sistem ayarları', icon: Settings, path: '/settings', color: 'text-gray-400' },
+  { id: 'p-cekler', type: 'page', title: 'Çekler', subtitle: 'Çek yönetimi ve takibi', icon: CreditCard, path: '/cekler', color: 'text-yellow-400' },
+  { id: 'p-uretim', type: 'page', title: 'Üretim', subtitle: 'Üretim kayıtları ve profilleri', icon: Factory, path: '/uretim', color: 'text-orange-400' },
+  { id: 'p-pazarlama', type: 'page', title: 'Pazarlama', subtitle: 'Kampanya ve içerik yönetimi', icon: TrendingUp, path: '/pazarlama', color: 'text-pink-400' },
+  { id: 'p-guvenlik', type: 'page', title: 'Güvenlik', subtitle: 'Güvenlik merkezi ve loglar', icon: Shield, path: '/guvenlik', color: 'text-red-400' },
+  { id: 'p-guncelleme', type: 'page', title: 'Güncelleme Notları', subtitle: 'Sürüm geçmişi ve yenilikler', icon: Bell, path: '/guncelleme-notlari', color: 'text-violet-400' },
+  { id: 'p-arac-takip', type: 'page', title: 'Araç Takip', subtitle: 'Canlı araç konumu ve rota', icon: MapPin, path: '/arac-takip', color: 'text-cyan-400' },
 ];
 
 interface CommandPaletteProps {
@@ -74,7 +86,7 @@ export function CommandPalette({ isOpen, onClose }: CommandPaletteProps) {
     if (query.length < 2) return [];
 
     const results: SearchResult[] = [];
-    const q = query.toLowerCase();
+    const q = query.toLowerCase().trim();
 
     // Search cari
     const cariData = getFromStorage<any[]>(StorageKey.CARI_DATA) || [];
@@ -138,7 +150,7 @@ export function CommandPalette({ isOpen, onClose }: CommandPaletteProps) {
   // Filter pages
   const filteredPages = useMemo(() => {
     if (!query) return PAGES;
-    const q = query.toLowerCase();
+    const q = query.toLowerCase().trim();
     return PAGES.filter(p => 
       p.title.toLowerCase().includes(q) || 
       (p.subtitle || '').toLowerCase().includes(q)

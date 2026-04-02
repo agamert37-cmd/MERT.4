@@ -413,7 +413,7 @@ export function FaturaPage() {
           movements: [movement, ...(stock.movements || [])],
         } as any);
       }
-      emit('stok:updated', { source: 'fatura', faturaId: newFatura.id });
+      emit('stok:updated', { productId: '', productName: '', changes: {}, source: 'fatura', faturaId: newFatura.id });
     }
 
     sec.auditLog('add', newFatura.id, `fatura:${form.type}:${formGrossAmount}`);
@@ -443,8 +443,8 @@ export function FaturaPage() {
     updateFaturaSync(id, cancelledFatura);
 
     // ─── STOK GERİ ALMA (useTableSync ile senkron) ────────────────────────
-    if (fatura.isLinkedToGoods && fatura.faturaItems.length > 0) {
-      for (const item of fatura.faturaItems) {
+    if (fatura.isLinkedToGoods && (fatura.faturaItems || []).length > 0) {
+      for (const item of (fatura.faturaItems || [])) {
         const fsItem = faturaStok.find(fs => fs.name === item.name);
         const linkedStockId = item.linkedStockId || fsItem?.linkedStockId;
         if (!linkedStockId) continue;
@@ -469,7 +469,7 @@ export function FaturaPage() {
           movements: [reverseMovement, ...(stock.movements || [])],
         } as any);
       }
-      emit('stok:updated', { source: 'fatura_iptal', faturaId: id });
+      emit('stok:updated', { productId: '', productName: '', changes: {}, source: 'fatura_iptal', faturaId: id });
     }
 
     if (selectedFatura?.id === id) setSelectedFatura(cancelledFatura);
@@ -483,7 +483,7 @@ export function FaturaPage() {
   const handleDownloadUBL = (fatura: Fatura) => {
     if (fatura.type !== 'satis') { toast.error('UBL-TR XML sadece satış faturaları için oluşturulabilir'); return; }
     const company = getCompanyInfo();
-    const satirlar = fatura.faturaItems.map((item, i) => ({
+    const satirlar = (fatura.faturaItems || []).map((item, i) => ({
       sira: i + 1,
       aciklama: item.name,
       miktar: item.quantity,
@@ -589,7 +589,7 @@ export function FaturaPage() {
   const removeFaturaStokItem = (id: string) => {
     if (!canDelete) { toast.error(t('fatura.err.noPermStokDelete')); return; }
     const item = faturaStok.find(fs => fs.id === id);
-    const usedInFatura = faturalar.some(f => f.status === 'aktif' && f.faturaItems.some(fi => fi.name === item?.name));
+    const usedInFatura = faturalar.some(f => f.status === 'aktif' && (f.faturaItems || []).some(fi => fi.name === item?.name));
     if (usedInFatura && !confirm(`"${item?.name}" ${t('fatura.err.stokInUse')}`)) return;
     const updated = faturaStok.filter(s => s.id !== id);
     setFaturaStok(updated);
@@ -604,7 +604,7 @@ export function FaturaPage() {
   const faturaStokUsage = useMemo(() => {
     const usage: Record<string, { name: string; totalQty: number; totalAmount: number; faturaCount: number; linkedStockName?: string }> = {};
     faturalar.filter(f => f.status === 'aktif').forEach(f => {
-      f.faturaItems.forEach(item => {
+      (f.faturaItems || []).forEach(item => {
         const key = item.name;
         if (!usage[key]) {
           const fsItem = faturaStok.find(fs => fs.name === item.name);
@@ -923,15 +923,15 @@ export function FaturaPage() {
               </div>
 
               {/* Items preview */}
-              {fatura.faturaItems.length > 0 && (
+              {(fatura.faturaItems || []).length > 0 && (
                 <div className="mt-3 pt-3 border-t border-white/5 flex flex-wrap gap-2">
-                  {fatura.faturaItems.slice(0, 4).map((item, i) => (
+                  {(fatura.faturaItems || []).slice(0, 4).map((item, i) => (
                     <span key={i} className="px-2 py-1 bg-white/5 rounded-lg text-[10px] text-gray-400">
                       {item.name} • {item.quantity} {item.unit} • ₺{item.totalPrice.toFixed(2)}
                     </span>
                   ))}
-                  {fatura.faturaItems.length > 4 && (
-                    <span className="px-2 py-1 bg-white/5 rounded-lg text-[10px] text-gray-500">+{fatura.faturaItems.length - 4} kalem</span>
+                  {(fatura.faturaItems || []).length > 4 && (
+                    <span className="px-2 py-1 bg-white/5 rounded-lg text-[10px] text-gray-500">+{(fatura.faturaItems || []).length - 4} kalem</span>
                   )}
                 </div>
               )}
@@ -1390,9 +1390,9 @@ export function FaturaPage() {
 
                   {/* Kalemler */}
                   <div>
-                    <h3 className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">Fatura Kalemleri ({selectedFatura.faturaItems.length})</h3>
+                    <h3 className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">Fatura Kalemleri ({(selectedFatura.faturaItems || []).length})</h3>
                     <div className="space-y-1.5">
-                      {selectedFatura.faturaItems.map((item, i) => (
+                      {(selectedFatura.faturaItems || []).map((item, i) => (
                         <div key={i} className="flex items-center justify-between p-3 bg-black/40 border border-white/5 rounded-xl">
                           <div>
                             <span className="font-bold text-white text-sm">{item.name}</span>
@@ -1431,7 +1431,7 @@ export function FaturaPage() {
                         <Package className="w-3 h-3" /> Stok Etkisi
                       </h3>
                       <div className="space-y-1">
-                        {selectedFatura.faturaItems.map((item, i) => {
+                        {(selectedFatura.faturaItems || []).map((item, i) => {
                           const fsItem = faturaStok.find(fs => fs.name === item.name);
                           const hasLink = item.linkedStockId || fsItem?.linkedStockId;
                           return (

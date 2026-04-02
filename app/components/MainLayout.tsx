@@ -11,6 +11,8 @@ import * as Tooltip from '@radix-ui/react-tooltip';
 import { getFromStorage, StorageKey } from '../utils/storage';
 import { createPouchBackup, downloadBackup } from '../lib/pouchdb-backup';
 import { motion, AnimatePresence } from 'motion/react';
+import { createSystemBackup, getFromStorage, StorageKey } from '../utils/storage';
+import { motion, AnimatePresence, type Variants } from 'motion/react';
 import { 
   LayoutDashboard, 
   Package, 
@@ -126,7 +128,7 @@ const springConfig = {
   mass: 1.0
 };
 
-const pageVariants = {
+const pageVariants: Variants = {
   initial: {
     opacity: 0,
     y: 20,

@@ -202,7 +202,7 @@ export function CeklerPage() {
 
   // Sayfa ziyaretini logla
   useEffect(() => {
-    logActivity('page_visit', 'Çekler sayfası görüntülendi', user?.name);
+    logActivity('page_visit', 'Çekler sayfası görüntülendi', { employeeName: user?.name });
   }, []);
 
   const [cekler, setCekler] = useState<CekData[]>([]);
@@ -382,7 +382,7 @@ export function CeklerPage() {
     if (!canEdit) { sec.logUnauthorized('cek_edit', 'Çek durumu değiştirme yetkisi yok'); return; }
     if (!modalCek) return;
     if (!sec.checkRate('edit')) return;
-    let updated = { ...modalCek, status: newStatus, statusNote: statusNote || modalCek.statusNote, updatedAt: new Date().toISOString() };
+    let updated: CekData = { ...modalCek, status: newStatus, statusNote: statusNote || modalCek.statusNote, updatedAt: new Date().toISOString() };
     updated = addAuditEntry(updated, 'status_change', `Durum → ${newStatus}${statusNote ? ` - ${statusNote}` : ''}`, userName);
     saveCek(updated);
     sec.auditLog('cek_status_change', updated.id, updated.bankName);
@@ -497,7 +497,7 @@ export function CeklerPage() {
     saveCek(cek);
     sec.auditLog('cek_add', cek.id, `VERİLEN - ${cek.bankName} - ₺${cek.amount} → ${cek.recipientName}`);
     emit('cek:created', { cekId: cek.id, direction: 'verilen', amount: cek.amount });
-    logActivity('cek_verilen', `Verilen çek: ₺${cek.amount.toLocaleString()} → ${cek.recipientName}`, user?.name);
+    logActivity('cek_verilen', `Verilen çek: ₺${cek.amount.toLocaleString()} → ${cek.recipientName}`, { employeeName: user?.name });
     setCekler(getCekler());
     setModalType('none');
     setNewVerilenCek({ amount: '', bankName: '', checkNumber: '', dueDate: '', issueDate: new Date().toISOString().split('T')[0], recipientName: '', paymentReason: '' });

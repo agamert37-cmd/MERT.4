@@ -23,6 +23,7 @@ import {
   Activity,
 } from 'lucide-react';
 import { useSyncContext } from '../contexts/SyncContext';
+import { useGlobalSyncTables } from '../contexts/GlobalTableSyncContext';
 import { toast } from 'sonner';
 
 interface SyncStatusBarProps {
@@ -75,6 +76,7 @@ export function SyncStatusBar({ tableName }: SyncStatusBarProps) {
     setupStatus, isChecking, lastChecked, recheckTables, isSupabaseConfigured,
     pendingCount, isSyncing: isCloudSyncing, lastSyncAt, isOnline: cloudOnline, syncError,
   } = useSyncContext();
+  const { tables: globalTables } = useGlobalSyncTables();
   const [isExpanded, setIsExpanded] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncProgress, setSyncProgress] = useState('');
@@ -136,8 +138,45 @@ export function SyncStatusBar({ tableName }: SyncStatusBarProps) {
   }
 
   const isConnected = setupStatus.isConnected;
-  const totalRecords = setupStatus.tables.reduce((sum, t) => sum + t.rowCount, 0);
-  const tablesWithData = setupStatus.tables.filter(t => t.rowCount > 0).length;
+  const tables = setupStatus.tables ?? [];
+  const totalRecords = tables.reduce((sum: number, t: { rowCount: number }) => sum + t.rowCount, 0);
+  const tablesWithData = tables.filter((t: { rowCount: number }) => t.rowCount > 0).length;
+  const extStatus = setupStatus as any;
+  const latencyMs: number | undefined = extStatus.latencyMs;
+  const kvTotalKeys: number | undefined = extStatus.kvTotalKeys;
+
+  // Tablo görüntüleme adları ve ikonları
+  const TABLE_DISPLAY: Record<string, { displayName: string; icon: string }> = {
+    fisler: { displayName: 'Fişler', icon: '🧾' },
+    urunler: { displayName: 'Ürünler', icon: '🥩' },
+    cari_hesaplar: { displayName: 'Cari', icon: '👥' },
+    kasa_islemleri: { displayName: 'Kasa', icon: '💰' },
+    personeller: { displayName: 'Personel', icon: '👤' },
+    bankalar: { displayName: 'Bankalar', icon: '🏦' },
+    cekler: { displayName: 'Çekler', icon: '📋' },
+    araclar: { displayName: 'Araçlar', icon: '🚛' },
+    arac_shifts: { displayName: 'Araç Vardiya', icon: '🔄' },
+    arac_km_logs: { displayName: 'KM Logs', icon: '📍' },
+    uretim_profilleri: { displayName: 'Üretim Profil', icon: '⚙️' },
+    uretim_kayitlari: { displayName: 'Üretim', icon: '🏭' },
+    faturalar: { displayName: 'Faturalar', icon: '📄' },
+    fatura_stok: { displayName: 'Fatura Stok', icon: '📦' },
+    tahsilatlar: { displayName: 'Tahsilatlar', icon: '💳' },
+  };
+
+  // GlobalTableSyncContext verisini JSX'in beklediği formata dönüştür
+  const tables = globalTables.map(t => ({
+    table: t.name,
+    displayName: TABLE_DISPLAY[t.name]?.displayName ?? t.name,
+    rowCount: t.docCount,
+    icon: TABLE_DISPLAY[t.name]?.icon ?? '📊',
+    syncState: t.syncState,
+    lastSyncAt: t.lastSyncAt,
+  }));
+
+  // Gerçek per-tablo verisi GlobalTableSyncContext'ten
+  const totalRecords = globalTables.reduce((sum, t) => sum + t.docCount, 0);
+  const tablesWithData = globalTables.filter(t => t.docCount > 0).length;
 
   return (
     <div className="mb-4">
@@ -204,12 +243,12 @@ export function SyncStatusBar({ tableName }: SyncStatusBarProps) {
                 animate={{ opacity: 1, scale: 1 }}
                 className="text-[10px] text-white/30 font-mono"
               >
-                {totalRecords} kayıt · {tablesWithData}/{setupStatus.tables.length} tablo
+                {totalRecords} kayıt · {tablesWithData}/{tables.length} tablo
               </motion.span>
             )}
-            {setupStatus.latencyMs && isConnected && (
+            {latencyMs && isConnected && (
               <span className="text-[10px] text-white/20 font-mono hidden sm:inline">
-                {setupStatus.latencyMs}ms
+                {latencyMs}ms
               </span>
             )}
             {/* Canlı sync durumu */}
@@ -243,7 +282,7 @@ export function SyncStatusBar({ tableName }: SyncStatusBarProps) {
 
         {/* Tablo dots */}
         <div className="flex items-center gap-0.5 flex-shrink-0" onClick={e => e.stopPropagation()}>
-          {setupStatus.tables.map((t, i) => (
+          {tables.map((t, i) => (
             <motion.div
               key={t.table}
               title={`${t.displayName}: ${t.rowCount} kayıt`}
@@ -341,15 +380,15 @@ export function SyncStatusBar({ tableName }: SyncStatusBarProps) {
                   )}
                 </div>
                 <div className="flex items-center gap-3 text-[10px] text-white/25 font-mono">
-                  {setupStatus.latencyMs && <span>{setupStatus.latencyMs}ms gecikme</span>}
-                  {setupStatus.kvTotalKeys != null && <span>{setupStatus.kvTotalKeys} KV key</span>}
+                  {latencyMs && <span>{latencyMs}ms gecikme</span>}
+                  {kvTotalKeys != null && <span>{kvTotalKeys} KV key</span>}
                 </div>
               </div>
 
               {/* Tablo grid */}
               <div className="p-3">
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
-                  {setupStatus.tables.map((t, i) => (
+                  {tables.map((t, i) => (
                     <motion.div
                       key={t.table}
                       initial={{ opacity: 0, y: 8, scale: 0.95 }}
@@ -424,6 +463,7 @@ export function SyncStatusBar({ tableName }: SyncStatusBarProps) {
  */
 export function SyncBadge({ tableName }: { tableName: string }) {
   const { setupStatus, isChecking } = useSyncContext();
+  const { tables: globalTables } = useGlobalSyncTables();
 
   if (!setupStatus) {
     return (
@@ -434,7 +474,8 @@ export function SyncBadge({ tableName }: { tableName: string }) {
     );
   }
 
-  const table = setupStatus.tables.find(t => t.table === tableName);
+  const table = (setupStatus.tables ?? []).find(t => t.table === tableName);
+  const table = globalTables.find(t => t.name === tableName);
   if (!table) return null;
 
   if (!setupStatus.isConnected) {
@@ -453,7 +494,7 @@ export function SyncBadge({ tableName }: { tableName: string }) {
       className="inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-950/40 text-emerald-400 text-xs rounded-full border border-emerald-700/30"
     >
       <CheckCircle2 className="w-2.5 h-2.5" />
-      {isChecking ? 'Senkron ediliyor' : `${table.rowCount} kayıt`}
+      {isChecking ? 'Senkron ediliyor' : `${table.docCount} kayıt`}
     </motion.span>
   );
 }
