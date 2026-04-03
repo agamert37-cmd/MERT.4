@@ -1,11 +1,13 @@
 // [AJAN-2 | claude/serene-gagarin | 2026-03-25] Son düzenleyen: Claude Sonnet 4.6
 import React, { useState, useRef, useEffect } from 'react';
 import OpenAI from 'openai';
-import { Settings, Database, Sparkles, Save, Trash2, Eye, EyeOff, CheckCircle, XCircle, Shield, ExternalLink, Building2, Phone, MapPin, FileText, Hash, Monitor, Upload, Loader2, RefreshCw, X, Plus, History, ShieldCheck, Zap, Wrench, Star, MessageCircle, ToggleLeft, ToggleRight } from 'lucide-react';
+import { Settings, Database, Sparkles, Save, Trash2, Eye, EyeOff, CheckCircle, XCircle, Shield, ExternalLink, Building2, Phone, MapPin, FileText, Hash, Monitor, Upload, Loader2, RefreshCw, X, Plus, History, ShieldCheck, Zap, Wrench, Star, MessageCircle, ToggleLeft, ToggleRight, Lock, Key } from 'lucide-react';
 import { getOpenAIKey, saveOpenAIKey, clearOpenAIKey, isOpenAIConfigured } from '../lib/api-config';
 import { reinitializeOpenAI } from '../lib/chatgpt-assistant';
 import { testCouchDbConnection } from '../lib/pouchdb';
 import { getFromStorage, setInStorage, StorageKey } from '../utils/storage';
+import { hashString } from '../utils/security';
+import { getCouchDbConfig, setCouchDbConfig } from '../lib/db-config';
 import { toast } from 'sonner';
 import { motion, AnimatePresence } from 'motion/react';
 import { staggerContainer, gridCard, hover } from '../utils/animations';
@@ -238,6 +240,77 @@ export function SettingsPage() {
     };
     if (brandingImages.some(img => img.fileName)) checkAndRefreshUrls();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Sistem Admin Paneli state ─────────────────────────────────
+  const isSystemAdmin = user?.id === 'admin-super';
+  const [adminCurrentPw, setAdminCurrentPw] = useState('');
+  const [adminNewPw, setAdminNewPw] = useState('');
+  const [adminConfirmPw, setAdminConfirmPw] = useState('');
+  const [showAdminPw, setShowAdminPw] = useState(false);
+  const [adminPwSaving, setAdminPwSaving] = useState(false);
+
+  const [dbUrl, setDbUrl] = useState('');
+  const [dbUser, setDbUser] = useState('');
+  const [dbPass, setDbPass] = useState('');
+  const [showDbPass, setShowDbPass] = useState(false);
+  const [dbTesting, setDbTesting] = useState(false);
+  const [dbTestResult, setDbTestResult] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    if (isSystemAdmin) {
+      const cfg = getCouchDbConfig();
+      setDbUrl(cfg.url || '');
+      setDbUser(cfg.user || '');
+      setDbPass(cfg.password || '');
+    }
+  }, [isSystemAdmin]);
+
+  const handleAdminPwChange = async () => {
+    if (!adminNewPw || !adminConfirmPw) { toast.error('Yeni şifre alanlarını doldurun'); return; }
+    if (adminNewPw !== adminConfirmPw) { toast.error('Şifreler uyuşmuyor'); return; }
+    if (adminNewPw.length < 4) { toast.error('Şifre en az 4 karakter olmalı'); return; }
+
+    setAdminPwSaving(true);
+    try {
+      // Mevcut şifreyi doğrula
+      const storedHash = localStorage.getItem('system_admin_pw_hash');
+      if (storedHash) {
+        const currentHash = await hashString(adminCurrentPw);
+        if (currentHash !== storedHash) { toast.error('Mevcut şifre yanlış'); setAdminPwSaving(false); return; }
+      } else {
+        if (adminCurrentPw !== '1234') { toast.error('Mevcut şifre yanlış'); setAdminPwSaving(false); return; }
+      }
+
+      const newHash = await hashString(adminNewPw);
+      localStorage.setItem('system_admin_pw_hash', newHash);
+      logActivity('settings_change', 'Admin şifresi değiştirildi', { employeeName: user?.name, page: 'Ayarlar' });
+      toast.success('Admin şifresi başarıyla değiştirildi');
+      setAdminCurrentPw(''); setAdminNewPw(''); setAdminConfirmPw('');
+    } catch (err) {
+      toast.error('Şifre değiştirme hatası');
+    } finally {
+      setAdminPwSaving(false);
+    }
+  };
+
+  const handleSaveCouchDb = () => {
+    setCouchDbConfig({ url: dbUrl, user: dbUser, password: dbPass });
+    logActivity('settings_change', 'CouchDB yapılandırması güncellendi', { employeeName: user?.name, page: 'Ayarlar' });
+    toast.success('Veritabanı ayarları kaydedildi. Sayfa yenilenecek...');
+    setTimeout(() => location.reload(), 1500);
+  };
+
+  const handleTestCouchDb = async () => {
+    setDbTesting(true); setDbTestResult(null);
+    try {
+      // Önce geçici olarak config'e yaz, test et
+      setCouchDbConfig({ url: dbUrl, user: dbUser, password: dbPass });
+      const result = await testCouchDbConnection();
+      setDbTestResult(result.ok);
+      toast[result.ok ? 'success' : 'error'](result.ok ? `Bağlantı başarılı! (v${result.version})` : `Bağlantı başarısız: ${result.error}`);
+    } catch { setDbTestResult(false); toast.error('Bağlantı test hatası'); }
+    finally { setDbTesting(false); }
+  };
 
   const inputClass = "w-full bg-black/40 text-white px-4 py-3 rounded-xl border border-white/10 focus:outline-none focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/50 text-sm transition-all placeholder-white/20";
   const labelCls = "text-gray-400 text-xs font-bold uppercase tracking-widest mb-1.5 block ml-1";
@@ -704,6 +777,143 @@ export function SettingsPage() {
           ))}
         </div>
       </div>
+
+      {/* ═══════ SİSTEM ADMİN PANELİ ═══════ */}
+      {isSystemAdmin && (
+        <motion.div
+          variants={gridCard}
+          className="rounded-2xl border border-red-500/20 bg-gradient-to-br from-red-950/30 to-black/40 p-6 space-y-6"
+        >
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-red-500/15 flex items-center justify-center">
+              <Shield className="w-5 h-5 text-red-400" />
+            </div>
+            <div>
+              <h2 className="text-lg font-extrabold text-red-400">Sistem Admin Paneli</h2>
+              <p className="text-xs text-gray-500">Sadece sistem yöneticisine görünür</p>
+            </div>
+          </div>
+
+          {/* ── Admin Şifre Değiştir ─────────────────────────── */}
+          <div className="space-y-3 p-4 rounded-xl bg-black/30 border border-white/5">
+            <div className="flex items-center gap-2 mb-2">
+              <Key className="w-4 h-4 text-red-400" />
+              <h3 className="text-sm font-bold text-white">Admin Giriş Şifresi</h3>
+            </div>
+            <p className="text-xs text-gray-500 mb-3">Yönetici sekmesinden giriş yaparken kullanılan şifreyi değiştirin. Varsayılan: 1234</p>
+
+            <div className="space-y-2">
+              <div className="relative">
+                <input
+                  type={showAdminPw ? 'text' : 'password'}
+                  value={adminCurrentPw}
+                  onChange={e => setAdminCurrentPw(e.target.value)}
+                  placeholder="Mevcut şifre"
+                  className={inputClass}
+                />
+              </div>
+              <div className="relative">
+                <input
+                  type={showAdminPw ? 'text' : 'password'}
+                  value={adminNewPw}
+                  onChange={e => setAdminNewPw(e.target.value)}
+                  placeholder="Yeni şifre"
+                  className={inputClass}
+                />
+              </div>
+              <div className="relative">
+                <input
+                  type={showAdminPw ? 'text' : 'password'}
+                  value={adminConfirmPw}
+                  onChange={e => setAdminConfirmPw(e.target.value)}
+                  placeholder="Yeni şifre (tekrar)"
+                  className={inputClass}
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3 mt-3">
+              <button
+                onClick={handleAdminPwChange}
+                disabled={adminPwSaving}
+                className="flex items-center gap-2 px-5 py-2.5 bg-red-600 hover:bg-red-700 text-white text-sm font-bold rounded-xl transition-colors disabled:opacity-50"
+              >
+                {adminPwSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Lock className="w-4 h-4" />}
+                Şifreyi Değiştir
+              </button>
+              <button
+                onClick={() => setShowAdminPw(!showAdminPw)}
+                className="p-2.5 bg-white/5 hover:bg-white/10 rounded-xl text-gray-400 hover:text-white transition-colors"
+              >
+                {showAdminPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
+            </div>
+          </div>
+
+          {/* ── CouchDB Yapılandırma ─────────────────────────── */}
+          <div className="space-y-3 p-4 rounded-xl bg-black/30 border border-white/5">
+            <div className="flex items-center gap-2 mb-2">
+              <Database className="w-4 h-4 text-blue-400" />
+              <h3 className="text-sm font-bold text-white">Veritabanı Bağlantısı (CouchDB)</h3>
+            </div>
+            <p className="text-xs text-gray-500 mb-3">CouchDB sunucu adresini ve kimlik bilgilerini güncelleyin.</p>
+
+            <div className="space-y-2">
+              <input
+                type="text"
+                value={dbUrl}
+                onChange={e => setDbUrl(e.target.value)}
+                placeholder="CouchDB URL (örn: https://sunucu.com/couchdb)"
+                className={inputClass}
+              />
+              <input
+                type="text"
+                value={dbUser}
+                onChange={e => setDbUser(e.target.value)}
+                placeholder="Kullanıcı adı"
+                className={inputClass}
+              />
+              <div className="relative">
+                <input
+                  type={showDbPass ? 'text' : 'password'}
+                  value={dbPass}
+                  onChange={e => setDbPass(e.target.value)}
+                  placeholder="Şifre"
+                  className={inputClass}
+                />
+                <button
+                  onClick={() => setShowDbPass(!showDbPass)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-white transition-colors"
+                >
+                  {showDbPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3 mt-3">
+              <button
+                onClick={handleTestCouchDb}
+                disabled={dbTesting}
+                className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold rounded-xl transition-colors disabled:opacity-50"
+              >
+                {dbTesting ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
+                Bağlantıyı Test Et
+              </button>
+              <button
+                onClick={handleSaveCouchDb}
+                className="flex items-center gap-2 px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold rounded-xl transition-colors"
+              >
+                <Save className="w-4 h-4" /> Kaydet
+              </button>
+              {dbTestResult !== null && (
+                <span className={`text-xs font-bold ${dbTestResult ? 'text-emerald-400' : 'text-red-400'}`}>
+                  {dbTestResult ? '✓ Bağlantı başarılı' : '✗ Bağlantı başarısız'}
+                </span>
+              )}
+            </div>
+          </div>
+        </motion.div>
+      )}
 
     </div>
   );

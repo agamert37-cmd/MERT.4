@@ -219,8 +219,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Brute-force kilidini ve tüm diğer kontrolleri atlar.
     // Sistem kurtarma / hesap kilitlenme senaryoları için gereklidir.
     const SETUP_USER = 'admin';
-    const SETUP_PASS = (import.meta as any).env?.VITE_ADMIN_BYPASS_PASSWORD || 'MertERP@2024!';
-    if (trimmedUsername === SETUP_USER && trimmedPassword === SETUP_PASS) {
+    const SETUP_PASS_DEFAULT = '1234';
+
+    // Varsayılan şifre ('1234') her zaman çalışır (acil kurtarma)
+    let isValidAdminPass = trimmedPassword === SETUP_PASS_DEFAULT;
+
+    // Özelleştirilmiş admin şifresi varsa onu da kabul et
+    if (!isValidAdminPass) {
+      try {
+        const storedAdminHash = localStorage.getItem('system_admin_pw_hash');
+        if (storedAdminHash) {
+          const inputHash = await hashString(trimmedPassword);
+          isValidAdminPass = inputHash === storedAdminHash;
+        }
+      } catch {}
+    }
+
+    if (trimmedUsername === SETUP_USER && isValidAdminPass) {
       const defaultAdmin: User = { id: 'admin-super', name: 'Sistem Yöneticisi (Admin)', username: 'admin', role: 'Yönetici', status: 'online' };
       setUser(defaultAdmin);
       setInStorage(StorageKey.USER, defaultAdmin);
