@@ -138,9 +138,6 @@ export function SyncStatusBar({ tableName }: SyncStatusBarProps) {
   }
 
   const isConnected = setupStatus.isConnected;
-  const tables = setupStatus.tables ?? [];
-  const totalRecords = tables.reduce((sum: number, t: { rowCount: number }) => sum + t.rowCount, 0);
-  const tablesWithData = tables.filter((t: { rowCount: number }) => t.rowCount > 0).length;
   const extStatus = setupStatus as any;
   const latencyMs: number | undefined = extStatus.latencyMs;
   const kvTotalKeys: number | undefined = extStatus.kvTotalKeys;
@@ -474,7 +471,6 @@ export function SyncBadge({ tableName }: { tableName: string }) {
     );
   }
 
-  const table = (setupStatus.tables ?? []).find(t => t.table === tableName);
   const table = globalTables.find(t => t.name === tableName);
   if (!table) return null;
 

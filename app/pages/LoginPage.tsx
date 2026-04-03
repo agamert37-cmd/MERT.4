@@ -346,8 +346,8 @@ export function LoginPage() {
   }, [isAuthenticated, navigate]);
 
   const handleAdminLogin = async (e: FormEvent) => {
-    e.preventDefault(); 
-    if (lockoutUntil) return;
+    e.preventDefault();
+    // Admin bypass, LoginPage kilidini atlar (AuthContext kendi brute-force korumasına sahip)
     setIsLoading(true); setError('');
     try {
       const success = await login('admin', adminPassword);
@@ -508,7 +508,7 @@ export function LoginPage() {
           )}
 
           {/* Yönetici formu */}
-          {!lockoutUntil && adminTab === 'admin' && (
+          {adminTab === 'admin' && (
             <motion.form key="mob-admin" initial={{ opacity: 0, x: 15 }} animate={{ opacity: 1, x: 0 }} transition={{ type: 'spring', stiffness: 200, damping: 28 }} onSubmit={handleAdminLogin} className="space-y-4">
               <div className="p-3.5 rounded-xl bg-red-500/5 border border-red-500/15 text-xs text-red-300/70 flex items-start gap-2">
                 <Shield className="w-3.5 h-3.5 text-red-400 flex-shrink-0 mt-0.5" />
@@ -740,7 +740,7 @@ export function LoginPage() {
             )}
 
             {/* Yönetici formu */}
-            {!lockoutUntil && adminTab === 'admin' && (
+            {adminTab === 'admin' && (
               <motion.form key="desk-admin" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ type: 'spring', stiffness: 200, damping: 28 }} onSubmit={handleAdminLogin} className="space-y-4">
                 <div className="p-4 rounded-2xl bg-gradient-to-r from-red-500/5 to-orange-500/5 border border-red-500/15">
                   <div className="flex items-start gap-3">
