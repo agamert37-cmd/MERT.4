@@ -740,25 +740,29 @@ export function YedeklerPage() {
             </div>
           )}
 
-          {/* Dual supabase info */}
+          {/* CouchDB durum bilgisi */}
           <div className="card-premium rounded-xl p-4">
             <div className="flex items-center gap-2.5 mb-2">
               <Server className="w-4 h-4 text-cyan-400" />
-              <h4 className="text-xs font-bold text-white">Yerel Depo (Dual Supabase)</h4>
+              <h4 className="text-xs font-bold text-white">CouchDB Sunucu Bağlantısı</h4>
             </div>
             {(() => {
-              const lc = getLocalRepoConfig() as any;
-              return lc.enabled ? (
-                <div className="flex items-center gap-3">
-                  <div className={`w-2.5 h-2.5 rounded-full ${isLocalHealthy() ? 'bg-emerald-400 animate-pulse' : 'bg-red-400'}`} />
-                  <span className="text-xs text-muted-foreground/60">
-                    {isLocalHealthy() ? `Bağlı — ${(lc as any).url ?? ''}` : `Bağlantı Kopuk — ${(lc as any).url ?? ''}`}
-                  </span>
-                  {(lc as any).lastSyncToCloud && <span className="text-[9px] text-muted-foreground/40">Son sync: {new Date((lc as any).lastSyncToCloud).toLocaleString('tr-TR')}</span>}
-                </div>
-              ) : (
-                <p className="text-xs text-muted-foreground/40">Yerel Supabase devre dışı. Ayarlar sayfasından yapılandırabilirsiniz.</p>
-              );
+              try {
+                const raw = localStorage.getItem('mert4_couchdb_config');
+                const cfg = raw ? JSON.parse(raw) : null;
+                const url = cfg?.url || window.location.origin + '/couchdb';
+                return (
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <div className={`w-2.5 h-2.5 rounded-full ${isLocalHealthy() ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}`} />
+                      <span className="text-xs text-muted-foreground/60 truncate">{url}</span>
+                    </div>
+                    <p className="text-[10px] text-muted-foreground/40">Bağlantı ayarları için Ayarlar → Sistem Admin Paneli</p>
+                  </div>
+                );
+              } catch {
+                return <p className="text-xs text-muted-foreground/40">CouchDB yapılandırılmamış. Ayarlar sayfasından düzenleyin.</p>;
+              }
             })()}
           </div>
         </motion.div>

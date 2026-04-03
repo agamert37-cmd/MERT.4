@@ -47,7 +47,7 @@ export function SupabaseStatus() {
                   <Loader2 className="w-5 h-5 animate-spin" />
                   <div>
                     <p className="font-semibold text-sm">Senkronize ediliyor...</p>
-                    <p className="text-xs opacity-90">Değişiklikler Supabase'e gönderiliyor</p>
+                    <p className="text-xs opacity-90">Değişiklikler CouchDB'ye gönderiliyor</p>
                   </div>
                 </>
               ) : (
@@ -55,7 +55,7 @@ export function SupabaseStatus() {
                   <CheckCircle className="w-5 h-5" />
                   <div>
                     <p className="font-semibold text-sm">Bağlı</p>
-                    <p className="text-xs opacity-90">Supabase ile senkronize</p>
+                    <p className="text-xs opacity-90">CouchDB ile senkronize</p>
                   </div>
                 </>
               )}

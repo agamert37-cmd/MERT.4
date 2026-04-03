@@ -86,7 +86,7 @@ export function SyncStatusBar({ tableName }: SyncStatusBarProps) {
 
     setIsSyncing(true);
     setSyncProgress('Başlatılıyor...');
-    toast.loading('Supabase\'e senkronize ediliyor...', { id: 'sync-toast' });
+    toast.loading('CouchDB\'ye senkronize ediliyor...', { id: 'sync-toast' });
 
     try {
       const { ok, fail } = await pushAllLocalToSupabase(tableName, setSyncProgress);
