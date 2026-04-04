@@ -1,10 +1,10 @@
 // [AJAN-2 | claude/serene-gagarin | 2026-03-25] Son düzenleyen: Claude Sonnet 4.6
 import React, { useState, useRef, useEffect } from 'react';
 import OpenAI from 'openai';
-import { Settings, Database, Sparkles, Save, Trash2, Eye, EyeOff, CheckCircle, XCircle, Shield, ExternalLink, Building2, Phone, MapPin, FileText, Hash, Monitor, Upload, Loader2, RefreshCw, X, Plus, History, ShieldCheck, Zap, Wrench, Star, MessageCircle, ToggleLeft, ToggleRight, Lock, Key } from 'lucide-react';
+import { Settings, Database, Sparkles, Save, Trash2, Eye, EyeOff, CheckCircle, XCircle, Shield, ExternalLink, Building2, Phone, MapPin, FileText, Hash, Monitor, Upload, Loader2, RefreshCw, X, Plus, History, ShieldCheck, Zap, Wrench, Star, MessageCircle, ToggleLeft, ToggleRight, Lock, Key, BarChart3, Cloud } from 'lucide-react';
 import { getOpenAIKey, saveOpenAIKey, clearOpenAIKey, isOpenAIConfigured } from '../lib/api-config';
 import { reinitializeOpenAI } from '../lib/chatgpt-assistant';
-import { testCouchDbConnection } from '../lib/pouchdb';
+import { testCouchDbConnection, getCouchDbTableStatus, type CouchDbTableStatus } from '../lib/pouchdb';
 import { getFromStorage, setInStorage, StorageKey } from '../utils/storage';
 import { hashString } from '../utils/security';
 import { getCouchDbConfig, setCouchDbConfig } from '../lib/db-config';
@@ -255,6 +255,8 @@ export function SettingsPage() {
   const [showDbPass, setShowDbPass] = useState(false);
   const [dbTesting, setDbTesting] = useState(false);
   const [dbTestResult, setDbTestResult] = useState<boolean | null>(null);
+  const [tableStats, setTableStats] = useState<CouchDbTableStatus[]>([]);
+  const [tableStatsLoading, setTableStatsLoading] = useState(false);
 
   useEffect(() => {
     if (isSystemAdmin) {
@@ -303,13 +305,21 @@ export function SettingsPage() {
   const handleTestCouchDb = async () => {
     setDbTesting(true); setDbTestResult(null);
     try {
-      // Önce geçici olarak config'e yaz, test et
       setCouchDbConfig({ url: dbUrl, user: dbUser, password: dbPass });
       const result = await testCouchDbConnection();
       setDbTestResult(result.ok);
       toast[result.ok ? 'success' : 'error'](result.ok ? `Bağlantı başarılı! (v${result.version})` : `Bağlantı başarısız: ${result.error}`);
     } catch { setDbTestResult(false); toast.error('Bağlantı test hatası'); }
     finally { setDbTesting(false); }
+  };
+
+  const handleLoadTableStats = async () => {
+    setTableStatsLoading(true);
+    try {
+      const stats = await getCouchDbTableStatus();
+      setTableStats(stats);
+    } catch { toast.error('Tablo istatistikleri yüklenemedi'); }
+    finally { setTableStatsLoading(false); }
   };
 
   const inputClass = "w-full bg-black/40 text-white px-4 py-3 rounded-xl border border-white/10 focus:outline-none focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/50 text-sm transition-all placeholder-white/20";
@@ -863,7 +873,7 @@ export function SettingsPage() {
                 type="text"
                 value={dbUrl}
                 onChange={e => setDbUrl(e.target.value)}
-                placeholder="CouchDB URL (örn: https://sunucu.com/couchdb)"
+                placeholder="CouchDB URL (örn: http://localhost:5984)"
                 className={inputClass}
               />
               <input
@@ -890,7 +900,7 @@ export function SettingsPage() {
               </div>
             </div>
 
-            <div className="flex items-center gap-3 mt-3">
+            <div className="flex flex-wrap items-center gap-3 mt-3">
               <button
                 onClick={handleTestCouchDb}
                 disabled={dbTesting}
@@ -903,7 +913,7 @@ export function SettingsPage() {
                 onClick={handleSaveCouchDb}
                 className="flex items-center gap-2 px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold rounded-xl transition-colors"
               >
-                <Save className="w-4 h-4" /> Kaydet
+                <Save className="w-4 h-4" /> Kaydet & Yenile
               </button>
               {dbTestResult !== null && (
                 <span className={`text-xs font-bold ${dbTestResult ? 'text-emerald-400' : 'text-red-400'}`}>
@@ -911,6 +921,88 @@ export function SettingsPage() {
                 </span>
               )}
             </div>
+          </div>
+
+          {/* ── Tablo Veri İstatistikleri ─────────────────────── */}
+          <div className="space-y-3 p-4 rounded-xl bg-black/30 border border-white/5">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                <BarChart3 className="w-4 h-4 text-purple-400" />
+                <h3 className="text-sm font-bold text-white">Tablo Veri İstatistikleri</h3>
+              </div>
+              <button
+                onClick={handleLoadTableStats}
+                disabled={tableStatsLoading}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600/30 hover:bg-purple-600/50 text-purple-300 text-xs font-bold rounded-lg transition-colors disabled:opacity-50"
+              >
+                {tableStatsLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
+                Yükle
+              </button>
+            </div>
+            <p className="text-xs text-gray-500">Her tablodaki kayıt sayısı: Yerel Depo / PouchDB / CouchDB</p>
+
+            {tableStats.length === 0 && !tableStatsLoading && (
+              <p className="text-xs text-gray-600 text-center py-4">"Yükle" butonuna basarak istatistikleri görün</p>
+            )}
+
+            {tableStatsLoading && (
+              <div className="flex items-center justify-center py-6 gap-2 text-gray-500 text-xs">
+                <Loader2 className="w-4 h-4 animate-spin" /> Yükleniyor...
+              </div>
+            )}
+
+            {tableStats.length > 0 && (
+              <div className="space-y-1.5 mt-2">
+                {/* Başlık */}
+                <div className="grid grid-cols-4 gap-2 px-2 pb-1 border-b border-white/5">
+                  <span className="text-[10px] text-gray-500 font-bold uppercase tracking-wider col-span-1">Tablo</span>
+                  <span className="text-[10px] text-gray-500 font-bold uppercase tracking-wider text-center">Yerel</span>
+                  <span className="text-[10px] text-gray-500 font-bold uppercase tracking-wider text-center">PouchDB</span>
+                  <span className="text-[10px] text-gray-500 font-bold uppercase tracking-wider text-center">CouchDB</span>
+                </div>
+                {tableStats.map(t => {
+                  const inSync = t.couchDocCount > 0 && t.couchDocCount >= t.localStorageCount;
+                  const hasData = t.localStorageCount > 0 || t.localDocCount > 0 || t.couchDocCount > 0;
+                  return (
+                    <div key={t.name} className={`grid grid-cols-4 gap-2 px-2 py-1.5 rounded-lg ${hasData ? 'bg-white/5' : 'bg-transparent opacity-50'}`}>
+                      <div className="col-span-1 flex items-center gap-1.5 min-w-0">
+                        <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${inSync ? 'bg-emerald-400' : t.localStorageCount > 0 ? 'bg-yellow-400' : 'bg-gray-600'}`} />
+                        <span className="text-xs text-white truncate">{t.displayName}</span>
+                      </div>
+                      <span className={`text-xs text-center font-mono ${t.localStorageCount > 0 ? 'text-blue-300' : 'text-gray-600'}`}>
+                        {t.localStorageCount}
+                      </span>
+                      <span className={`text-xs text-center font-mono ${t.localDocCount > 0 ? 'text-purple-300' : 'text-gray-600'}`}>
+                        {t.localDocCount}
+                      </span>
+                      <div className="flex items-center justify-center gap-1">
+                        {t.error ? (
+                          <span className="text-[10px] text-red-400">hata</span>
+                        ) : (
+                          <span className={`text-xs font-mono ${t.couchDocCount > 0 ? 'text-emerald-300' : 'text-gray-600'}`}>
+                            {t.exists ? t.couchDocCount : '—'}
+                          </span>
+                        )}
+                        {inSync && <Cloud className="w-3 h-3 text-emerald-400 flex-shrink-0" />}
+                      </div>
+                    </div>
+                  );
+                })}
+                {/* Toplam */}
+                <div className="grid grid-cols-4 gap-2 px-2 pt-2 border-t border-white/10 mt-1">
+                  <span className="text-xs text-gray-400 font-bold col-span-1">Toplam</span>
+                  <span className="text-xs text-blue-300 font-bold text-center font-mono">
+                    {tableStats.reduce((s, t) => s + t.localStorageCount, 0)}
+                  </span>
+                  <span className="text-xs text-purple-300 font-bold text-center font-mono">
+                    {tableStats.reduce((s, t) => s + t.localDocCount, 0)}
+                  </span>
+                  <span className="text-xs text-emerald-300 font-bold text-center font-mono">
+                    {tableStats.reduce((s, t) => s + t.couchDocCount, 0)}
+                  </span>
+                </div>
+              </div>
+            )}
           </div>
         </motion.div>
       )}

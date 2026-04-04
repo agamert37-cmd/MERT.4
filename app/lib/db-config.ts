@@ -30,7 +30,7 @@ function _defaultCouchUrl(): string {
 const DEFAULT_CONFIG: CouchDbConfig = {
   url: _defaultCouchUrl(),
   user: (import.meta as any).env?.VITE_COUCHDB_USER || 'adm1n',
-  password: (import.meta as any).env?.VITE_COUCHDB_PASSWORD || '13579',
+  password: (import.meta as any).env?.VITE_COUCHDB_PASSWORD || '135790',
   peerUrl: (import.meta as any).env?.VITE_COUCHDB_PEER_URL || '',
 };
 

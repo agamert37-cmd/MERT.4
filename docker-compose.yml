@@ -7,7 +7,7 @@ services:
       - "5984:5984"
     environment:
       COUCHDB_USER: ${COUCHDB_USER:-adm1n}
-      COUCHDB_PASSWORD: ${COUCHDB_PASSWORD:-13579}
+      COUCHDB_PASSWORD: ${COUCHDB_PASSWORD:-135790}
     volumes:
       - couchdb_data:/opt/couchdb/data
     healthcheck:
@@ -28,7 +28,7 @@ services:
     entrypoint: ["/bin/sh", "-c"]
     command:
       - |
-        COUCH="http://${COUCHDB_USER:-adm1n}:${COUCHDB_PASSWORD:-13579}@couchdb:5984"
+        COUCH="http://${COUCHDB_USER:-adm1n}:${COUCHDB_PASSWORD:-135790}@couchdb:5984"
         # Sistem veritabanları
         for db in _users _replicator _global_changes; do
           curl -s -X PUT "$$COUCH/$$db" 2>/dev/null || true
@@ -52,7 +52,7 @@ services:
       args:
         VITE_COUCHDB_URL: http://localhost:5984
         VITE_COUCHDB_USER: ${COUCHDB_USER:-adm1n}
-        VITE_COUCHDB_PASSWORD: ${COUCHDB_PASSWORD:-13579}
+        VITE_COUCHDB_PASSWORD: ${COUCHDB_PASSWORD:-135790}
     container_name: mert-site
     ports:
       - "8080:80"
