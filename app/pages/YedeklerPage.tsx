@@ -27,6 +27,10 @@ import {
   stopAutoBackupScheduler, getAutoBackupConfig, saveAutoBackupConfig,
   type BackupMeta, type PouchBackupData,
 } from '../lib/pouchdb-backup';
+import {
+  initializeCouchDbDatabases, seedPouchDbFromLocalStorage,
+  getCouchDbTableStatus, type CouchDbTableStatus,
+} from '../lib/pouchdb';
 
 const STORAGE_PREFIX = 'isleyen_et_';
 
@@ -123,6 +127,67 @@ export function YedeklerPage() {
   // ─── Local repo config stubs ──────────────────────────────────────────────
   const getLocalRepoConfig = useCallback(() => ({ enabled: false }), []);
   const isLocalHealthy = useCallback(() => false, []);
+
+  // ─── CouchDB kurulum state ────────────────────────────────────────────────
+  const [couchTableStatus, setCouchTableStatus] = useState<CouchDbTableStatus[]>([]);
+  const [couchStatusLoading, setCouchStatusLoading] = useState(false);
+  const [couchInitializing, setCouchInitializing] = useState(false);
+  const [couchSeeding, setCouchSeeding] = useState(false);
+  const [seedProgress, setSeedProgress] = useState('');
+  const [initResult, setInitResult] = useState<{ ok: number; fail: number; alreadyExisted: number } | null>(null);
+  const [seedResult, setSeedResult] = useState<Record<string, { seeded: number; existed: number; errors: number }> | null>(null);
+
+  const fetchCouchTableStatus = useCallback(async () => {
+    setCouchStatusLoading(true);
+    try {
+      const statuses = await getCouchDbTableStatus();
+      setCouchTableStatus(statuses);
+    } catch {
+      toast.error('CouchDB durumu alınamadı');
+    }
+    setCouchStatusLoading(false);
+  }, []);
+
+  const handleInitializeDatabases = useCallback(async () => {
+    setCouchInitializing(true);
+    setInitResult(null);
+    try {
+      const result = await initializeCouchDbDatabases();
+      setInitResult({
+        ok: result.ok.length,
+        fail: result.fail.length,
+        alreadyExisted: result.alreadyExisted.length,
+      });
+      if (result.fail.length === 0) {
+        toast.success(`${result.ok.length} veritabanı başarıyla oluşturuldu`);
+      } else {
+        toast.warning(`${result.ok.length} başarılı, ${result.fail.length} hatalı: ${result.fail.join(', ')}`);
+      }
+      await fetchCouchTableStatus();
+    } catch (e: any) {
+      toast.error('Veritabanı oluşturma hatası: ' + e.message);
+    }
+    setCouchInitializing(false);
+  }, [fetchCouchTableStatus]);
+
+  const handleSeedFromLocalStorage = useCallback(async () => {
+    setCouchSeeding(true);
+    setSeedProgress('Başlatılıyor...');
+    setSeedResult(null);
+    try {
+      const result = await seedPouchDbFromLocalStorage((tableName, count) => {
+        setSeedProgress(`${tableName}: ${count} kayıt aktarıldı`);
+      });
+      setSeedResult(result);
+      const total = Object.values(result).reduce((s, v) => s + v.seeded, 0);
+      toast.success(`${total} kayıt PouchDB'ye aktarıldı (CouchDB'ye otomatik sync edilecek)`);
+      await fetchCouchTableStatus();
+    } catch (e: any) {
+      toast.error('Veri aktarma hatası: ' + e.message);
+    }
+    setCouchSeeding(false);
+    setSeedProgress('');
+  }, [fetchCouchTableStatus]);
   // ─── Legacy / table restore stubs ──────────────────────────────────────────
   const handleLegacyBackup = useCallback(() => {
     const { data } = collectLocalStorageData();
@@ -740,30 +805,97 @@ export function YedeklerPage() {
             </div>
           )}
 
-          {/* CouchDB durum bilgisi */}
-          <div className="card-premium rounded-xl p-4">
-            <div className="flex items-center gap-2.5 mb-2">
-              <Server className="w-4 h-4 text-cyan-400" />
-              <h4 className="text-xs font-bold text-white">CouchDB Sunucu Bağlantısı</h4>
+          {/* ── CouchDB Kurulum Paneli ── */}
+          <div className="card-premium rounded-xl p-5 space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <Database className="w-4 h-4 text-cyan-400" />
+                <h4 className="text-sm font-bold text-white">CouchDB Veritabanı Kurulumu</h4>
+              </div>
+              <button
+                onClick={fetchCouchTableStatus}
+                disabled={couchStatusLoading}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs bg-secondary/40 hover:bg-secondary/60 text-muted-foreground transition-all"
+              >
+                <RefreshCw className={`w-3 h-3 ${couchStatusLoading ? 'animate-spin' : ''}`} /> Kontrol Et
+              </button>
             </div>
-            {(() => {
-              try {
-                const raw = localStorage.getItem('mert4_couchdb_config');
-                const cfg = raw ? JSON.parse(raw) : null;
-                const url = cfg?.url || window.location.origin + '/couchdb';
-                return (
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2">
-                      <div className={`w-2.5 h-2.5 rounded-full ${isLocalHealthy() ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}`} />
-                      <span className="text-xs text-muted-foreground/60 truncate">{url}</span>
+
+            {/* Adım 1 — Veritabanlarını oluştur */}
+            <div className="p-4 rounded-xl bg-black/30 border border-white/5 space-y-2">
+              <p className="text-xs font-bold text-white flex items-center gap-2">
+                <span className="w-5 h-5 rounded-full bg-blue-500/20 text-blue-400 text-[10px] flex items-center justify-center font-black">1</span>
+                CouchDB Veritabanlarını Oluştur
+              </p>
+              <p className="text-xs text-muted-foreground/60">15 tablo + KV store CouchDB'de yoksa oluşturulur. Zaten varsa atlanır.</p>
+              <button
+                onClick={handleInitializeDatabases}
+                disabled={couchInitializing}
+                className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl transition-colors disabled:opacity-50"
+              >
+                {couchInitializing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Database className="w-3.5 h-3.5" />}
+                {couchInitializing ? 'Oluşturuluyor...' : 'Tüm Veritabanlarını Oluştur'}
+              </button>
+              {initResult && (
+                <div className="text-xs flex gap-3 mt-1">
+                  <span className="text-emerald-400">✓ {initResult.ok} başarılı</span>
+                  {initResult.alreadyExisted > 0 && <span className="text-blue-400">{initResult.alreadyExisted} zaten vardı</span>}
+                  {initResult.fail > 0 && <span className="text-red-400">✗ {initResult.fail} hatalı</span>}
+                </div>
+              )}
+            </div>
+
+            {/* Adım 2 — Yerel verileri aktar */}
+            <div className="p-4 rounded-xl bg-black/30 border border-white/5 space-y-2">
+              <p className="text-xs font-bold text-white flex items-center gap-2">
+                <span className="w-5 h-5 rounded-full bg-emerald-500/20 text-emerald-400 text-[10px] flex items-center justify-center font-black">2</span>
+                Yerel Verileri CouchDB'ye Aktar
+              </p>
+              <p className="text-xs text-muted-foreground/60">localStorage'daki tüm veriler PouchDB'ye yazılır. PouchDB otomatik olarak CouchDB'ye senkronize eder.</p>
+              <button
+                onClick={handleSeedFromLocalStorage}
+                disabled={couchSeeding}
+                className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl transition-colors disabled:opacity-50"
+              >
+                {couchSeeding ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <UploadCloud className="w-3.5 h-3.5" />}
+                {couchSeeding ? (seedProgress || 'Aktarılıyor...') : 'Verileri CouchDB\'ye Aktar'}
+              </button>
+              {seedResult && (
+                <div className="mt-2 grid grid-cols-2 gap-1">
+                  {Object.entries(seedResult).filter(([, v]) => v.seeded > 0 || v.errors > 0).map(([table, v]) => (
+                    <div key={table} className="text-[10px] flex justify-between px-2 py-1 rounded bg-white/[0.03]">
+                      <span className="text-muted-foreground/60 truncate">{table}</span>
+                      <span className={v.errors > 0 ? 'text-red-400' : 'text-emerald-400'}>
+                        +{v.seeded} {v.errors > 0 && `(${v.errors} hata)`}
+                      </span>
                     </div>
-                    <p className="text-[10px] text-muted-foreground/40">Bağlantı ayarları için Ayarlar → Sistem Admin Paneli</p>
-                  </div>
-                );
-              } catch {
-                return <p className="text-xs text-muted-foreground/40">CouchDB yapılandırılmamış. Ayarlar sayfasından düzenleyin.</p>;
-              }
-            })()}
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Tablo durumu */}
+            {couchTableStatus.length > 0 && (
+              <div className="space-y-1.5">
+                <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Tablo Durumları</p>
+                <div className="grid grid-cols-1 gap-1">
+                  {couchTableStatus.map(t => (
+                    <div key={t.name} className="flex items-center justify-between px-3 py-2 rounded-lg bg-white/[0.03] border border-white/[0.05]">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <div className={`w-2 h-2 rounded-full flex-shrink-0 ${t.exists ? 'bg-emerald-400' : 'bg-red-400'}`} />
+                        <span className="text-xs text-white/80 truncate">{t.displayName}</span>
+                      </div>
+                      <div className="flex items-center gap-3 text-[10px] flex-shrink-0 ml-2">
+                        <span className="text-muted-foreground/50">LS: <span className="text-white/60">{t.localStorageCount}</span></span>
+                        <span className="text-muted-foreground/50">PDB: <span className="text-white/60">{t.localDocCount}</span></span>
+                        <span className={t.exists ? 'text-emerald-400' : 'text-red-400'}>CDB: {t.couchDocCount}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <p className="text-[10px] text-muted-foreground/40">LS = localStorage | PDB = PouchDB (yerel) | CDB = CouchDB (sunucu)</p>
+              </div>
+            )}
           </div>
         </motion.div>
       )}

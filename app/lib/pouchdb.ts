@@ -186,6 +186,221 @@ export interface DbStats {
   docCount: number;
 }
 
+// ── localStorage → PouchDB tablo eşlemesi ─────────────────────
+const TABLE_STORAGE_KEYS: Record<string, string> = {
+  fisler:           'isleyen_et_fisler_data',
+  urunler:          'isleyen_et_stok_data',
+  cari_hesaplar:    'isleyen_et_cari_data',
+  kasa_islemleri:   'isleyen_et_kasa_data',
+  personeller:      'isleyen_et_personel_data',
+  bankalar:         'isleyen_et_bank_data',
+  cekler:           'isleyen_et_cekler_data',
+  araclar:          'isleyen_et_arac_data',
+  arac_shifts:      'isleyen_et_arac_shifts',
+  arac_km_logs:     'isleyen_et_arac_km_logs',
+  uretim_profilleri:'isleyen_et_uretim_profiles',
+  uretim_kayitlari: 'isleyen_et_uretim_data',
+  faturalar:        'isleyen_et_faturalar',
+  fatura_stok:      'isleyen_et_fatura_stok',
+  tahsilatlar:      'isleyen_et_tahsilatlar_data',
+};
+
+/** Tablo adının Türkçe görüntü adı */
+export const TABLE_DISPLAY_NAMES: Record<string, string> = {
+  fisler:           'Fişler (Satışlar)',
+  urunler:          'Ürünler (Stok)',
+  cari_hesaplar:    'Cari Hesaplar',
+  kasa_islemleri:   'Kasa İşlemleri',
+  personeller:      'Personel',
+  bankalar:         'Bankalar',
+  cekler:           'Çekler',
+  araclar:          'Araçlar',
+  arac_shifts:      'Araç Vardiyaları',
+  arac_km_logs:     'Araç KM Logları',
+  uretim_profilleri:'Üretim Profilleri',
+  uretim_kayitlari: 'Üretim Kayıtları',
+  faturalar:        'Faturalar',
+  fatura_stok:      'Fatura Stok',
+  tahsilatlar:      'Tahsilatlar',
+  mert_kv_store:    'KV Store',
+};
+
+/** CouchDB'de tüm veritabanlarını oluştur (PUT /{db}) */
+export async function initializeCouchDbDatabases(
+  onProgress?: (msg: string) => void
+): Promise<{ ok: string[]; fail: string[]; alreadyExisted: string[] }> {
+  const config = getCouchDbConfig();
+  if (!config.url) return { ok: [], fail: ['CouchDB URL yapılandırılmamış'], alreadyExisted: [] };
+
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (config.user) {
+    headers['Authorization'] = 'Basic ' + btoa(`${config.user}:${config.password}`);
+  }
+
+  const allDbs = [...TABLE_NAMES.map(t => DB_PREFIX + t), KV_DB_NAME];
+  const ok: string[] = [];
+  const fail: string[] = [];
+  const alreadyExisted: string[] = [];
+
+  for (const dbName of allDbs) {
+    onProgress?.(`Oluşturuluyor: ${dbName}...`);
+    try {
+      const res = await fetch(`${config.url}/${dbName}`, { method: 'PUT', headers });
+      if (res.status === 412) {
+        // Zaten var
+        alreadyExisted.push(dbName);
+        ok.push(dbName);
+      } else if (res.ok) {
+        ok.push(dbName);
+      } else {
+        const body = await res.json().catch(() => ({}));
+        fail.push(`${dbName}: ${body.error || res.status}`);
+      }
+    } catch (e: any) {
+      fail.push(`${dbName}: ${e.message}`);
+    }
+  }
+
+  return { ok, fail, alreadyExisted };
+}
+
+/** localStorage'daki tüm verileri PouchDB'ye yükle (PouchDB → CouchDB sync otomatik devam eder) */
+export async function seedPouchDbFromLocalStorage(
+  onProgress?: (tableName: string, count: number) => void
+): Promise<Record<string, { seeded: number; existed: number; errors: number }>> {
+  const result: Record<string, { seeded: number; existed: number; errors: number }> = {};
+
+  for (const [tableName, storageKey] of Object.entries(TABLE_STORAGE_KEYS)) {
+    result[tableName] = { seeded: 0, existed: 0, errors: 0 };
+
+    try {
+      const raw = localStorage.getItem(storageKey);
+      if (!raw) continue;
+
+      const items: any[] = JSON.parse(raw);
+      if (!Array.isArray(items) || items.length === 0) continue;
+
+      const db = getDb(tableName);
+
+      // Mevcut doc ID'lerini bir kez çek
+      const existing = await db.allDocs({ include_docs: false });
+      const existingIds = new Set(existing.rows.map((r: any) => r.id));
+
+      // Sadece yokolanları batch olarak ekle
+      const toInsert = items
+        .filter(item => {
+          const id = item.id || item._id;
+          return id && !existingIds.has(id);
+        })
+        .map(item => {
+          const { _id, _rev, _deleted, ...rest } = item;
+          const docId = item.id || _id;
+          return { ...rest, _id: docId };
+        });
+
+      if (toInsert.length > 0) {
+        const bulkResult = await db.bulkDocs(toInsert);
+        for (const r of bulkResult as any[]) {
+          if ((r as any).error) result[tableName].errors++;
+          else result[tableName].seeded++;
+        }
+      }
+
+      result[tableName].existed = existingIds.size;
+      onProgress?.(tableName, result[tableName].seeded);
+    } catch (e: any) {
+      console.error(`[seedPouchDb] ${tableName} hatası:`, e?.message);
+    }
+  }
+
+  return result;
+}
+
+export interface CouchDbTableStatus {
+  name: string;
+  displayName: string;
+  exists: boolean;
+  couchDocCount: number;
+  localDocCount: number;
+  localStorageCount: number;
+  error?: string;
+}
+
+/** CouchDB'deki tüm veritabanlarının detaylı durumunu getir */
+export async function getCouchDbTableStatus(): Promise<CouchDbTableStatus[]> {
+  const config = getCouchDbConfig();
+  if (!config.url) return [];
+
+  const headers: Record<string, string> = {};
+  if (config.user) {
+    headers['Authorization'] = 'Basic ' + btoa(`${config.user}:${config.password}`);
+  }
+
+  const allDbs = [...TABLE_NAMES.map(t => DB_PREFIX + t), KV_DB_NAME];
+  const statuses: CouchDbTableStatus[] = [];
+
+  for (const dbName of allDbs) {
+    const shortName = dbName.replace(DB_PREFIX, '');
+    const localStorageKey = TABLE_STORAGE_KEYS[shortName];
+
+    // LocalStorage sayısı
+    let localStorageCount = 0;
+    try {
+      const raw = localStorageKey ? localStorage.getItem(localStorageKey) : null;
+      if (raw) {
+        const arr = JSON.parse(raw);
+        if (Array.isArray(arr)) localStorageCount = arr.length;
+      }
+    } catch {}
+
+    // PouchDB (yerel IndexedDB) sayısı
+    let localDocCount = 0;
+    try {
+      const db = getDb(dbName);
+      const info = await db.info();
+      localDocCount = info.doc_count;
+    } catch {}
+
+    // CouchDB sayısı
+    try {
+      const res = await fetch(`${config.url}/${dbName}`, { method: 'GET', headers });
+      if (res.ok) {
+        const data = await res.json();
+        statuses.push({
+          name: dbName,
+          displayName: TABLE_DISPLAY_NAMES[shortName] || TABLE_DISPLAY_NAMES[dbName] || shortName,
+          exists: true,
+          couchDocCount: data.doc_count || 0,
+          localDocCount,
+          localStorageCount,
+        });
+      } else {
+        statuses.push({
+          name: dbName,
+          displayName: TABLE_DISPLAY_NAMES[shortName] || shortName,
+          exists: false,
+          couchDocCount: 0,
+          localDocCount,
+          localStorageCount,
+          error: `HTTP ${res.status}`,
+        });
+      }
+    } catch (e: any) {
+      statuses.push({
+        name: dbName,
+        displayName: TABLE_DISPLAY_NAMES[shortName] || shortName,
+        exists: false,
+        couchDocCount: 0,
+        localDocCount,
+        localStorageCount,
+        error: e.message,
+      });
+    }
+  }
+
+  return statuses;
+}
+
 /** Tüm tabloların kayıt sayılarını getir */
 export async function getAllDbStats(): Promise<DbStats[]> {
   const stats: DbStats[] = [];
