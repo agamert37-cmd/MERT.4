@@ -384,7 +384,7 @@ export function SyncStatusBar({ tableName }: SyncStatusBarProps) {
                     <>
                       <Zap className="w-3.5 h-3.5 text-emerald-500" />
                       <p className="text-[11px] text-emerald-400/80 font-medium">
-                        KV Store aktif — Supabase okuma/yazma çalışıyor
+                        KV Store aktif — PouchDB/CouchDB senkronizasyonu çalışıyor
                       </p>
                     </>
                   ) : (

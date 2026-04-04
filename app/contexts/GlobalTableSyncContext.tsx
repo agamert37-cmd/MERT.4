@@ -179,9 +179,9 @@ interface GlobalTableSyncProviderProps {
 /**
  * GlobalTableSyncProvider
  *
- * App.tsx'e sarılır. Tüm Supabase tablolarını localStorage ile senkronize
+ * App.tsx'e sarılır. Tüm PouchDB tablolarını localStorage ile senkronize
  * eder. Hangi sayfada olunursa olsun (Dashboard dahil) veriler doğrudan
- * Supabase tablolarından okunur ve storage_update eventi yayınlanır.
+ * PouchDB'den okunur ve storage_update eventi yayınlanır.
  */
 export function GlobalTableSyncProvider({ children }: GlobalTableSyncProviderProps) {
   const [tables, setTables] = useState<TableSyncStatus[]>([]);
