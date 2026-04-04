@@ -8,10 +8,8 @@ import { SupabaseStatusBadge } from './SupabaseStatus';
 import { NodeStatusBadge } from './NodeStatusPanel';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import * as Tooltip from '@radix-ui/react-tooltip';
-import { getFromStorage, StorageKey } from '../utils/storage';
-import { createPouchBackup, downloadBackup } from '../lib/pouchdb-backup';
-import { motion, AnimatePresence } from 'motion/react';
 import { createSystemBackup, getFromStorage, StorageKey } from '../utils/storage';
+import { createPouchBackup, downloadBackup } from '../lib/pouchdb-backup';
 import { motion, AnimatePresence, type Variants } from 'motion/react';
 import { 
   LayoutDashboard, 

@@ -1,5 +1,6 @@
 import { createBrowserRouter, Navigate, Outlet } from "react-router";
 import { Suspense, lazy } from "react";
+import { ErrorBoundary } from "./components/ErrorBoundary";
 import { MainLayout } from "./components/MainLayout";
 import { ErrorPage } from "./pages/ErrorPage";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
@@ -47,7 +48,11 @@ function PageLoader() {
 }
 
 function Lazy({ children }: { children: React.ReactNode }) {
-  return <Suspense fallback={<PageLoader />}>{children}</Suspense>;
+  return (
+    <ErrorBoundary>
+      <Suspense fallback={<PageLoader />}>{children}</Suspense>
+    </ErrorBoundary>
+  );
 }
 
 function ProtectedRoute({ element }: { element: React.ReactElement }) {
