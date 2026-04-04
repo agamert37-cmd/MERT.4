@@ -756,7 +756,7 @@ export function YedeklerPage() {
               <CheckCircle2 className="w-4 h-4 text-blue-400 flex-shrink-0 mt-0.5" />
               <div className="text-xs text-muted-foreground/60 space-y-1">
                 <p className="text-blue-400 font-medium">Otomatik Yedekleme Bilgisi</p>
-                <p>Uygulama açıkken belirtilen aralıklarda sunucu tarafında SHA-256 doğrulamalı tam yedek oluşturulur. Yedekler Supabase KV Store'da kalıcı olarak saklanır.</p>
+                <p>Uygulama açıkken belirtilen aralıklarda SHA-256 doğrulamalı tam yedek oluşturulur. Yedekler PouchDB/CouchDB üzerinde kalıcı olarak saklanır.</p>
               </div>
             </div>
           </div>

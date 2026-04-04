@@ -6,7 +6,7 @@
  * Mobilde localStorage boş olduğundan hiçbir veri görünmez.
  *
  * ÇÖZÜM: Bu provider app seviyesinde monte edilir. useTableSync hook'unu
- * her kritik Supabase tablosu için çalıştırır. Böylece uygulama açıldığında
+ * her CouchDB tablosu için çalıştırır. Böylece uygulama açıldığında
  * (hangi sayfa olursa olsun) tüm tablolar localStorage'a yüklenir ve
  * DashboardPage'in storage_update dinleyicisi tetiklenerek veriler görünür.
  *
