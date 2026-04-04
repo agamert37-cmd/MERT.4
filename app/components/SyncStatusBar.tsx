@@ -30,38 +30,6 @@ interface SyncStatusBarProps {
   tableName?: string;
 }
 
-// [AJAN-2] BUG FIX: localStorage verisini Supabase'e göndermeden önce toDb dönüşümü uygula
-// Eski kod ham camelCase veri gönderiyordu → Supabase sütun adı uyuşmazlığı → gönderilemedi hatası
-import { productToDb } from '../pages/StokPage';
-import { cariToDb } from '../pages/CariPage';
-
-// Tablo→localStorage key + toDb dönüşüm haritası
-const TABLE_CONFIG: Record<string, { storageKey: string; toDb?: (item: any) => any }> = {
-  personeller:       { storageKey: 'personel_data', toDb: (p: any) => ({
-    id: p.id, name: p.name, username: p.username, position: p.position, role: p.role, status: p.status,
-    phone: p.phone, email: p.email, last_login: p.lastLogin || p.last_login, join_date: p.joinDate || p.join_date,
-    department: p.department, salary: p.salary, active: p.active, pin_code: p.pinCode || p.pin_code,
-    password: p.password, permissions: typeof p.permissions === 'string' ? p.permissions : JSON.stringify(p.permissions || []),
-  }) },
-  cari_hesaplar:     { storageKey: 'cari_data', toDb: cariToDb },
-  urunler:           { storageKey: 'stok_data', toDb: productToDb },
-  araclar:           { storageKey: 'arac_data', toDb: (v: any) => ({
-    id: v.id, plate: v.plate, model: v.model, driver: v.driver, km: v.km,
-    last_maintenance: v.lastMaintenance || v.last_maintenance, next_inspection: v.nextInspection || v.next_inspection,
-    insurance: v.insurance, status: v.status,
-  }) },
-  arac_shifts:       { storageKey: 'arac_shifts' },
-  arac_km_logs:      { storageKey: 'arac_km_logs' },
-  bankalar:          { storageKey: 'bank_data' },
-  fisler:            { storageKey: 'fisler' },
-  kasa_islemleri:    { storageKey: 'kasa_data' },
-  cekler:            { storageKey: 'cekler_data' },
-  uretim_profilleri: { storageKey: 'uretim_profiles' },
-  uretim_kayitlari:  { storageKey: 'uretim_data' },
-  faturalar:         { storageKey: 'faturalar' },
-  fatura_stok:       { storageKey: 'fatura_stok' },
-  tahsilatlar:       { storageKey: 'tahsilatlar' },
-};
 
 import { seedPouchDbFromLocalStorage } from '../lib/pouchdb';
 

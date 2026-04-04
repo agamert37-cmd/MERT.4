@@ -388,16 +388,16 @@ export function SettingsPage() {
             </div>
           </div>
 
-          {/* Database Info */}
+          {/* CouchDB Bağlantı Durumu */}
           <div className="p-8 rounded-3xl bg-[#111] border border-white/5">
             <div className="flex items-center gap-4 mb-6">
               <div className="w-12 h-12 rounded-2xl bg-emerald-500/10 flex items-center justify-center border border-emerald-500/20"><Database className="w-6 h-6 text-emerald-400"/></div>
-              <div className="flex-1"><h2 className="text-xl font-bold">Veritabanı (Supabase)</h2><p className="text-xs text-gray-500">Sisteme Gömülü</p></div>
+              <div className="flex-1"><h2 className="text-xl font-bold">Veritabanı (CouchDB)</h2><p className="text-xs text-gray-500">PouchDB + CouchDB Sync</p></div>
               <span className="px-3 py-1 bg-emerald-500/10 text-emerald-400 text-xs font-bold rounded-lg border border-emerald-500/20 flex items-center gap-1"><Shield className="w-3 h-3"/> Güvenli</span>
             </div>
             <div className="space-y-4 opacity-70 pointer-events-none">
-              <div><label className={labelCls}>Project URL</label><div className={`${inputClass} font-mono text-xs overflow-hidden text-ellipsis whitespace-nowrap`}>{supabaseConfig.supabaseUrl}</div></div>
-              <div><label className={labelCls}>Anon Key</label><div className={`${inputClass} font-mono text-xs overflow-hidden text-ellipsis whitespace-nowrap`}>{supabaseConfig.supabaseAnonKey.substring(0,30)}...</div></div>
+              <div><label className={labelCls}>CouchDB URL</label><div className={`${inputClass} font-mono text-xs overflow-hidden text-ellipsis whitespace-nowrap`}>{getCouchDbConfig().url}</div></div>
+              <div><label className={labelCls}>Kullanıcı</label><div className={`${inputClass} font-mono text-xs`}>{getCouchDbConfig().user || 'admin'}</div></div>
             </div>
             {testResults.supabase !== null && (
               <div className={`mt-4 text-sm font-bold flex items-center gap-2 ${testResults.supabase ? 'text-emerald-400' : 'text-red-400'}`}>
