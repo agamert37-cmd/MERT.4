@@ -92,7 +92,7 @@ export function YedeklerPage() {
   const [autoBackupInterval, setAutoBackupInterval] = useState(() => getAutoBackupConfig().intervalHours || 24);
   const [lastAutoBackup, setLastAutoBackup] = useState(() => getAutoBackupConfig().lastRun || null);
 
-  // ─── Cloud backup stubs (Supabase removed, CouchDB not yet configured) ──────
+  // ─── Cloud backup stubs (CouchDB sync otomatik — manuel bulut yedek henüz yok) ──────
   const [cloudBackups] = useState<BackupMeta[]>([]);
   const [filteredCloudBackups] = useState<BackupMeta[]>([]);
   const [verifyingId, setVerifyingId] = useState<string | null>(null);
@@ -364,7 +364,7 @@ export function YedeklerPage() {
     reader.onload = (ev) => {
       try {
         const parsed = JSON.parse(ev.target?.result as string);
-        // Hem pouchdb_full hem eski supabase_tables formatını kabul et
+        // pouchdb_full formatını kabul et (eski supabase_tables formatıyla da uyumlu)
         if (!parsed.tables) { toast.error('Geçersiz yedek dosyası — "tables" alanı bulunamadı'); return; }
         setRestoreFileContent(parsed);
         setIsFileModalOpen(true);
