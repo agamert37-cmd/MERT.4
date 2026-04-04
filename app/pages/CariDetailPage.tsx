@@ -377,7 +377,9 @@ export function CariDetailPage() {
     return [...cariNotes].sort((a, b) => {
       if (a.pinned && !b.pinned) return -1;
       if (!a.pinned && b.pinned) return 1;
-      return new Date(b.date.split('.').reverse().join('-') + 'T' + b.time).getTime() - new Date(a.date.split('.').reverse().join('-') + 'T' + a.time).getTime();
+      const bStr = (b.date || '01.01.2000').split('.').reverse().join('-') + 'T' + (b.time || '00:00');
+      const aStr = (a.date || '01.01.2000').split('.').reverse().join('-') + 'T' + (a.time || '00:00');
+      return new Date(bStr).getTime() - new Date(aStr).getTime();
     });
   }, [cariNotes]);
 
@@ -581,8 +583,8 @@ export function CariDetailPage() {
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                     <div className="flex items-center gap-4">
                       <div className="w-12 h-12 rounded-xl bg-indigo-500/10 text-indigo-400 flex flex-col items-center justify-center">
-                        <span className="text-lg font-bold leading-none">{ex.date.split('.')[0]}</span>
-                        <span className="text-[9px] uppercase font-bold">{new Date(ex.date.split('.').reverse().join('-')).toLocaleString('tr-TR', {month:'short'})}</span>
+                        <span className="text-lg font-bold leading-none">{(ex.date || '').split('.')[0] || '—'}</span>
+                        <span className="text-[9px] uppercase font-bold">{ex.date ? new Date(ex.date.split('.').reverse().join('-')).toLocaleString('tr-TR', {month:'short'}) : '—'}</span>
                       </div>
                       <div>
                         <p className="text-sm text-gray-400">Önceki: <span className="text-white">₺{ex.previousBalance.toLocaleString()}</span></p>
