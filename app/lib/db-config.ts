@@ -24,10 +24,6 @@ export interface CouchDbConfig {
 function _defaultCouchUrl(): string {
   const envUrl = (import.meta as any).env?.VITE_COUCHDB_URL;
   if (envUrl) return envUrl;
-  // Tarayıcıda: sitenin kendi origin'i + nginx proxy yolu
-  if (typeof window !== 'undefined') {
-    return window.location.origin + '/couchdb';
-  }
   return 'http://localhost:5984';
 }
 
