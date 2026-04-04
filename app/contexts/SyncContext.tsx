@@ -138,8 +138,6 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
 
   // Online/offline takibi — debounce ile hızlı ağ değişimlerinde çoklu recheck'i önle
   useEffect(() => {
-    const onOnline = () => { setIsOnline(true); recheckTables(); };
-    const onOffline = () => setIsOnline(false);
     let recheckTimer: ReturnType<typeof setTimeout> | null = null;
     const onOnline = () => {
       setIsOnline(true);

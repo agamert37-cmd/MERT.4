@@ -92,7 +92,7 @@ export function YedeklerPage() {
   const [autoBackupInterval, setAutoBackupInterval] = useState(() => getAutoBackupConfig().intervalHours || 24);
   const [lastAutoBackup, setLastAutoBackup] = useState(() => getAutoBackupConfig().lastRun || null);
 
-  // ─── Cloud backup stubs (Supabase removed, CouchDB not yet configured) ──────
+  // ─── Cloud backup stubs (CouchDB sync otomatik — manuel bulut yedek henüz yok) ──────
   const [cloudBackups] = useState<BackupMeta[]>([]);
   const [filteredCloudBackups] = useState<BackupMeta[]>([]);
   const [verifyingId, setVerifyingId] = useState<string | null>(null);
@@ -364,7 +364,7 @@ export function YedeklerPage() {
     reader.onload = (ev) => {
       try {
         const parsed = JSON.parse(ev.target?.result as string);
-        // Hem pouchdb_full hem eski supabase_tables formatını kabul et
+        // pouchdb_full formatını kabul et (eski supabase_tables formatıyla da uyumlu)
         if (!parsed.tables) { toast.error('Geçersiz yedek dosyası — "tables" alanı bulunamadı'); return; }
         setRestoreFileContent(parsed);
         setIsFileModalOpen(true);
@@ -756,7 +756,7 @@ export function YedeklerPage() {
               <CheckCircle2 className="w-4 h-4 text-blue-400 flex-shrink-0 mt-0.5" />
               <div className="text-xs text-muted-foreground/60 space-y-1">
                 <p className="text-blue-400 font-medium">Otomatik Yedekleme Bilgisi</p>
-                <p>Uygulama açıkken belirtilen aralıklarda sunucu tarafında SHA-256 doğrulamalı tam yedek oluşturulur. Yedekler Supabase KV Store'da kalıcı olarak saklanır.</p>
+                <p>Uygulama açıkken belirtilen aralıklarda SHA-256 doğrulamalı tam yedek oluşturulur. Yedekler PouchDB/CouchDB üzerinde kalıcı olarak saklanır.</p>
               </div>
             </div>
           </div>

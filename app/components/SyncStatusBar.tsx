@@ -30,50 +30,12 @@ interface SyncStatusBarProps {
   tableName?: string;
 }
 
-// [AJAN-2] BUG FIX: localStorage verisini Supabase'e göndermeden önce toDb dönüşümü uygula
-// Eski kod ham camelCase veri gönderiyordu → Supabase sütun adı uyuşmazlığı → gönderilemedi hatası
-import { productToDb } from '../pages/StokPage';
-import { cariToDb } from '../pages/CariPage';
 
-// Tablo→localStorage key + toDb dönüşüm haritası
-const TABLE_CONFIG: Record<string, { storageKey: string; toDb?: (item: any) => any }> = {
-  personeller:       { storageKey: 'personel_data', toDb: (p: any) => ({
-    id: p.id, name: p.name, username: p.username, position: p.position, role: p.role, status: p.status,
-    phone: p.phone, email: p.email, last_login: p.lastLogin || p.last_login, join_date: p.joinDate || p.join_date,
-    department: p.department, salary: p.salary, active: p.active, pin_code: p.pinCode || p.pin_code,
-    password: p.password, permissions: typeof p.permissions === 'string' ? p.permissions : JSON.stringify(p.permissions || []),
-  }) },
-  cari_hesaplar:     { storageKey: 'cari_data', toDb: cariToDb },
-  urunler:           { storageKey: 'stok_data', toDb: productToDb },
-  araclar:           { storageKey: 'arac_data', toDb: (v: any) => ({
-    id: v.id, plate: v.plate, model: v.model, driver: v.driver, km: v.km,
-    last_maintenance: v.lastMaintenance || v.last_maintenance, next_inspection: v.nextInspection || v.next_inspection,
-    insurance: v.insurance, status: v.status,
-  }) },
-  arac_shifts:       { storageKey: 'arac_shifts' },
-  arac_km_logs:      { storageKey: 'arac_km_logs' },
-  bankalar:          { storageKey: 'bank_data' },
-  fisler:            { storageKey: 'fisler' },
-  kasa_islemleri:    { storageKey: 'kasa_data' },
-  cekler:            { storageKey: 'cekler_data' },
-  uretim_profilleri: { storageKey: 'uretim_profiles' },
-  uretim_kayitlari:  { storageKey: 'uretim_data' },
-  faturalar:         { storageKey: 'faturalar' },
-  fatura_stok:       { storageKey: 'fatura_stok' },
-  tahsilatlar:       { storageKey: 'tahsilatlar' },
-};
-
-async function pushAllLocalToSupabase(
-  _tableName: string,
-  _onProgress?: (msg: string) => void
-): Promise<{ ok: number; fail: number }> {
-  // no-op: sync handled by PouchDB/useTableSync
-  return { ok: 0, fail: 0 };
-}
+import { seedPouchDbFromLocalStorage } from '../lib/pouchdb';
 
 export function SyncStatusBar({ tableName }: SyncStatusBarProps) {
   const {
-    setupStatus, isChecking, lastChecked, recheckTables, isSupabaseConfigured,
+    setupStatus, isChecking, lastChecked, recheckTables,
     pendingCount, isSyncing: isCloudSyncing, lastSyncAt, isOnline: cloudOnline, syncError,
   } = useSyncContext();
   const { tables: globalTables } = useGlobalSyncTables();
@@ -82,23 +44,25 @@ export function SyncStatusBar({ tableName }: SyncStatusBarProps) {
   const [syncProgress, setSyncProgress] = useState('');
 
   const handleSyncNow = async () => {
-    if (!tableName || !isSupabaseConfigured || isSyncing) return;
+    if (!tableName || isSyncing) return;
 
     setIsSyncing(true);
     setSyncProgress('Başlatılıyor...');
     toast.loading('CouchDB\'ye senkronize ediliyor...', { id: 'sync-toast' });
 
     try {
-      const { ok, fail } = await pushAllLocalToSupabase(tableName, setSyncProgress);
+      const result = await seedPouchDbFromLocalStorage((t, count) => {
+        setSyncProgress(`${t}: ${count} kayıt`);
+      });
+      const total = Object.values(result).reduce((s, v) => s + v.seeded, 0);
+      const errors = Object.values(result).reduce((s, v) => s + v.errors, 0);
 
-      if (ok > 0 && fail === 0) {
-        toast.success(`${ok} kayıt başarıyla yazıldı!`, { id: 'sync-toast' });
-      } else if (ok > 0 && fail > 0) {
-        toast.warning(`${ok} başarılı, ${fail} hatalı`, { id: 'sync-toast' });
-      } else if (fail > 0) {
-        toast.error(`${fail} kayıt gönderilemedi`, { id: 'sync-toast' });
+      if (total > 0 && errors === 0) {
+        toast.success(`${total} kayıt CouchDB'ye aktarıldı`, { id: 'sync-toast' });
+      } else if (total > 0) {
+        toast.warning(`${total} aktarıldı, ${errors} hatalı`, { id: 'sync-toast' });
       } else {
-        toast.info('Gönderilecek kayıt bulunamadı', { id: 'sync-toast' });
+        toast.info('Tüm kayıtlar zaten senkronize', { id: 'sync-toast' });
       }
 
       await recheckTables();
@@ -110,20 +74,7 @@ export function SyncStatusBar({ tableName }: SyncStatusBarProps) {
     }
   };
 
-  // Supabase bağlı değilse minimal göster
-  if (!isSupabaseConfigured) {
-    return (
-      <motion.div
-        initial={{ opacity: 0, y: -8 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="flex items-center gap-2 px-3 py-1.5 bg-white/[0.03] border border-white/8 rounded-xl text-xs text-white/30 mb-4"
-      >
-        <WifiOff className="w-3 h-3" />
-        <span>Yerel depo — bulut bağlantısı yok</span>
-      </motion.div>
-    );
-  }
-
+  // CouchDB bağlı değilse minimal göster
   if (!setupStatus) {
     return (
       <motion.div
@@ -433,7 +384,7 @@ export function SyncStatusBar({ tableName }: SyncStatusBarProps) {
                     <>
                       <Zap className="w-3.5 h-3.5 text-emerald-500" />
                       <p className="text-[11px] text-emerald-400/80 font-medium">
-                        KV Store aktif — Supabase okuma/yazma çalışıyor
+                        KV Store aktif — PouchDB/CouchDB senkronizasyonu çalışıyor
                       </p>
                     </>
                   ) : (

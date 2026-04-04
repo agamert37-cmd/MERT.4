@@ -405,7 +405,7 @@ export function NodeStatusPanel() {
               {/* Cloud durumu */}
               <NodeRow
                 icon={<Cloud className="w-4 h-4" />}
-                name="Supabase Cloud"
+                name="CouchDB Cloud"
                 subtitle="Birincil veritabanı"
                 online={cloud.online}
                 latencyMs={cloud.latencyMs}

@@ -139,7 +139,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   // ── Uzaktan Zorla Oturum Kapatma (Cross-Device) ────────────────
-  // Supabase KV'de `sync_force_logout_{userId}` anahtarı varsa
+  // KV Store'da `sync_force_logout_{userId}` anahtarı varsa
   // bu cihazda oturumu otomatik kapat.
   useEffect(() => {
     const startPolling = () => {
@@ -183,9 +183,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const login = useCallback(async (username: string, password: string): Promise<boolean> => {
     let storedPersonnel = getFromStorage<any[]>(StorageKey.PERSONEL_DATA) || [];
 
-    // ── Mobil / Yeni Cihaz: Yerel veri yoksa Supabase'den çek ─────
+    // ── Mobil / Yeni Cihaz: Yerel veri yoksa PouchDB'den çek ─────
     // localStorage henüz senkronize edilmemişse (yeni cihaz / ilk açılış)
-    // forceSync() ile buluttan personel verisini indir.
     // PouchDB otomatik senkronize eder — ek forceSync gerekmez
     if (storedPersonnel.length === 0) {
       try {

@@ -64,7 +64,7 @@ export function SettingsPage() {
   const [openaiKey, setOpenaiKey] = useState(getOpenAIKey());
   const [showKey, setShowKey] = useState(false);
   const [testing, setTesting] = useState(false);
-  const [testResults, setTestResults] = useState({ supabase: null as boolean | null, openai: null as boolean | null });
+  const [testResults, setTestResults] = useState({ couchdb: null as boolean | null, openai: null as boolean | null });
 
   // SMS yapılandırması
   const [smsConfig, setSmsConfig] = useState<SMSConfig>(() => {
@@ -119,13 +119,13 @@ export function SettingsPage() {
   };
 
   const handleTestAll = async () => {
-    setTesting(true); setTestResults({ supabase: null, openai: null });
+    setTesting(true); setTestResults({ couchdb: null, openai: null });
     try {
       const result = await testCouchDbConnection();
-      setTestResults(p => ({ ...p, supabase: result.ok }));
+      setTestResults(p => ({ ...p, couchdb: result.ok }));
       if (result.ok) toast.success('CouchDB bağlantısı başarılı!');
       else toast.error(`CouchDB: ${result.error || 'Bağlantı hatası'}`);
-    } catch { setTestResults(p => ({ ...p, supabase: false })); toast.error('CouchDB bağlantı hatası!'); }
+    } catch { setTestResults(p => ({ ...p, couchdb: false })); toast.error('CouchDB bağlantı hatası!'); }
 
     if (openaiKey.trim()) {
       try {
@@ -388,20 +388,20 @@ export function SettingsPage() {
             </div>
           </div>
 
-          {/* Database Info */}
+          {/* CouchDB Bağlantı Durumu */}
           <div className="p-8 rounded-3xl bg-[#111] border border-white/5">
             <div className="flex items-center gap-4 mb-6">
               <div className="w-12 h-12 rounded-2xl bg-emerald-500/10 flex items-center justify-center border border-emerald-500/20"><Database className="w-6 h-6 text-emerald-400"/></div>
-              <div className="flex-1"><h2 className="text-xl font-bold">Veritabanı (Supabase)</h2><p className="text-xs text-gray-500">Sisteme Gömülü</p></div>
+              <div className="flex-1"><h2 className="text-xl font-bold">Veritabanı (CouchDB)</h2><p className="text-xs text-gray-500">PouchDB + CouchDB Sync</p></div>
               <span className="px-3 py-1 bg-emerald-500/10 text-emerald-400 text-xs font-bold rounded-lg border border-emerald-500/20 flex items-center gap-1"><Shield className="w-3 h-3"/> Güvenli</span>
             </div>
             <div className="space-y-4 opacity-70 pointer-events-none">
-              <div><label className={labelCls}>Project URL</label><div className={`${inputClass} font-mono text-xs overflow-hidden text-ellipsis whitespace-nowrap`}>{supabaseConfig.supabaseUrl}</div></div>
-              <div><label className={labelCls}>Anon Key</label><div className={`${inputClass} font-mono text-xs overflow-hidden text-ellipsis whitespace-nowrap`}>{supabaseConfig.supabaseAnonKey.substring(0,30)}...</div></div>
+              <div><label className={labelCls}>CouchDB URL</label><div className={`${inputClass} font-mono text-xs overflow-hidden text-ellipsis whitespace-nowrap`}>{getCouchDbConfig().url}</div></div>
+              <div><label className={labelCls}>Kullanıcı</label><div className={`${inputClass} font-mono text-xs`}>{getCouchDbConfig().user || 'admin'}</div></div>
             </div>
-            {testResults.supabase !== null && (
-              <div className={`mt-4 text-sm font-bold flex items-center gap-2 ${testResults.supabase ? 'text-emerald-400' : 'text-red-400'}`}>
-                {testResults.supabase ? <CheckCircle className="w-4 h-4"/> : <XCircle className="w-4 h-4"/>} {testResults.supabase ? 'Bağlantı Başarılı' : 'Bağlantı Hatası'}
+            {testResults.couchdb !== null && (
+              <div className={`mt-4 text-sm font-bold flex items-center gap-2 ${testResults.couchdb ? 'text-emerald-400' : 'text-red-400'}`}>
+                {testResults.couchdb ? <CheckCircle className="w-4 h-4"/> : <XCircle className="w-4 h-4"/>} {testResults.couchdb ? 'Bağlantı Başarılı' : 'Bağlantı Hatası'}
               </div>
             )}
           </div>
@@ -677,8 +677,8 @@ export function SettingsPage() {
 
           <div>
             <label className="text-xs text-muted-foreground mb-1 block">
-              Yerel Docker Supabase URL
-              <span className="ml-1 text-muted-foreground/50">(örn: http://192.168.1.5:54321 veya Cloudflare Tunnel URL)</span>
+              Yerel Sunucu URL
+              <span className="ml-1 text-muted-foreground/50">(örn: http://192.168.1.5:5984 veya Cloudflare Tunnel URL)</span>
             </label>
             <input
               value={nodeConfig.localUrl || ''}
@@ -689,7 +689,7 @@ export function SettingsPage() {
           </div>
 
           <div>
-            <label className="text-xs text-muted-foreground mb-1 block">Yerel Supabase Anon Key</label>
+            <label className="text-xs text-muted-foreground mb-1 block">API Anahtarı (isteğe bağlı)</label>
             <input
               value={nodeConfig.anonKey || ''}
               onChange={e => setNodeConfigState(p => ({ ...p, anonKey: e.target.value }))}

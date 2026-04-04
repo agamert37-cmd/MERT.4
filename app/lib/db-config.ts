@@ -55,10 +55,14 @@ export function setCouchDbConfig(config: Partial<CouchDbConfig>): void {
 export function getCouchDbAuthUrl(): string {
   const { url, user, password } = getCouchDbConfig();
   if (!user) return url;
-  const u = new URL(url);
-  u.username = user;
-  u.password = password;
-  return u.toString().replace(/\/$/, '');
+  try {
+    const u = new URL(url);
+    u.username = user;
+    u.password = password;
+    return u.toString().replace(/\/$/, '');
+  } catch {
+    return url;
+  }
 }
 
 export function getPeerCouchDbUrl(): string {

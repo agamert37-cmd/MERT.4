@@ -6,7 +6,7 @@
  * Mobilde localStorage boş olduğundan hiçbir veri görünmez.
  *
  * ÇÖZÜM: Bu provider app seviyesinde monte edilir. useTableSync hook'unu
- * her kritik Supabase tablosu için çalıştırır. Böylece uygulama açıldığında
+ * her CouchDB tablosu için çalıştırır. Böylece uygulama açıldığında
  * (hangi sayfa olursa olsun) tüm tablolar localStorage'a yüklenir ve
  * DashboardPage'in storage_update dinleyicisi tetiklenerek veriler görünür.
  *
@@ -179,9 +179,9 @@ interface GlobalTableSyncProviderProps {
 /**
  * GlobalTableSyncProvider
  *
- * App.tsx'e sarılır. Tüm Supabase tablolarını localStorage ile senkronize
+ * App.tsx'e sarılır. Tüm PouchDB tablolarını localStorage ile senkronize
  * eder. Hangi sayfada olunursa olsun (Dashboard dahil) veriler doğrudan
- * Supabase tablolarından okunur ve storage_update eventi yayınlanır.
+ * PouchDB'den okunur ve storage_update eventi yayınlanır.
  */
 export function GlobalTableSyncProvider({ children }: GlobalTableSyncProviderProps) {
   const [tables, setTables] = useState<TableSyncStatus[]>([]);

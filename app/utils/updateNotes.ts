@@ -19,7 +19,6 @@ export interface UpdateNote {
 
 // Mevcut uygulama versiyonu — her yeni sürümde burası güncellenir
 export const CURRENT_VERSION = 'v4.5.0';
-export const CURRENT_VERSION = 'v4.4';
 
 // localStorage anahtarı — kullanıcının en son gördüğü versiyon
 export const SEEN_VERSION_KEY = 'isleyen_et_last_seen_version';
