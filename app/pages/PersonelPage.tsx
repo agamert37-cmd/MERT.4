@@ -391,8 +391,7 @@ export function PersonelPage() {
               by: user?.name || 'Admin',
               at: new Date().toISOString(),
             });
-            // Personel durumunu offline olarak işaretle — [AJAN-2]: useTableSync üzerinden güncelle
-            // setInStorage bypass kaldırıldı — useTableSync hem localStorage hem Supabase'i yönetir
+            // Personel durumunu offline olarak işaretle — useTableSync → PouchDB → CouchDB
             updateItem(personId, { status: 'offline' } as any).catch(e => console.warn('[PersonelPage] status update hatası:', e));
             logActivity('security_alert', 'Uzaktan oturum kapatma tetiklendi', {
               employeeName: user?.name,
@@ -452,7 +451,7 @@ export function PersonelPage() {
       return p;
     });
     setInStorage('personel_data', updatedPersonnel);
-    // BUG FIX [AJAN-2]: Personel izin değişikliği Supabase'e de yaz
+    // Personel izin değişikliğini PouchDB'ye de yaz (→ CouchDB sync)
     const updatedEmployee = updatedPersonnel.find((p: any) => p.id === request.employeeId);
     if (updatedEmployee) {
       updateItem(request.employeeId, { permissions: updatedEmployee.permissions, tempPermissions: updatedEmployee.tempPermissions } as any)

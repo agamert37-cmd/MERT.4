@@ -191,8 +191,8 @@ export function CeklerPage() {
   const { canAdd, canDelete, canEdit } = getPagePermissions(user, currentEmployee, 'cekler');
   const sec = usePageSecurity('cekler');
 
-  // [AJAN-2]: deleteItem artık cekler Supabase tablosundan da siliyor
-  const { data: syncedCekler, deleteItem: deleteCekFromSupabase } = useTableSync<CekData>({
+  // PouchDB/CouchDB senkronizasyonu
+  const { data: syncedCekler, deleteItem: deleteCek } = useTableSync<CekData>({
     tableName: 'cekler',
     storageKey: StorageKey.CEKLER_DATA,
     initialData: [],
@@ -511,8 +511,7 @@ export function CeklerPage() {
     const existing = getFromStorage<CekData[]>(StorageKey.CEKLER_DATA) || [];
     setInStorage(StorageKey.CEKLER_DATA, existing.filter(c => c.id !== id));
     setCekler(existing.filter(c => c.id !== id));
-    // [AJAN-2]: Supabase cekler tablosundan da sil
-    deleteCekFromSupabase(id).catch(e => console.warn('[CeklerPage] Supabase delete hatası:', e));
+    deleteCek(id).catch(e => console.warn('[CeklerPage] PouchDB delete hatası:', e));
     emit('cek:deleted', { cekId: id, bankName });
     setSelectedCek(null);
     sec.auditLog('cek_delete', id, bankName);
