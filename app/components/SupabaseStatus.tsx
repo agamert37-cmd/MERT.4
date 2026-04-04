@@ -48,6 +48,7 @@ export function SupabaseStatus() {
                   <div>
                     <p className="font-semibold text-sm">Senkronize ediliyor...</p>
                     <p className="text-xs opacity-90">Değişiklikler CouchDB'ye gönderiliyor</p>
+                    <p className="text-xs opacity-90">PouchDB → CouchDB senkronize ediliyor</p>
                   </div>
                 </>
               ) : (
