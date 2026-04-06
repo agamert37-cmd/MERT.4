@@ -73,18 +73,15 @@ export function GunSonuPage() {
   const [isCloseDialogOpen, setIsCloseDialogOpen] = useState(false);
   const [isReopenDialogOpen, setIsReopenDialogOpen] = useState(false);
 
-  // BUG FIX [AJAN-2]: Mount'ta KV'den gün sonu durumunu yükle — başka cihazdaki kapanış görünsün
+  // Mount'ta KV'den gün sonu durumunu yükle — KV her zaman otorite (başka cihazdaki kapanış görünsün)
   useEffect(() => {
-    const local = localStorage.getItem(GUN_SONU_KEY);
-    if (!local) {
-      kvGet<{ closed: boolean }>(`gun_sonu_${todayISO}`).then(remote => {
-        if (remote && remote.closed === true) {
-          setIsDayClosed(true);
-          localStorage.setItem(GUN_SONU_KEY, JSON.stringify(remote));
-          window.dispatchEvent(new Event('storage_update'));
-        }
-      }).catch(() => {});
-    }
+    kvGet<{ closed: boolean }>(`gun_sonu_${todayISO}`).then(remote => {
+      if (remote) {
+        setIsDayClosed(remote.closed === true);
+        localStorage.setItem(GUN_SONU_KEY, JSON.stringify(remote));
+        window.dispatchEvent(new Event('storage_update'));
+      }
+    }).catch(() => {});
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -331,9 +328,9 @@ export function GunSonuPage() {
       closedAt: new Date().toISOString(),
       closedBy: currentEmployee?.name || 'Bilinmeyen',
     };
-    localStorage.setItem(GUN_SONU_KEY, JSON.stringify(gunSonuRecord));
-    // BUG FIX [AJAN-2]: Gün sonu durumu KV store'a da yaz — çapraz cihaz senkronu
+    // KV store birincil (CouchDB senkronize), localStorage önbellek
     kvSet(`gun_sonu_${todayISO}`, gunSonuRecord).catch(() => toast.warning('Gün sonu çapraz cihaz senkronizasyonu başarısız. Diğer cihazlar bu kapatmayı göremeyebilir.'));
+    localStorage.setItem(GUN_SONU_KEY, JSON.stringify(gunSonuRecord));
     // Diğer sayfaları bilgilendir (SalesPage, KasaPage)
     window.dispatchEvent(new Event('storage_update'));
     setIsCloseDialogOpen(false);
@@ -349,11 +346,10 @@ export function GunSonuPage() {
       return;
     }
     setIsDayClosed(false);
-    // localStorage'dan kaldır
-    localStorage.removeItem(GUN_SONU_KEY);
-    // BUG FIX [AJAN-2]: Gün sonu açıldı — KV store'a da yaz
+    // KV store birincil (CouchDB senkronize), localStorage önbellek temizle
     kvSet(`gun_sonu_${todayISO}`, { closed: false, reopenedAt: new Date().toISOString(), reopenedBy: currentEmployee?.name || 'Bilinmeyen' })
       .catch(() => toast.warning('Gün sonu açma çapraz cihaz senkronizasyonu başarısız.'));
+    localStorage.removeItem(GUN_SONU_KEY);
     // Diğer sayfaları bilgilendir (SalesPage, KasaPage)
     window.dispatchEvent(new Event('storage_update'));
     setIsReopenDialogOpen(false);

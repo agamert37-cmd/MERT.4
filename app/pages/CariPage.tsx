@@ -646,9 +646,9 @@ export function CariPage() {
 
   const saveRegions = (updated: Region[]) => {
     setRegions(updated);
-    localStorage.setItem('isleyen_et_regions', JSON.stringify(updated));
-    // BUG FIX [AJAN-2]: Bölgeler KV store'a da yaz — çapraz cihaz sync
+    // KV store birincil kaynak (CouchDB üzerinden senkronize), localStorage önbellek
     kvSet('cari_regions', updated).catch(e => console.error('[Cari] regions kv sync:', e));
+    localStorage.setItem('isleyen_et_regions', JSON.stringify(updated));
   };
 
   // Kategoriler — localStorage'da sakla (özelleştirilebilir)
@@ -669,24 +669,24 @@ export function CariPage() {
   const saveCategories = (musteri: string[], toptanci: string[]) => {
     setMusteriCategories(musteri);
     setToptanciCategories(toptanci);
-    localStorage.setItem('isleyen_et_musteri_cats', JSON.stringify(musteri));
-    localStorage.setItem('isleyen_et_toptanci_cats', JSON.stringify(toptanci));
-    // BUG FIX [AJAN-2]: Müşteri/toptancı kategorileri KV store'a da yaz — çapraz cihaz sync
+    // KV store birincil kaynak (CouchDB üzerinden senkronize), localStorage önbellek
     kvSet('cari_musteri_cats', musteri).catch(e => console.error('[Cari] cats kv sync:', e));
     kvSet('cari_toptanci_cats', toptanci).catch(e => console.error('[Cari] cats kv sync:', e));
+    localStorage.setItem('isleyen_et_musteri_cats', JSON.stringify(musteri));
+    localStorage.setItem('isleyen_et_toptanci_cats', JSON.stringify(toptanci));
   };
 
-  // BUG FIX [AJAN-2]: Mount'ta KV'den bölge ve kategorileri yükle (mobil ilk açılış)
+  // Mount'ta KV'den bölge ve kategorileri yükle — KV her zaman otorite (localStorage önbellek olarak)
   useEffect(() => {
-    if (!localStorage.getItem('isleyen_et_regions')) {
-      kvGet<Region[]>('cari_regions').then(r => { if (r && r.length > 0) { setRegions(r); localStorage.setItem('isleyen_et_regions', JSON.stringify(r)); } }).catch(() => {});
-    }
-    if (!localStorage.getItem('isleyen_et_musteri_cats')) {
-      kvGet<string[]>('cari_musteri_cats').then(r => { if (r && r.length > 0) { setMusteriCategories(r); localStorage.setItem('isleyen_et_musteri_cats', JSON.stringify(r)); } }).catch(() => {});
-    }
-    if (!localStorage.getItem('isleyen_et_toptanci_cats')) {
-      kvGet<string[]>('cari_toptanci_cats').then(r => { if (r && r.length > 0) { setToptanciCategories(r); localStorage.setItem('isleyen_et_toptanci_cats', JSON.stringify(r)); } }).catch(() => {});
-    }
+    kvGet<Region[]>('cari_regions').then(r => {
+      if (r && r.length > 0) { setRegions(r); localStorage.setItem('isleyen_et_regions', JSON.stringify(r)); }
+    }).catch(() => {});
+    kvGet<string[]>('cari_musteri_cats').then(r => {
+      if (r && r.length > 0) { setMusteriCategories(r); localStorage.setItem('isleyen_et_musteri_cats', JSON.stringify(r)); }
+    }).catch(() => {});
+    kvGet<string[]>('cari_toptanci_cats').then(r => {
+      if (r && r.length > 0) { setToptanciCategories(r); localStorage.setItem('isleyen_et_toptanci_cats', JSON.stringify(r)); }
+    }).catch(() => {});
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

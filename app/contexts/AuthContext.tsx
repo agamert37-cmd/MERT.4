@@ -223,10 +223,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Varsayılan şifre ('1234') her zaman çalışır (acil kurtarma)
     let isValidAdminPass = trimmedPassword === SETUP_PASS_DEFAULT;
 
-    // Özelleştirilmiş admin şifresi varsa onu da kabul et
+    // Özelleştirilmiş admin şifresi varsa onu da kabul et (KV store önce, localStorage fallback)
     if (!isValidAdminPass) {
       try {
-        const storedAdminHash = localStorage.getItem('system_admin_pw_hash');
+        const storedAdminHash = (await kvGet<string>('system_admin_pw_hash')) ?? localStorage.getItem('system_admin_pw_hash');
         if (storedAdminHash) {
           const inputHash = await hashString(trimmedPassword);
           isValidAdminPass = inputHash === storedAdminHash;

@@ -5,6 +5,7 @@ import { Settings, Database, Sparkles, Save, Trash2, Eye, EyeOff, CheckCircle, X
 import { getOpenAIKey, saveOpenAIKey, clearOpenAIKey, isOpenAIConfigured } from '../lib/api-config';
 import { reinitializeOpenAI } from '../lib/chatgpt-assistant';
 import { testCouchDbConnection, getCouchDbTableStatus, type CouchDbTableStatus } from '../lib/pouchdb';
+import { kvGet, kvSet } from '../lib/pouchdb-kv';
 import { getFromStorage, setInStorage, StorageKey } from '../utils/storage';
 import { hashString } from '../utils/security';
 import { getCouchDbConfig, setCouchDbConfig } from '../lib/db-config';
@@ -21,7 +22,7 @@ import { logActivity } from '../utils/activityLogger';
 import { useModuleBus } from '../hooks/useModuleBus';
 import { getPagePermissions } from '../utils/permissions';
 import { LocalRepoPanel } from '../components/LocalRepoPanel';
-import { kvSet } from '../lib/pouchdb-kv';
+import { useGlobalSyncTables } from '../contexts/GlobalTableSyncContext';
 import { NodeStatusPanel } from '../components/NodeStatusPanel';
 import { getLocalNodeId, getLocalNodeConfig, saveLocalNodeConfig, type NodeInfo } from '../lib/node-registry';
 import { CHANGELOG, type ChangeType } from '../data/changelog';
@@ -57,6 +58,7 @@ export function SettingsPage() {
   const { currentEmployee } = useEmployee();
   const { t } = useLanguage();
   const { emit } = useModuleBus();
+  const { tables: globalSyncTables } = useGlobalSyncTables();
 
   // Güvenlik kontrolleri (RBAC) - merkezi utility
   const { canEdit } = getPagePermissions(user, currentEmployee, 'ayarlar');
@@ -274,8 +276,8 @@ export function SettingsPage() {
 
     setAdminPwSaving(true);
     try {
-      // Mevcut şifreyi doğrula
-      const storedHash = localStorage.getItem('system_admin_pw_hash');
+      // Mevcut şifreyi doğrula — KV store önce, localStorage fallback
+      const storedHash = (await kvGet<string>('system_admin_pw_hash')) ?? localStorage.getItem('system_admin_pw_hash');
       if (storedHash) {
         const currentHash = await hashString(adminCurrentPw);
         if (currentHash !== storedHash) { toast.error('Mevcut şifre yanlış'); setAdminPwSaving(false); return; }
@@ -284,6 +286,8 @@ export function SettingsPage() {
       }
 
       const newHash = await hashString(adminNewPw);
+      // KV store'a yaz (CouchDB'ye senkronize) + localStorage fallback
+      await kvSet('system_admin_pw_hash', newHash);
       localStorage.setItem('system_admin_pw_hash', newHash);
       logActivity('settings_change', 'Admin şifresi değiştirildi', { employeeName: user?.name, page: 'Ayarlar' });
       toast.success('Admin şifresi başarıyla değiştirildi');
@@ -951,54 +955,87 @@ export function SettingsPage() {
               </div>
             )}
 
+            {/* Canlı sync durumu — her zaman görünür */}
+            {globalSyncTables.length > 0 && tableStats.length === 0 && (
+              <div className="space-y-1.5 mt-2">
+                <div className="grid grid-cols-3 gap-2 px-2 pb-1 border-b border-white/5">
+                  <span className="text-[10px] text-gray-500 font-bold uppercase tracking-wider col-span-1">Tablo</span>
+                  <span className="text-[10px] text-gray-500 font-bold uppercase tracking-wider text-center">Kayıt</span>
+                  <span className="text-[10px] text-gray-500 font-bold uppercase tracking-wider text-center">Durum</span>
+                </div>
+                {globalSyncTables.map(gt => {
+                  const stateColor = gt.syncState === 'synced' ? 'bg-emerald-400' : gt.syncState === 'error' ? 'bg-red-400' : gt.syncState === 'loading' ? 'bg-blue-400' : 'bg-yellow-400';
+                  const stateLabel = gt.syncState === 'synced' ? 'Senkron' : gt.syncState === 'error' ? 'Hata' : gt.syncState === 'loading' ? 'Yükleniyor' : gt.syncState === 'offline' ? 'Çevrimdışı' : 'Bekliyor';
+                  return (
+                    <div key={gt.name} className="grid grid-cols-3 gap-2 px-2 py-1.5 rounded-lg bg-white/5">
+                      <div className="col-span-1 flex items-center gap-1.5 min-w-0">
+                        <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${stateColor}`} />
+                        <span className="text-xs text-white truncate">{gt.name}</span>
+                      </div>
+                      <span className="text-xs text-center font-mono text-purple-300">{gt.docCount}</span>
+                      <span className={`text-[10px] text-center font-medium ${gt.syncState === 'synced' ? 'text-emerald-400' : gt.syncState === 'error' ? 'text-red-400' : 'text-yellow-400'}`}>{stateLabel}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
             {tableStats.length > 0 && (
               <div className="space-y-1.5 mt-2">
                 {/* Başlık */}
-                <div className="grid grid-cols-4 gap-2 px-2 pb-1 border-b border-white/5">
+                <div className="grid grid-cols-5 gap-2 px-2 pb-1 border-b border-white/5">
                   <span className="text-[10px] text-gray-500 font-bold uppercase tracking-wider col-span-1">Tablo</span>
                   <span className="text-[10px] text-gray-500 font-bold uppercase tracking-wider text-center">Yerel</span>
                   <span className="text-[10px] text-gray-500 font-bold uppercase tracking-wider text-center">PouchDB</span>
                   <span className="text-[10px] text-gray-500 font-bold uppercase tracking-wider text-center">CouchDB</span>
+                  <span className="text-[10px] text-gray-500 font-bold uppercase tracking-wider text-center">Sync</span>
                 </div>
-                {tableStats.map(t => {
-                  const inSync = t.couchDocCount > 0 && t.couchDocCount >= t.localStorageCount;
-                  const hasData = t.localStorageCount > 0 || t.localDocCount > 0 || t.couchDocCount > 0;
+                {tableStats.map(ts => {
+                  const inSync = ts.couchDocCount > 0 && ts.couchDocCount >= ts.localStorageCount;
+                  const hasData = ts.localStorageCount > 0 || ts.localDocCount > 0 || ts.couchDocCount > 0;
+                  const globalState = globalSyncTables.find(g => g.name === ts.name);
+                  const syncLabel = globalState?.syncState === 'synced' ? '✓' : globalState?.syncState === 'error' ? '✗' : globalState?.syncState === 'loading' ? '…' : '—';
+                  const syncColor = globalState?.syncState === 'synced' ? 'text-emerald-400' : globalState?.syncState === 'error' ? 'text-red-400' : 'text-yellow-400';
                   return (
-                    <div key={t.name} className={`grid grid-cols-4 gap-2 px-2 py-1.5 rounded-lg ${hasData ? 'bg-white/5' : 'bg-transparent opacity-50'}`}>
+                    <div key={ts.name} className={`grid grid-cols-5 gap-2 px-2 py-1.5 rounded-lg ${hasData ? 'bg-white/5' : 'bg-transparent opacity-50'}`}>
                       <div className="col-span-1 flex items-center gap-1.5 min-w-0">
-                        <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${inSync ? 'bg-emerald-400' : t.localStorageCount > 0 ? 'bg-yellow-400' : 'bg-gray-600'}`} />
-                        <span className="text-xs text-white truncate">{t.displayName}</span>
+                        <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${inSync ? 'bg-emerald-400' : ts.localStorageCount > 0 ? 'bg-yellow-400' : 'bg-gray-600'}`} />
+                        <span className="text-xs text-white truncate">{ts.displayName}</span>
                       </div>
-                      <span className={`text-xs text-center font-mono ${t.localStorageCount > 0 ? 'text-blue-300' : 'text-gray-600'}`}>
-                        {t.localStorageCount}
+                      <span className={`text-xs text-center font-mono ${ts.localStorageCount > 0 ? 'text-blue-300' : 'text-gray-600'}`}>
+                        {ts.localStorageCount}
                       </span>
-                      <span className={`text-xs text-center font-mono ${t.localDocCount > 0 ? 'text-purple-300' : 'text-gray-600'}`}>
-                        {t.localDocCount}
+                      <span className={`text-xs text-center font-mono ${ts.localDocCount > 0 ? 'text-purple-300' : 'text-gray-600'}`}>
+                        {ts.localDocCount}
                       </span>
                       <div className="flex items-center justify-center gap-1">
-                        {t.error ? (
+                        {ts.error ? (
                           <span className="text-[10px] text-red-400">hata</span>
                         ) : (
-                          <span className={`text-xs font-mono ${t.couchDocCount > 0 ? 'text-emerald-300' : 'text-gray-600'}`}>
-                            {t.exists ? t.couchDocCount : '—'}
+                          <span className={`text-xs font-mono ${ts.couchDocCount > 0 ? 'text-emerald-300' : 'text-gray-600'}`}>
+                            {ts.exists ? ts.couchDocCount : '—'}
                           </span>
                         )}
                         {inSync && <Cloud className="w-3 h-3 text-emerald-400 flex-shrink-0" />}
                       </div>
+                      <span className={`text-xs text-center font-bold ${syncColor}`}>{syncLabel}</span>
                     </div>
                   );
                 })}
                 {/* Toplam */}
-                <div className="grid grid-cols-4 gap-2 px-2 pt-2 border-t border-white/10 mt-1">
+                <div className="grid grid-cols-5 gap-2 px-2 pt-2 border-t border-white/10 mt-1">
                   <span className="text-xs text-gray-400 font-bold col-span-1">Toplam</span>
                   <span className="text-xs text-blue-300 font-bold text-center font-mono">
-                    {tableStats.reduce((s, t) => s + t.localStorageCount, 0)}
+                    {tableStats.reduce((s, ts) => s + ts.localStorageCount, 0)}
                   </span>
                   <span className="text-xs text-purple-300 font-bold text-center font-mono">
-                    {tableStats.reduce((s, t) => s + t.localDocCount, 0)}
+                    {tableStats.reduce((s, ts) => s + ts.localDocCount, 0)}
                   </span>
                   <span className="text-xs text-emerald-300 font-bold text-center font-mono">
-                    {tableStats.reduce((s, t) => s + t.couchDocCount, 0)}
+                    {tableStats.reduce((s, ts) => s + ts.couchDocCount, 0)}
+                  </span>
+                  <span className="text-xs text-emerald-400 font-bold text-center">
+                    {globalSyncTables.filter(g => g.syncState === 'synced').length}/{globalSyncTables.length}
                   </span>
                 </div>
               </div>

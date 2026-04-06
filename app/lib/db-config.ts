@@ -1,6 +1,7 @@
 // [AJAN-2 | claude/serene-gagarin | 2026-03-25]
 // CouchDB yapılandırması — PouchDB ↔ CouchDB sync için
 
+// LOCAL ONLY — intentionally not synced (CouchDB server URL may differ per device/location)
 const CONFIG_KEY = 'mert4_couchdb_config';
 
 export interface CouchDbConfig {

@@ -410,6 +410,7 @@ export interface SecurityThreat {
   resolved: boolean;
 }
 
+// LOCAL ONLY — intentionally not synced to CouchDB (device-specific, time-limited security data)
 const THREATS_KEY = 'isleyen_et_security_threats';
 const MAX_THREATS = 200;
 
@@ -491,6 +492,7 @@ export interface ActiveSession {
   isCurrentSession: boolean;
 }
 
+// LOCAL ONLY — intentionally not synced (session data is per-device/per-browser)
 const SESSIONS_KEY = 'isleyen_et_active_sessions';
 const CURRENT_SESSION_ID_KEY = 'isleyen_et_current_session_id';
 
@@ -647,6 +649,7 @@ export function updateSecurityPolicy(updates: Partial<SecurityPolicy>): Security
 
 // ─── TAMPER-PROOF LOG HASH ZINCIRI ────────────────────────────────────────────
 
+// LOCAL ONLY — intentionally not synced (tamper-proof hash chain must stay device-local)
 const LOG_CHAIN_KEY = 'isleyen_et_log_chain';
 
 export function getLogChainHash(): string {
@@ -803,6 +806,7 @@ export function collectDeviceInfo(): DeviceInfo {
   };
 }
 
+// LOCAL ONLY — intentionally not synced (device fingerprint history is per-device)
 const DEVICE_HISTORY_KEY = 'isleyen_et_device_history';
 const MAX_DEVICE_HISTORY = 50;
 
@@ -851,6 +855,7 @@ export interface AutoResponseRule {
   lastTriggered?: string;
 }
 
+// LOCAL ONLY — intentionally not synced (auto-response rules are security-sensitive)
 const AUTO_RESPONSE_KEY = 'isleyen_et_auto_response_rules';
 
 const DEFAULT_AUTO_RESPONSES: AutoResponseRule[] = [
@@ -1136,6 +1141,7 @@ export function generateSecurityAudit(): { items: SecurityAuditItem[]; passRate:
 
 // ─── 2FA ───────────────────────────────────────────────────────────────────────
 
+// LOCAL ONLY — intentionally not synced (2FA secret must stay on enrolling device)
 const TWO_FA_KEY = 'isleyen_et_2fa_config';
 
 export interface TwoFAConfig {

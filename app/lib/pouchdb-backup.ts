@@ -3,6 +3,7 @@
 
 import { getDb, getAllDbStats } from './pouchdb';
 import { TABLE_NAMES, KV_DB_NAME } from './db-config';
+import { kvGet, kvSet, kvDel } from './pouchdb-kv';
 
 // ─── Tipler ───────────────────────────────────────────────────────────────────
 
@@ -225,19 +226,32 @@ export interface BackupMeta {
 const BACKUP_META_KEY = 'isleyen_et_pouchdb_backup_meta';
 
 export function getBackupMetaList(): BackupMeta[] {
+  // LOCAL ONLY fallback — KV store async versiyonu için getBackupMetaListAsync kullan
   try {
     return JSON.parse(localStorage.getItem(BACKUP_META_KEY) || '[]');
   } catch { return []; }
 }
 
-export function saveBackupMeta(meta: BackupMeta): void {
-  const list = getBackupMetaList();
+export async function getBackupMetaListAsync(): Promise<BackupMeta[]> {
+  try {
+    const kvList = await kvGet<BackupMeta[]>('pouchdb_backup_meta');
+    if (kvList && kvList.length > 0) return kvList;
+  } catch {}
+  return getBackupMetaList();
+}
+
+export async function saveBackupMeta(meta: BackupMeta): Promise<void> {
+  const list = await getBackupMetaListAsync();
   const updated = [meta, ...list.filter(m => m.id !== meta.id)].slice(0, 30);
+  // KV store'a yaz (CouchDB'ye senkronize)
+  await kvSet('pouchdb_backup_meta', updated).catch(() => {});
+  // localStorage fallback
   localStorage.setItem(BACKUP_META_KEY, JSON.stringify(updated));
 }
 
-export function deleteBackupMeta(id: string): void {
-  const list = getBackupMetaList().filter(m => m.id !== id);
+export async function deleteBackupMeta(id: string): Promise<void> {
+  const list = (await getBackupMetaListAsync()).filter(m => m.id !== id);
+  await kvSet('pouchdb_backup_meta', list).catch(() => {});
   localStorage.setItem(BACKUP_META_KEY, JSON.stringify(list));
 }
 
@@ -281,7 +295,7 @@ export function startAutoBackupScheduler(onBackup?: (meta: BackupMeta) => void):
         sizeKB: result.sizeKB,
         tableStats: result.backup.meta.tableStats,
       };
-      saveBackupMeta(meta);
+      await saveBackupMeta(meta);
       const cfg = getAutoBackupConfig();
       saveAutoBackupConfig({ ...cfg, lastRun: new Date().toISOString() });
       console.log(`[AutoBackup] Tamamlandı: ${result.totalDocs} kayıt`);
@@ -316,7 +330,7 @@ export async function getBackupSystemStats(): Promise<{
   totalDocsInPouchDB: number;
   tableStats: Record<string, number>;
 }> {
-  const metas = getBackupMetaList();
+  const metas = await getBackupMetaListAsync();
   const dbStats = await getAllDbStats();
   const tableStats: Record<string, number> = {};
   let total = 0;

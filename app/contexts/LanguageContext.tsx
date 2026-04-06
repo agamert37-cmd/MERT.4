@@ -1,5 +1,6 @@
-import React, { createContext, useContext, useState, useCallback, useMemo, type ReactNode } from 'react';
+import React, { createContext, useContext, useState, useCallback, useMemo, useEffect, type ReactNode } from 'react';
 import { type Language, t as translate, LANGUAGES, DEFAULT_LANGUAGE, LANGUAGE_STORAGE_KEY, type LanguageMeta } from '../utils/i18n';
+import { kvGet, kvSet } from '../lib/pouchdb-kv';
 
 interface LanguageContextType {
   lang: Language;
@@ -26,11 +27,22 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
     return DEFAULT_LANGUAGE;
   });
 
+  // KV store'dan dil ayarını yükle (başlangıçta localStorage'dan alındı, KV güncelleme gelirse uygula)
+  useEffect(() => {
+    kvGet<string>('app_language').then(kvLang => {
+      if (kvLang && ['tr', 'en', 'ru', 'uz'].includes(kvLang) && kvLang !== lang) {
+        setLangState(kvLang as Language);
+      }
+    }).catch(() => {});
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   const setLang = useCallback((newLang: Language) => {
     setLangState(newLang);
     try {
       localStorage.setItem(LANGUAGE_STORAGE_KEY, newLang);
     } catch {}
+    // KV store'a da yaz (CouchDB üzerinden diğer cihazlara senkronize)
+    kvSet('app_language', newLang).catch(() => {});
   }, []);
 
   const t = useCallback((key: string, defaultText?: string) => {

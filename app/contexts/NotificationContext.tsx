@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { CURRENT_VERSION, SEEN_VERSION_KEY, UPDATE_NOTES } from '../utils/updateNotes';
+import { kvSet } from '../lib/pouchdb-kv';
 
 export interface Notification {
   id: string;
@@ -40,9 +41,10 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
     return [];
   });
 
-  // LocalStorage'a kaydet
+  // LocalStorage'a kaydet + KV store'a yaz (CouchDB yedekleme)
   useEffect(() => {
     localStorage.setItem('isleyen_et_notifications', JSON.stringify(notifications));
+    kvSet('app_notifications', notifications).catch(() => {});
   }, [notifications]);
 
   // Yeni versiyon bildirimi — sayfa yüklenince bir kez kontrol et
