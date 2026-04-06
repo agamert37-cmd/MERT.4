@@ -168,7 +168,7 @@ export function DbSetupBanner({ onReady }: DbSetupBannerProps) {
                     type="text"
                     value={cfgUrl}
                     onChange={e => setCfgUrl(e.target.value)}
-                    placeholder="CouchDB URL (örn: https://site.com/couchdb)"
+                    placeholder="http://localhost:5984"
                     className="w-full bg-black/60 text-white text-xs px-3 py-2 rounded-lg border border-white/10 focus:outline-none focus:border-red-500/50"
                   />
                 </div>

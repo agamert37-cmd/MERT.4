@@ -1,6 +1,7 @@
 // [AJAN-2 | claude/serene-gagarin | 2026-03-25]
 // CouchDB yapılandırması — PouchDB ↔ CouchDB sync için
 
+// LOCAL ONLY — intentionally not synced (CouchDB server URL may differ per device/location)
 const CONFIG_KEY = 'mert4_couchdb_config';
 
 export interface CouchDbConfig {
@@ -24,17 +25,13 @@ export interface CouchDbConfig {
 function _defaultCouchUrl(): string {
   const envUrl = (import.meta as any).env?.VITE_COUCHDB_URL;
   if (envUrl) return envUrl;
-  // Tarayıcıda: sitenin kendi origin'i + nginx proxy yolu
-  if (typeof window !== 'undefined') {
-    return window.location.origin + '/couchdb';
-  }
   return 'http://localhost:5984';
 }
 
 const DEFAULT_CONFIG: CouchDbConfig = {
   url: _defaultCouchUrl(),
-  user: (import.meta as any).env?.VITE_COUCHDB_USER || 'admin',
-  password: (import.meta as any).env?.VITE_COUCHDB_PASSWORD || '',
+  user: (import.meta as any).env?.VITE_COUCHDB_USER || 'adm1n',
+  password: (import.meta as any).env?.VITE_COUCHDB_PASSWORD || '135790',
   peerUrl: (import.meta as any).env?.VITE_COUCHDB_PEER_URL || '',
 };
 

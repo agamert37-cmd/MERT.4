@@ -50,12 +50,6 @@ interface TableStatus {
 
 interface SyncContextValue {
   setupStatus: SetupStatus | null;
-  setupStatus: {
-    isConnected: boolean;
-    tables?: TableStatus[];
-    latencyMs?: number;
-    kvTotalKeys?: number;
-  } | null;
   isChecking: boolean;
   lastChecked: Date | null;
   recheckTables: () => Promise<void>;

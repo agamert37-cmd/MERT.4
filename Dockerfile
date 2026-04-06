@@ -1,6 +1,14 @@
 # ─── Aşama 1: Build ───────────────────────────────────────────
 FROM node:22-alpine AS builder
 
+# CouchDB bağlantı bilgileri (docker-compose.yml'den build args olarak gelir)
+ARG VITE_COUCHDB_URL=http://localhost:5984
+ARG VITE_COUCHDB_USER=adm1n
+ARG VITE_COUCHDB_PASSWORD=135790
+ENV VITE_COUCHDB_URL=$VITE_COUCHDB_URL
+ENV VITE_COUCHDB_USER=$VITE_COUCHDB_USER
+ENV VITE_COUCHDB_PASSWORD=$VITE_COUCHDB_PASSWORD
+
 WORKDIR /app
 
 # Bağımlılıkları önce kopyala — Docker cache katmanı için

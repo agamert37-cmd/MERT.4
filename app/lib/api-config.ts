@@ -7,6 +7,7 @@
 const SUPABASE_URL = '';
 const SUPABASE_ANON_KEY = '';
 
+// LOCAL ONLY — intentionally not synced to CouchDB (API key is sensitive, per-device)
 const OPENAI_KEY_STORAGE = 'isleyen_et_openai_key';
 // Legacy key for migration
 const LEGACY_STORAGE_KEY = 'isleyen_et_api_config';

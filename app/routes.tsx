@@ -1,4 +1,6 @@
 import { createBrowserRouter, Navigate, Outlet } from "react-router";
+import { Suspense, lazy } from "react";
+import { ErrorBoundary } from "./components/ErrorBoundary";
 import { MainLayout } from "./components/MainLayout";
 import { ErrorPage } from "./pages/ErrorPage";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
@@ -7,37 +9,52 @@ import { NotificationProvider } from "./contexts/NotificationContext";
 import { SyncProvider } from "./contexts/SyncContext";
 import { LanguageProvider } from "./contexts/LanguageContext";
 
-// Direct static imports (NO lazy loading to avoid dynamic import errors)
+// Eagerly loaded — her zaman hızlı açılmalı
 import { LoginPage } from "./pages/LoginPage";
 import { DashboardPage } from "./pages/DashboardPage";
-import { StokPage } from "./pages/StokPage";
-import { CariPage } from "./pages/CariPage";
-import { PersonelPage } from "./pages/PersonelPage";
-import { SalesPage } from "./pages/SalesPage";
-import { TahsilatPage } from "./pages/TahsilatPage";
-import { GunSonuPage } from "./pages/GunSonuPage";
-import { AracTakipPage } from "./pages/AracTakipPage";
-import { ChatPage } from "./pages/ChatPage";
-import { CariDetailPage } from "./pages/CariDetailPage";
-import { KasaPage } from "./pages/KasaPage";
-import { AracPage } from "./pages/AracPage";
-import { RaporlarPage } from "./pages/RaporlarPage";
-import { FilesPage } from "./pages/FilesPage";
-import { FisHistoryPage } from "./pages/FisHistoryPage";
-import { SettingsPage } from "./pages/SettingsPage";
-import { YedeklerPage } from "./pages/YedeklerPage";
-import { StokHareketPage } from "./pages/StokHareketPage";
-import { UretimPage } from "./pages/UretimPage";
-import { PazarlamaPage } from "./pages/PazarlamaPage";
-import { CeklerPage } from "./pages/CeklerPage";
-import { SecurityPage } from "./pages/SecurityPage";
-import { FaturaPage } from "./pages/FaturaPage";
-import { UpdateNotesPage } from "./pages/UpdateNotesPage";
 
-/**
- * Route guard: kullanıcı giriş yapmamışsa /login'e yönlendirir.
- * Tüm korumalı sayfalarda component mount'tan ÖNCE kontrol yapılır.
- */
+// Lazy loaded — ilk yüklemede indirilmez, sayfaya girilince yüklenir
+const SalesPage        = lazy(() => import("./pages/SalesPage").then(m => ({ default: m.SalesPage })));
+const TahsilatPage     = lazy(() => import("./pages/TahsilatPage").then(m => ({ default: m.TahsilatPage })));
+const GunSonuPage      = lazy(() => import("./pages/GunSonuPage").then(m => ({ default: m.GunSonuPage })));
+const AracTakipPage    = lazy(() => import("./pages/AracTakipPage").then(m => ({ default: m.AracTakipPage })));
+const ChatPage         = lazy(() => import("./pages/ChatPage").then(m => ({ default: m.ChatPage })));
+const StokPage         = lazy(() => import("./pages/StokPage").then(m => ({ default: m.StokPage })));
+const StokHareketPage  = lazy(() => import("./pages/StokHareketPage").then(m => ({ default: m.StokHareketPage })));
+const UretimPage       = lazy(() => import("./pages/UretimPage").then(m => ({ default: m.UretimPage })));
+const PazarlamaPage    = lazy(() => import("./pages/PazarlamaPage").then(m => ({ default: m.PazarlamaPage })));
+const CeklerPage       = lazy(() => import("./pages/CeklerPage").then(m => ({ default: m.CeklerPage })));
+const CariPage         = lazy(() => import("./pages/CariPage").then(m => ({ default: m.CariPage })));
+const CariDetailPage   = lazy(() => import("./pages/CariDetailPage").then(m => ({ default: m.CariDetailPage })));
+const KasaPage         = lazy(() => import("./pages/KasaPage").then(m => ({ default: m.KasaPage })));
+const AracPage         = lazy(() => import("./pages/AracPage").then(m => ({ default: m.AracPage })));
+const PersonelPage     = lazy(() => import("./pages/PersonelPage").then(m => ({ default: m.PersonelPage })));
+const RaporlarPage     = lazy(() => import("./pages/RaporlarPage").then(m => ({ default: m.RaporlarPage })));
+const FilesPage        = lazy(() => import("./pages/FilesPage").then(m => ({ default: m.FilesPage })));
+const FisHistoryPage   = lazy(() => import("./pages/FisHistoryPage").then(m => ({ default: m.FisHistoryPage })));
+const SettingsPage     = lazy(() => import("./pages/SettingsPage").then(m => ({ default: m.SettingsPage })));
+const YedeklerPage     = lazy(() => import("./pages/YedeklerPage").then(m => ({ default: m.YedeklerPage })));
+const SecurityPage     = lazy(() => import("./pages/SecurityPage").then(m => ({ default: m.SecurityPage })));
+const FaturaPage       = lazy(() => import("./pages/FaturaPage").then(m => ({ default: m.FaturaPage })));
+const UpdateNotesPage  = lazy(() => import("./pages/UpdateNotesPage").then(m => ({ default: m.UpdateNotesPage })));
+
+// Sayfa yüklenirken gösterilecek spinner
+function PageLoader() {
+  return (
+    <div className="flex items-center justify-center min-h-[60vh]">
+      <div className="w-8 h-8 border-2 border-blue-500/30 border-t-blue-500 rounded-full animate-spin" />
+    </div>
+  );
+}
+
+function Lazy({ children }: { children: React.ReactNode }) {
+  return (
+    <ErrorBoundary>
+      <Suspense fallback={<PageLoader />}>{children}</Suspense>
+    </ErrorBoundary>
+  );
+}
+
 function ProtectedRoute({ element }: { element: React.ReactElement }) {
   const { isAuthenticated } = useAuth();
   if (!isAuthenticated) {
@@ -46,11 +63,6 @@ function ProtectedRoute({ element }: { element: React.ReactElement }) {
   return element;
 }
 
-/**
- * Error page wrapper that provides contexts for the error boundary.
- * When an error occurs, the errorElement replaces RootProviders,
- * so we need to provide minimal context here.
- */
 function RootErrorBoundary() {
   return (
     <LanguageProvider>
@@ -67,11 +79,6 @@ function RootErrorBoundary() {
   );
 }
 
-/**
- * Root layout that provides all contexts inside the router tree.
- * RouterProvider creates its own React tree, so contexts must live HERE,
- * not around <RouterProvider>.
- */
 function RootProviders() {
   return (
     <LanguageProvider>
@@ -88,9 +95,10 @@ function RootProviders() {
   );
 }
 
+const P = (el: React.ReactElement) => <ProtectedRoute element={el} />;
+
 export const router = createBrowserRouter([
   {
-    // Invisible root — only provides context, no path segment
     element: <RootProviders />,
     errorElement: <RootErrorBoundary />,
     children: [
@@ -102,31 +110,31 @@ export const router = createBrowserRouter([
         path: "/",
         Component: MainLayout,
         children: [
-          { index: true, element: <ProtectedRoute element={<Navigate to="/dashboard" replace />} /> },
-          { path: "dashboard", element: <ProtectedRoute element={<DashboardPage />} /> },
-          { path: "sales", element: <ProtectedRoute element={<SalesPage />} /> },
-          { path: "tahsilat", element: <ProtectedRoute element={<TahsilatPage />} /> },
-          { path: "gun-sonu", element: <ProtectedRoute element={<GunSonuPage />} /> },
-          { path: "arac-takip", element: <ProtectedRoute element={<AracTakipPage />} /> },
-          { path: "chat", element: <ProtectedRoute element={<ChatPage />} /> },
-          { path: "stok", element: <ProtectedRoute element={<StokPage />} /> },
-          { path: "stok-hareket", element: <ProtectedRoute element={<StokHareketPage />} /> },
-          { path: "uretim", element: <ProtectedRoute element={<UretimPage />} /> },
-          { path: "pazarlama", element: <ProtectedRoute element={<PazarlamaPage />} /> },
-          { path: "cekler", element: <ProtectedRoute element={<CeklerPage />} /> },
-          { path: "cari", element: <ProtectedRoute element={<CariPage />} /> },
-          { path: "cari/:id", element: <ProtectedRoute element={<CariDetailPage />} /> },
-          { path: "kasa", element: <ProtectedRoute element={<KasaPage />} /> },
-          { path: "arac", element: <ProtectedRoute element={<AracPage />} /> },
-          { path: "personel", element: <ProtectedRoute element={<PersonelPage />} /> },
-          { path: "raporlar", element: <ProtectedRoute element={<RaporlarPage />} /> },
-          { path: "dosyalar", element: <ProtectedRoute element={<FilesPage />} /> },
-          { path: "fis-gecmisi", element: <ProtectedRoute element={<FisHistoryPage />} /> },
-          { path: "settings", element: <ProtectedRoute element={<SettingsPage />} /> },
-          { path: "yedekler", element: <ProtectedRoute element={<YedeklerPage />} /> },
-          { path: "guvenlik", element: <ProtectedRoute element={<SecurityPage />} /> },
-          { path: "faturalar", element: <ProtectedRoute element={<FaturaPage />} /> },
-          { path: "guncelleme-notlari", element: <ProtectedRoute element={<UpdateNotesPage />} /> },
+          { index: true, element: P(<Navigate to="/dashboard" replace />) },
+          { path: "dashboard",         element: P(<DashboardPage />) },
+          { path: "sales",             element: P(<Lazy><SalesPage /></Lazy>) },
+          { path: "tahsilat",          element: P(<Lazy><TahsilatPage /></Lazy>) },
+          { path: "gun-sonu",          element: P(<Lazy><GunSonuPage /></Lazy>) },
+          { path: "arac-takip",        element: P(<Lazy><AracTakipPage /></Lazy>) },
+          { path: "chat",              element: P(<Lazy><ChatPage /></Lazy>) },
+          { path: "stok",              element: P(<Lazy><StokPage /></Lazy>) },
+          { path: "stok-hareket",      element: P(<Lazy><StokHareketPage /></Lazy>) },
+          { path: "uretim",            element: P(<Lazy><UretimPage /></Lazy>) },
+          { path: "pazarlama",         element: P(<Lazy><PazarlamaPage /></Lazy>) },
+          { path: "cekler",            element: P(<Lazy><CeklerPage /></Lazy>) },
+          { path: "cari",              element: P(<Lazy><CariPage /></Lazy>) },
+          { path: "cari/:id",          element: P(<Lazy><CariDetailPage /></Lazy>) },
+          { path: "kasa",              element: P(<Lazy><KasaPage /></Lazy>) },
+          { path: "arac",              element: P(<Lazy><AracPage /></Lazy>) },
+          { path: "personel",          element: P(<Lazy><PersonelPage /></Lazy>) },
+          { path: "raporlar",          element: P(<Lazy><RaporlarPage /></Lazy>) },
+          { path: "dosyalar",          element: P(<Lazy><FilesPage /></Lazy>) },
+          { path: "fis-gecmisi",       element: P(<Lazy><FisHistoryPage /></Lazy>) },
+          { path: "settings",          element: P(<Lazy><SettingsPage /></Lazy>) },
+          { path: "yedekler",          element: P(<Lazy><YedeklerPage /></Lazy>) },
+          { path: "guvenlik",          element: P(<Lazy><SecurityPage /></Lazy>) },
+          { path: "faturalar",         element: P(<Lazy><FaturaPage /></Lazy>) },
+          { path: "guncelleme-notlari",element: P(<Lazy><UpdateNotesPage /></Lazy>) },
         ],
       },
       {

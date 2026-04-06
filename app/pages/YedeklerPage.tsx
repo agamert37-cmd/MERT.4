@@ -20,7 +20,7 @@ import { useModuleBus } from '../hooks/useModuleBus';
 import { getPagePermissions } from '../utils/permissions';
 import {
   createPouchBackup, downloadBackup, restorePouchBackup,
-  restoreSelectedTables, getBackupMetaList, saveBackupMeta,
+  restoreSelectedTables, getBackupMetaListAsync, saveBackupMeta,
   deleteBackupMeta, getBackupSystemStats, startAutoBackupScheduler,
   stopAutoBackupScheduler, getAutoBackupConfig, saveAutoBackupConfig,
   type BackupMeta, type PouchBackupData,
@@ -224,8 +224,9 @@ export function YedeklerPage() {
     finally { setRestoringId(null); setRestoreProgress(''); }
   }, [canBackup]);
 
-  const fetchLocalBackups = useCallback(() => {
-    setLocalBackups(getBackupMetaList());
+  const fetchLocalBackups = useCallback(async () => {
+    const list = await getBackupMetaListAsync();
+    setLocalBackups(list);
   }, []);
 
   const fetchBackupStats = useCallback(async () => {
@@ -267,7 +268,7 @@ export function YedeklerPage() {
         sizeKB: result.sizeKB,
         tableStats: result.backup.meta.tableStats,
       };
-      saveBackupMeta(meta);
+      await saveBackupMeta(meta);
 
       // Yedek verisini localStorage'a kaydet (geri yükleme için)
       try {
@@ -293,9 +294,9 @@ export function YedeklerPage() {
   };
 
   // ─── Yerel yedek sil ─────────────────────────────────────────────────────
-  const handleDeleteLocalBackup = (id: string) => {
+  const handleDeleteLocalBackup = async (id: string) => {
     if (!window.confirm('Bu yedeği kalıcı olarak silmek istediğinize emin misiniz?')) return;
-    deleteBackupMeta(id);
+    await deleteBackupMeta(id);
     try { localStorage.removeItem(`pouchdb_backup_data_${id}`); } catch {}
     fetchLocalBackups();
     fetchBackupStats();
