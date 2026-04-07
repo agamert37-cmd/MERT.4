@@ -101,6 +101,7 @@ export const TABLE_NAMES = [
   'faturalar',
   'fatura_stok',
   'tahsilatlar',
+  'guncelleme_notlari',
 ] as const;
 
 export type TableName = typeof TABLE_NAMES[number];

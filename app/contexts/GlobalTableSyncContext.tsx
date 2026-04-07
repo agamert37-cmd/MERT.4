@@ -93,7 +93,8 @@ const TABLE_SYNC_CONFIGS: TableSyncConfig[] = [
   { tableName: 'uretim_kayitlari', storageKey: StorageKey.URETIM_DATA,   orderBy: 'created_at', orderAsc: false },
   { tableName: 'faturalar',        storageKey: StorageKey.FATURALAR,     orderBy: 'tarih',      orderAsc: false },
   { tableName: 'fatura_stok',      storageKey: StorageKey.FATURA_STOK,   orderBy: 'created_at', orderAsc: false },
-  { tableName: 'tahsilatlar',      storageKey: 'tahsilatlar_data',       orderBy: 'tarih',      orderAsc: false },
+  { tableName: 'tahsilatlar',         storageKey: 'tahsilatlar_data',          orderBy: 'tarih',      orderAsc: false },
+  { tableName: 'guncelleme_notlari',  storageKey: StorageKey.GUNCELLEME_NOTLARI, orderBy: 'date',     orderAsc: false },
 ];
 
 // ─── Genel tablo senkronizasyon bileşeni ──────────────────────────────────────

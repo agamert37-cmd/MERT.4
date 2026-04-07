@@ -39,6 +39,7 @@ export const StorageKey = {
   BACKUPS: 'local_backups',
   VITRIN_ANALYTICS: 'vitrin_analytics',
   USER_ACTIVITY_LOG: 'user_activity_log',
+  GUNCELLEME_NOTLARI: 'guncelleme_notlari',
 } as const;
 
 // ─── Okuma/Yazma ─────────────────────────────────────────────────────────────

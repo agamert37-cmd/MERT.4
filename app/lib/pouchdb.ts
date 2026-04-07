@@ -252,8 +252,9 @@ const TABLE_STORAGE_KEYS: Record<string, string> = {
   uretim_profilleri:'isleyen_et_uretim_profiles',
   uretim_kayitlari: 'isleyen_et_uretim_data',
   faturalar:        'isleyen_et_faturalar',
-  fatura_stok:      'isleyen_et_fatura_stok',
-  tahsilatlar:      'isleyen_et_tahsilatlar_data',
+  fatura_stok:           'isleyen_et_fatura_stok',
+  tahsilatlar:           'isleyen_et_tahsilatlar_data',
+  guncelleme_notlari:    '', // localStorage'da yok — DB'ye doğrudan seed edilir
 };
 
 /** Tablo adının Türkçe görüntü adı */
@@ -270,10 +271,11 @@ export const TABLE_DISPLAY_NAMES: Record<string, string> = {
   arac_km_logs:     'Araç KM Logları',
   uretim_profilleri:'Üretim Profilleri',
   uretim_kayitlari: 'Üretim Kayıtları',
-  faturalar:        'Faturalar',
-  fatura_stok:      'Fatura Stok',
-  tahsilatlar:      'Tahsilatlar',
-  mert_kv_store:    'KV Store',
+  faturalar:            'Faturalar',
+  fatura_stok:          'Fatura Stok',
+  tahsilatlar:          'Tahsilatlar',
+  guncelleme_notlari:   'Güncelleme Notları',
+  mert_kv_store:        'KV Store',
 };
 
 /** CouchDB'de tüm veritabanlarını oluştur (PUT /{db}) */
