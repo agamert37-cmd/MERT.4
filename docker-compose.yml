@@ -50,7 +50,11 @@ services:
     build:
       context: .
       args:
-        VITE_COUCHDB_URL: http://localhost:5984
+        # VITE_COUCHDB_URL kasıtlı olarak boş bırakıldı.
+        # Uygulama tarayıcıda çalışırken URL'yi runtime'da otomatik belirler:
+        #   window.location.origin + '/couchdb'  →  nginx proxy  →  http://couchdb:5984
+        # Bu sayede localhost'a bağımlı kalmadan herhangi bir cihazdan erişim mümkündür.
+        VITE_COUCHDB_URL: ""
         VITE_COUCHDB_USER: ${COUCHDB_USER:-adm1n}
         VITE_COUCHDB_PASSWORD: ${COUCHDB_PASSWORD:-135790}
     container_name: mert-site

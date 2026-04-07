@@ -14,17 +14,22 @@ export interface CouchDbConfig {
 /**
  * Varsayılan CouchDB bağlantı noktasını belirle.
  *
- * Tarayıcıda:  site ile aynı origin üzerinden nginx proxy kullanılır.
- *   http://localhost:8080/couchdb  →  nginx  →  http://couchdb:5984
- *   • CORS sorunu olmaz (aynı origin)
- *   • Yerel kurulu CouchDB ile çakışmaz
- *   • Docker CouchDB'sine ulaşır
- *
- * .env.local değeri varsa (updater.py yapılandırması) önceliklidir.
+ * Öncelik sırası:
+ *   1. VITE_COUCHDB_URL env değişkeni (build-time veya .env.local)
+ *   2. Tarayıcı origin + '/couchdb' — nginx reverse proxy yolu (Docker)
+ *      http://<sunucu>/couchdb  →  nginx  →  http://couchdb:5984
+ *      • CORS sorunu olmaz (aynı origin)
+ *      • Herhangi bir cihazdan bağlanılabilir (hardcoded localhost değil)
+ *      • Docker servis adı (couchdb) ile doğrudan iletişim kurulur
+ *   3. Fallback: http://localhost:5984 (doğrudan geliştirme ortamı)
  */
 function _defaultCouchUrl(): string {
   const envUrl = (import.meta as any).env?.VITE_COUCHDB_URL;
   if (envUrl) return envUrl;
+  // Tarayıcıda çalışıyorsa nginx proxy yolunu kullan (Docker deployment için)
+  if (typeof window !== 'undefined') {
+    return window.location.origin + '/couchdb';
+  }
   return 'http://localhost:5984';
 }
 
@@ -96,6 +101,7 @@ export const TABLE_NAMES = [
   'faturalar',
   'fatura_stok',
   'tahsilatlar',
+  'guncelleme_notlari',
 ] as const;
 
 export type TableName = typeof TABLE_NAMES[number];

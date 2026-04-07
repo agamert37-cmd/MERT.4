@@ -34,7 +34,20 @@ export function startSync(tableName: string): PouchDB.Replication.Sync<{}> | nul
   if (!couchUrl) return null;
 
   const localDb = getDb(dbName);
-  const remoteDb = new PouchDB(`${couchUrl}/${dbName}`);
+
+  // Auth header'ı her zaman HTTP isteğine ekle.
+  // Relative URL (nginx proxy) veya absolute URL (doğrudan CouchDB) fark etmez.
+  const { user, password } = getCouchDbConfig();
+  const remoteDb = new PouchDB(`${couchUrl}/${dbName}`, {
+    fetch(url: string, opts: RequestInit) {
+      if (user) {
+        const headers = new Headers((opts as any)?.headers);
+        headers.set('Authorization', 'Basic ' + btoa(`${user}:${password}`));
+        opts = { ...opts, headers };
+      }
+      return (PouchDB as any).fetch(url, opts);
+    },
+  } as any);
 
   const sync = localDb.sync(remoteDb, {
     live: true,
@@ -92,6 +105,44 @@ export function stopAllSync(): void {
   }
   peerSyncs.clear();
 }
+
+/**
+ * Tüm CouchDB sync'lerini yeniden başlat (bağlantı kesildikten sonra geri gelince).
+ * PouchDB'nin `retry: true` seçeneği genellikle bunu otomatik yapar; ancak bazı
+ * ağ geçişlerinde (VPN, Wi-Fi değişimi) sync nesnesi tamamen ölür.
+ * Bu fonksiyon mevcut sync'leri iptal edip yeniden oluşturur.
+ */
+export function restartAllSync(): void {
+  // Mevcut CouchDB sync'lerini temizle (peer sync'lere dokunma)
+  staggerTimers.forEach(t => clearTimeout(t));
+  staggerTimers.length = 0;
+  for (const [, sync] of syncs) {
+    sync.cancel();
+  }
+  syncs.clear();
+  // Kademeli yeniden başlat
+  startAllSync();
+}
+
+// ── Ağ Kurtarma (online event) ────────────────────────────────
+// Tarayıcı çevrimiçi durumuna geçtiğinde tüm sync'leri yeniden başlat.
+// PouchDB'nin retry mekanizması çoğu durumda bunu kendisi yapar; bu, Wi-Fi/VPN
+// değişimi gibi uç durumlara karşı ek bir güvence katmanıdır.
+
+let _onlineListenerAttached = false;
+
+function _attachOnlineListener(): void {
+  if (_onlineListenerAttached || typeof window === 'undefined') return;
+  _onlineListenerAttached = true;
+
+  window.addEventListener('online', () => {
+    console.info('[PouchDB] Ağ bağlantısı yeniden kuruldu — sync yeniden başlatılıyor…');
+    // 1 saniyelik gecikme: ağ arayüzü stabilize olsun
+    setTimeout(() => restartAllSync(), 1000);
+  });
+}
+
+_attachOnlineListener();
 
 // ── Peer (2. bilgisayar) Sync ──────────────────────────────────
 
@@ -201,8 +252,9 @@ const TABLE_STORAGE_KEYS: Record<string, string> = {
   uretim_profilleri:'isleyen_et_uretim_profiles',
   uretim_kayitlari: 'isleyen_et_uretim_data',
   faturalar:        'isleyen_et_faturalar',
-  fatura_stok:      'isleyen_et_fatura_stok',
-  tahsilatlar:      'isleyen_et_tahsilatlar_data',
+  fatura_stok:           'isleyen_et_fatura_stok',
+  tahsilatlar:           'isleyen_et_tahsilatlar_data',
+  guncelleme_notlari:    '', // localStorage'da yok — DB'ye doğrudan seed edilir
 };
 
 /** Tablo adının Türkçe görüntü adı */
@@ -219,10 +271,11 @@ export const TABLE_DISPLAY_NAMES: Record<string, string> = {
   arac_km_logs:     'Araç KM Logları',
   uretim_profilleri:'Üretim Profilleri',
   uretim_kayitlari: 'Üretim Kayıtları',
-  faturalar:        'Faturalar',
-  fatura_stok:      'Fatura Stok',
-  tahsilatlar:      'Tahsilatlar',
-  mert_kv_store:    'KV Store',
+  faturalar:            'Faturalar',
+  fatura_stok:          'Fatura Stok',
+  tahsilatlar:          'Tahsilatlar',
+  guncelleme_notlari:   'Güncelleme Notları',
+  mert_kv_store:        'KV Store',
 };
 
 /** CouchDB'de tüm veritabanlarını oluştur (PUT /{db}) */
@@ -314,6 +367,48 @@ export async function seedPouchDbFromLocalStorage(
   }
 
   return result;
+}
+
+/**
+ * Uygulama başlangıcında otomatik çağrılır.
+ * Sadece PouchDB'si boş (doc_count === 0) olan tabloları localStorage'dan doldurur.
+ * Zaten veri olan tablolara dokunmaz → idempotent & güvenli.
+ * PouchDB dolunca çalışan startAllSync() bu verileri otomatik CouchDB'ye iter.
+ */
+export async function autoSeedIfEmpty(
+  onDone?: (totalSeeded: number) => void
+): Promise<void> {
+  let totalSeeded = 0;
+
+  for (const [tableName, storageKey] of Object.entries(TABLE_STORAGE_KEYS)) {
+    try {
+      const db = getDb(tableName);
+      const info = await db.info();
+      if (info.doc_count > 0) continue; // zaten veri var, atla
+
+      const raw = localStorage.getItem(storageKey);
+      if (!raw) continue;
+      const items: any[] = JSON.parse(raw);
+      if (!Array.isArray(items) || items.length === 0) continue;
+
+      const toInsert = items
+        .filter(item => item.id || item._id)
+        .map(item => {
+          // eslint-disable-next-line @typescript-eslint/no-unused-vars
+          const { _id, _rev, _deleted, ...rest } = item;
+          return { ...rest, _id: item.id || _id };
+        });
+      if (toInsert.length === 0) continue;
+
+      const results = await db.bulkDocs(toInsert);
+      const seeded = (results as any[]).filter((r: any) => !r.error).length;
+      totalSeeded += seeded;
+    } catch {
+      // sessizce geç — başlatma sırasında hata kritik değil
+    }
+  }
+
+  onDone?.(totalSeeded);
 }
 
 export interface CouchDbTableStatus {
