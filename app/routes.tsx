@@ -37,6 +37,7 @@ const YedeklerPage     = lazy(() => import("./pages/YedeklerPage").then(m => ({ 
 const SecurityPage     = lazy(() => import("./pages/SecurityPage").then(m => ({ default: m.SecurityPage })));
 const FaturaPage       = lazy(() => import("./pages/FaturaPage").then(m => ({ default: m.FaturaPage })));
 const UpdateNotesPage  = lazy(() => import("./pages/UpdateNotesPage").then(m => ({ default: m.UpdateNotesPage })));
+const SunucuPage       = lazy(() => import("./pages/SunucuPage").then(m => ({ default: m.SunucuPage })));
 
 // Sayfa yüklenirken gösterilecek spinner
 function PageLoader() {
@@ -135,6 +136,7 @@ export const router = createBrowserRouter([
           { path: "guvenlik",          element: P(<Lazy><SecurityPage /></Lazy>) },
           { path: "faturalar",         element: P(<Lazy><FaturaPage /></Lazy>) },
           { path: "guncelleme-notlari",element: P(<Lazy><UpdateNotesPage /></Lazy>) },
+          { path: "sunucu",            element: P(<Lazy><SunucuPage /></Lazy>) },
         ],
       },
       {

@@ -39,6 +39,8 @@ interface GlobalSyncTablesContextValue {
   // Veri erişimi — okuma-only sayfalar için (FaturaPage, UretimPage vb.)
   setTableData: (name: string, data: any[]) => void;
   tableDataRef: React.MutableRefObject<Map<string, any[]>>;
+  // Versiyon sayaçları — useGlobalTableData re-render tetikleyici
+  tableVersions: Record<string, number>;
 }
 
 const GlobalSyncTablesContext = createContext<GlobalSyncTablesContextValue>({
@@ -46,6 +48,7 @@ const GlobalSyncTablesContext = createContext<GlobalSyncTablesContextValue>({
   registerTable: () => {},
   setTableData: () => {},
   tableDataRef: { current: new Map() },
+  tableVersions: {},
 });
 
 export function useGlobalSyncTables() {
@@ -54,12 +57,16 @@ export function useGlobalSyncTables() {
 
 /**
  * useGlobalTableData — okuma-only sayfalar için tablo verisini doğrudan
- * GlobalTableSyncContext'ten al. Re-renders: sadece tablo data değiştiğinde.
+ * GlobalTableSyncContext'ten al.
+ *
+ * Re-render mekanizması: tableVersions[tableName] değiştiğinde (veri güncellemesinde)
+ * consumer re-render olur. Diğer tabloların güncellemeleri bu hook'u tetiklemez.
  */
 export function useGlobalTableData<T = any>(tableName: string): T[] {
-  const { tableDataRef, tables } = useContext(GlobalSyncTablesContext);
-  // tables değiştiğinde (syncState/docCount güncellemesi) veriyi taze al
-  const tableEntry = tables.find(t => t.name === tableName);
+  const { tableDataRef, tableVersions } = useContext(GlobalSyncTablesContext);
+  // Sadece bu tablonun versiyonunu oku → o tablo güncellendiğinde re-render tetiklenir
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const _version = tableVersions[tableName] ?? 0;
   return (tableDataRef.current.get(tableName) as T[]) ?? [];
 }
 
@@ -219,8 +226,10 @@ interface GlobalTableSyncProviderProps {
  */
 export function GlobalTableSyncProvider({ children }: GlobalTableSyncProviderProps) {
   const [tables, setTables] = useState<TableSyncStatus[]>([]);
-  // Veri ref — state değil (re-render storm önlemek için)
+  // Veri ref — büyük veri array'lerini state'e koymak yerine ref kullan
   const tableDataRef = useRef<Map<string, any[]>>(new Map());
+  // Versiyon sayaçları — useGlobalTableData re-render tetikleyici (sadece sayı, veri değil)
+  const [tableVersions, setTableVersions] = useState<Record<string, number>>({});
 
   const registerTable = useCallback((status: TableSyncStatus) => {
     setTables(prev => {
@@ -232,10 +241,10 @@ export function GlobalTableSyncProvider({ children }: GlobalTableSyncProviderPro
     });
   }, []);
 
-  // Veriyi ref'e yaz — render tetiklemez, okuyucular tabloların metadata
-  // güncellemesini (registerTable) bekleyerek taze veriyi alır
+  // Veriyi ref'e yaz + o tablonun versiyonunu artır (consumer'lar re-render olur)
   const setTableData = useCallback((name: string, data: any[]) => {
     tableDataRef.current.set(name, data);
+    setTableVersions(prev => ({ ...prev, [name]: (prev[name] ?? 0) + 1 }));
   }, []);
 
   // PouchDB ↔ CouchDB continuous sync başlat (kademeli — 200ms aralık)
@@ -245,7 +254,7 @@ export function GlobalTableSyncProvider({ children }: GlobalTableSyncProviderPro
   }, []);
 
   return (
-    <GlobalSyncTablesContext.Provider value={{ tables, registerTable, setTableData, tableDataRef }}>
+    <GlobalSyncTablesContext.Provider value={{ tables, registerTable, setTableData, tableDataRef, tableVersions }}>
       {/* Her tablo için ayrı senkronizasyon bileşeni */}
       <FislerSync />
       <UrunlerSync />

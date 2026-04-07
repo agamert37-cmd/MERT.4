@@ -81,8 +81,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const updated = personnel.map(p =>
           p.id === currentUser.id ? { ...p, status: 'offline', lastSeen: new Date().toISOString() } : p
         );
-        localStorage.setItem('isleyen_et_personel_data', JSON.stringify(updated));
+        setInStorage(StorageKey.PERSONEL_DATA, updated);
         // Oturum kesim zaman damgasını kaydet (sonraki girişte tespit için)
+        // LOCAL ONLY — intentionally not synced (session timing is per-device)
         localStorage.setItem(`isleyen_et_session_end_${currentUser.id}`, JSON.stringify({
           userId: currentUser.id,
           name: currentUser.name,
@@ -98,6 +99,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!currentUser) return;
       if (document.visibilityState === 'hidden') {
         try {
+          // LOCAL ONLY — intentionally not synced (active sessions are per-device)
           const sessions: any[] = JSON.parse(localStorage.getItem('isleyen_et_active_sessions') || '[]');
           const sessionId = sessionStorage.getItem('isleyen_et_current_session_id');
           const updated = sessions.map(s =>
