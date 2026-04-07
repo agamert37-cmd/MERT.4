@@ -21,6 +21,7 @@ import { usePageSecurity } from '../hooks/usePageSecurity';
 import { useTableSync } from '../hooks/useTableSync';
 import { productToDb, productFromDb } from './StokPage';
 import { cariToDb, cariFromDb } from './CariPage';
+import { useGlobalTableData } from '../contexts/GlobalTableSyncContext';
 import { generateUBLXML, downloadXML, type UBLFaturaData } from '../utils/ublTr';
 import { getCompanyInfo } from './SettingsPage';
 
@@ -146,13 +147,8 @@ export function FaturaPage() {
   const [isFaturaStokModalOpen, setIsFaturaStokModalOpen] = useState(false);
   const [lightboxImage, setLightboxImage] = useState<string | null>(null);
 
-  // ─── Cari & Stok: useTableSync ile reaktif ────────────────────────────
-  const { data: cariList } = useTableSync<any>({
-    tableName: 'cari_hesaplar',
-    storageKey: StorageKey.CARI_DATA,
-    toDb: cariToDb,
-    fromDb: cariFromDb,
-  });
+  // ─── Cari & Stok: GlobalTableSyncContext'ten oku (tekrar sync'e gerek yok) ──
+  const cariList = useGlobalTableData<any>('cari_hesaplar');
   const { data: stokList, updateItem: updateStokItem } = useTableSync<any>({
     tableName: 'urunler',
     storageKey: StorageKey.STOK_DATA,

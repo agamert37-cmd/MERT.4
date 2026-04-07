@@ -21,6 +21,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { getDb } from '../lib/pouchdb';
 import { setInStorage } from '../utils/storage';
+import { toast } from 'sonner';
 
 // ─── Tipler ───────────────────────────────────────────────────────────────────
 
@@ -247,7 +248,11 @@ export function useTableSync<T extends { id: string }>(
         return item; // başarılı
       } catch (e: any) {
         if (e.status === 409 && attempt < MAX_RETRIES - 1) continue;
-        console.error(`[addItem] ${tableName}:`, e.message);
+        if (e.status === 409) {
+          toast.warning(`Kayıt çakışması (${tableName}) — son sürüm kullanıldı`, { duration: 3000 });
+        } else {
+          console.error(`[addItem] ${tableName}:`, e.message);
+        }
         // Rollback — DB'ye yazılamadı
         setDataState(prev => prev.filter(i => i.id !== item.id));
         return item;
@@ -366,7 +371,8 @@ export function useTableSync<T extends { id: string }>(
             );
           } else {
             // Sadece 409 conflict — normal çok-tab senaryosu
-            console.warn(`[batchUpdate] ${tableName}: ${errors.length} conflict (409) — yok sayıldı`);
+            const conflictCount = errors.filter((r: any) => r.status === 409).length;
+            toast.warning(`${conflictCount} kayıtta çakışma tespit edildi (${tableName}) — en yeni sürüm korundu`, { duration: 4000 });
           }
         }
       }
