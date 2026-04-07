@@ -44,7 +44,8 @@ import {
   Megaphone,
   Globe,
   FileEdit,
-  FileCheck
+  FileCheck,
+  Server
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { ProfileEditModal } from './ProfileEditModal';
@@ -87,6 +88,7 @@ const menuItems: MenuItem[] = [
   { path: '/faturalar', labelKey: 'nav.invoices', icon: FileCheck, color: 'indigo', permKey: 'kasa' },
   { path: '/dosyalar', labelKey: 'nav.files', icon: FolderOpen, color: 'teal', permKey: 'ayarlar' },
   { path: '/pazarlama', labelKey: 'nav.marketing', icon: Megaphone, color: 'pink', permKey: 'ayarlar' },
+  { path: '/sunucu', labelKey: 'nav.server', icon: Server, color: 'blue', permKey: 'ayarlar' },
   { path: '/yedekler', labelKey: 'nav.backups', icon: Database, color: 'slate', permKey: 'ayarlar' },
   { path: '/chat', labelKey: 'nav.aiAssistant', icon: MessageSquare, color: 'violet', permKey: 'dashboard' },
   { path: '/guvenlik', labelKey: 'nav.security', icon: ShieldAlert, color: 'red', permKey: 'ayarlar' },
@@ -116,6 +118,7 @@ const breadcrumbKeyMap: Record<string, string> = {
   '/chat': 'breadcrumb.aiAssistant',
   '/guvenlik': 'breadcrumb.security',
   '/settings': 'breadcrumb.settings',
+  '/sunucu': 'breadcrumb.server',
 };
 
 // Spring physics animation config
