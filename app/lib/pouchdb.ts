@@ -93,6 +93,44 @@ export function stopAllSync(): void {
   peerSyncs.clear();
 }
 
+/**
+ * Tüm CouchDB sync'lerini yeniden başlat (bağlantı kesildikten sonra geri gelince).
+ * PouchDB'nin `retry: true` seçeneği genellikle bunu otomatik yapar; ancak bazı
+ * ağ geçişlerinde (VPN, Wi-Fi değişimi) sync nesnesi tamamen ölür.
+ * Bu fonksiyon mevcut sync'leri iptal edip yeniden oluşturur.
+ */
+export function restartAllSync(): void {
+  // Mevcut CouchDB sync'lerini temizle (peer sync'lere dokunma)
+  staggerTimers.forEach(t => clearTimeout(t));
+  staggerTimers.length = 0;
+  for (const [, sync] of syncs) {
+    sync.cancel();
+  }
+  syncs.clear();
+  // Kademeli yeniden başlat
+  startAllSync();
+}
+
+// ── Ağ Kurtarma (online event) ────────────────────────────────
+// Tarayıcı çevrimiçi durumuna geçtiğinde tüm sync'leri yeniden başlat.
+// PouchDB'nin retry mekanizması çoğu durumda bunu kendisi yapar; bu, Wi-Fi/VPN
+// değişimi gibi uç durumlara karşı ek bir güvence katmanıdır.
+
+let _onlineListenerAttached = false;
+
+function _attachOnlineListener(): void {
+  if (_onlineListenerAttached || typeof window === 'undefined') return;
+  _onlineListenerAttached = true;
+
+  window.addEventListener('online', () => {
+    console.info('[PouchDB] Ağ bağlantısı yeniden kuruldu — sync yeniden başlatılıyor…');
+    // 1 saniyelik gecikme: ağ arayüzü stabilize olsun
+    setTimeout(() => restartAllSync(), 1000);
+  });
+}
+
+_attachOnlineListener();
+
 // ── Peer (2. bilgisayar) Sync ──────────────────────────────────
 
 /** Diğer bilgisayarla tüm tabloları senkronize et */
