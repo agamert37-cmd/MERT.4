@@ -34,7 +34,20 @@ export function startSync(tableName: string): PouchDB.Replication.Sync<{}> | nul
   if (!couchUrl) return null;
 
   const localDb = getDb(dbName);
-  const remoteDb = new PouchDB(`${couchUrl}/${dbName}`);
+
+  // Auth header'ı her zaman HTTP isteğine ekle.
+  // Relative URL (nginx proxy) veya absolute URL (doğrudan CouchDB) fark etmez.
+  const { user, password } = getCouchDbConfig();
+  const remoteDb = new PouchDB(`${couchUrl}/${dbName}`, {
+    fetch(url: string, opts: RequestInit) {
+      if (user) {
+        const headers = new Headers((opts as any)?.headers);
+        headers.set('Authorization', 'Basic ' + btoa(`${user}:${password}`));
+        opts = { ...opts, headers };
+      }
+      return (PouchDB as any).fetch(url, opts);
+    },
+  } as any);
 
   const sync = localDb.sync(remoteDb, {
     live: true,
