@@ -316,6 +316,48 @@ export async function seedPouchDbFromLocalStorage(
   return result;
 }
 
+/**
+ * Uygulama başlangıcında otomatik çağrılır.
+ * Sadece PouchDB'si boş (doc_count === 0) olan tabloları localStorage'dan doldurur.
+ * Zaten veri olan tablolara dokunmaz → idempotent & güvenli.
+ * PouchDB dolunca çalışan startAllSync() bu verileri otomatik CouchDB'ye iter.
+ */
+export async function autoSeedIfEmpty(
+  onDone?: (totalSeeded: number) => void
+): Promise<void> {
+  let totalSeeded = 0;
+
+  for (const [tableName, storageKey] of Object.entries(TABLE_STORAGE_KEYS)) {
+    try {
+      const db = getDb(tableName);
+      const info = await db.info();
+      if (info.doc_count > 0) continue; // zaten veri var, atla
+
+      const raw = localStorage.getItem(storageKey);
+      if (!raw) continue;
+      const items: any[] = JSON.parse(raw);
+      if (!Array.isArray(items) || items.length === 0) continue;
+
+      const toInsert = items
+        .filter(item => item.id || item._id)
+        .map(item => {
+          // eslint-disable-next-line @typescript-eslint/no-unused-vars
+          const { _id, _rev, _deleted, ...rest } = item;
+          return { ...rest, _id: item.id || _id };
+        });
+      if (toInsert.length === 0) continue;
+
+      const results = await db.bulkDocs(toInsert);
+      const seeded = (results as any[]).filter((r: any) => !r.error).length;
+      totalSeeded += seeded;
+    } catch {
+      // sessizce geç — başlatma sırasında hata kritik değil
+    }
+  }
+
+  onDone?.(totalSeeded);
+}
+
 export interface CouchDbTableStatus {
   name: string;
   displayName: string;

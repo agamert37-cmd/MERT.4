@@ -22,7 +22,8 @@ import type { SyncState } from '../hooks/useTableSync';
 import { cariFromDb, cariToDb } from '../pages/CariPage';
 import { productFromDb, productToDb } from '../pages/StokPage';
 import { StorageKey } from '../utils/storage';
-import { startAllSync, stopAllSync } from '../lib/pouchdb';
+import { startAllSync, stopAllSync, autoSeedIfEmpty } from '../lib/pouchdb';
+import { toast } from 'sonner';
 
 // ─── Per-tablo sync durumu context ────────────────────────────────────────────
 
@@ -248,9 +249,26 @@ export function GlobalTableSyncProvider({ children }: GlobalTableSyncProviderPro
   }, []);
 
   // PouchDB ↔ CouchDB continuous sync başlat (kademeli — 200ms aralık)
+  // Ardından: PouchDB boşsa localStorage'dan otomatik doldur → sync CouchDB'ye iter
   useEffect(() => {
     startAllSync();
-    return () => stopAllSync();
+
+    // 1500ms bekle: sync bağlantıları kurulsun, sonra seed gelsin
+    const seedTimer = setTimeout(() => {
+      autoSeedIfEmpty((totalSeeded) => {
+        if (totalSeeded > 0) {
+          toast.success(
+            `${totalSeeded} kayıt PouchDB'ye aktarıldı — CouchDB'ye senkronize ediliyor…`,
+            { duration: 5000 }
+          );
+        }
+      });
+    }, 1500);
+
+    return () => {
+      stopAllSync();
+      clearTimeout(seedTimer);
+    };
   }, []);
 
   return (
