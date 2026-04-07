@@ -20,6 +20,7 @@ import {
   PieChart as RePieChart, Pie, Cell, RadialBarChart, RadialBar
 } from 'recharts';
 import { getFromStorage, StorageKey } from '../utils/storage';
+import { useGlobalTableData } from '../contexts/GlobalTableSyncContext';
 import { generateDashboardPDF } from '../utils/reportGenerator';
 import { isOpenAIConfigured } from '../lib/api-config';
 import { logActivity } from '../utils/activityLogger';
@@ -114,6 +115,7 @@ export function DashboardPage() {
   // Merkezi yetki kontrolü
   const perms = getPagePermissions(user, currentEmployee, 'dashboard');
 
+  // refreshCounter: sadece deletedActivities (KV) ve manuel yenileme için
   const [refreshCounter, setRefreshCounter] = useState(0);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [chartView, setChartView] = useState<'area' | 'bar' | 'composed'>('composed');
@@ -133,27 +135,11 @@ export function DashboardPage() {
     }
   }, [user?.name]);
 
-  useEffect(() => {
-    const handler = () => setRefreshCounter(c => c + 1);
-    window.addEventListener('storage_update', handler);
-    window.addEventListener('storage', handler);
-    return () => {
-      window.removeEventListener('storage_update', handler);
-      window.removeEventListener('storage', handler);
-    };
-  }, []);
-
-  // ModuleBus: Herhangi bir moduldeki degisiklik dashboard'u gunceller
+  // storage_update event'leri artık gerekli değil — useGlobalTableData reaktif
+  // ModuleBus: deletedActivities (KV) yenilenmesi için tutuldu
   useEffect(() => {
     const refreshHandler = () => setRefreshCounter(c => c + 1);
-    onPrefix('stok:', refreshHandler);
-    onPrefix('cari:', refreshHandler);
-    onPrefix('fis:', refreshHandler);
-    onPrefix('kasa:', refreshHandler);
-    onPrefix('uretim:', refreshHandler);
-    onPrefix('personel:', refreshHandler);
-    onPrefix('gunsonu:', refreshHandler);
-    onPrefix('tahsilat:', refreshHandler);
+    onPrefix('fis:', refreshHandler); // deleted_fisler için
   }, [onPrefix]);
 
   const handleRefresh = useCallback(() => {
@@ -171,11 +157,12 @@ export function DashboardPage() {
   const currentHour = now.getHours();
   const greetingText = currentHour < 6 ? 'İyi Geceler' : currentHour < 12 ? 'Günaydın' : currentHour < 18 ? 'İyi Günler' : 'İyi Akşamlar';
 
-  const rawFisler = useMemo(() => getFromStorage<any[]>(StorageKey.FISLER) || [], [refreshCounter]);
-  const rawKasa = useMemo(() => getFromStorage<any[]>(StorageKey.KASA_DATA) || [], [refreshCounter]);
-  const rawStok = useMemo(() => getFromStorage<any[]>(StorageKey.STOK_DATA) || [], [refreshCounter]);
-  const rawPersonel = useMemo(() => getFromStorage<any[]>(StorageKey.PERSONEL_DATA) || [], [refreshCounter]);
-  const rawCari = useMemo(() => getFromStorage<any[]>(StorageKey.CARI_DATA) || [], [refreshCounter]);
+  // GlobalTableSyncContext'ten doğrudan oku — storage_update event'e gerek yok
+  const rawFisler = useGlobalTableData<any>('fisler');
+  const rawKasa = useGlobalTableData<any>('kasa_islemleri');
+  const rawStok = useGlobalTableData<any>('urunler');
+  const rawPersonel = useGlobalTableData<any>('personeller');
+  const rawCari = useGlobalTableData<any>('cari_hesaplar');
 
   const todayISO = new Date().toISOString().split('T')[0];
 
@@ -518,12 +505,12 @@ export function DashboardPage() {
   }, [realtimeRevenue, todayPurchaseTotal, kasaStats]);
 
   // ─── Üretim verimi ───
+  const rawUretim = useGlobalTableData<any>('uretim_kayitlari');
+  const uretimProfiles = useGlobalTableData<any>('uretim_profilleri');
   const productionStats = useMemo(() => {
-    const rawUretim = getFromStorage<any[]>(StorageKey.URETIM_DATA) || [];
-    const todayUretim = rawUretim.filter(u => u.date?.startsWith(todayISO) || u.createdAt?.startsWith(todayISO));
-    const totalProduced = todayUretim.reduce((s, u) => s + safeNum(u.quantity || u.miktar), 0);
-    const totalFire = todayUretim.reduce((s, u) => s + safeNum(u.fire || u.waste), 0);
-    const uretimProfiles = getFromStorage<any[]>(StorageKey.URETIM_PROFILES) || [];
+    const todayUretim = rawUretim.filter((u: any) => u.date?.startsWith(todayISO) || u.createdAt?.startsWith(todayISO));
+    const totalProduced = todayUretim.reduce((s: number, u: any) => s + safeNum(u.quantity || u.miktar), 0);
+    const totalFire = todayUretim.reduce((s: number, u: any) => s + safeNum(u.fire || u.waste), 0);
     return {
       todayCount: todayUretim.length,
       totalProduced,
@@ -531,7 +518,7 @@ export function DashboardPage() {
       efficiency: totalProduced > 0 ? Math.round(((totalProduced - totalFire) / totalProduced) * 100) : 100,
       profileCount: uretimProfiles.length,
     };
-  }, [refreshCounter, todayISO]);
+  }, [rawUretim, uretimProfiles, todayISO]);
 
   // ─── KPI Ticker verileri ───
   const kpiTickerItems = useMemo(() => [
