@@ -136,8 +136,6 @@ export function FaturaPage() {
   const sec = usePageSecurity('faturalar');
 
   // State
-  const [faturalar, setFaturalar] = useState<Fatura[]>(() => getFromStorage<Fatura[]>(StorageKey.FATURALAR) || []);
-  const [faturaStok, setFaturaStok] = useState<FaturaStokItem[]>(() => getFromStorage<FaturaStokItem[]>(StorageKey.FATURA_STOK) || DEFAULT_FATURA_STOK);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState<'all' | 'alis' | 'satis'>('all');
   const [filterStatus, setFilterStatus] = useState<'all' | 'aktif' | 'iptal'>('all');
@@ -189,23 +187,9 @@ export function FaturaPage() {
     initialData: DEFAULT_FATURA_STOK,
   });
 
-  // Sync from useTableSync
-  useEffect(() => {
-    if (syncFaturalar?.length) setFaturalar(syncFaturalar);
-  }, [syncFaturalar]);
-  useEffect(() => {
-    if (syncFaturaStok?.length) setFaturaStok(syncFaturaStok);
-  }, [syncFaturaStok]);
-
-  // Also listen for storage events (cross-tab)
-  useEffect(() => {
-    const handler = () => {
-      setFaturalar(getFromStorage<Fatura[]>(StorageKey.FATURALAR) || []);
-      setFaturaStok(getFromStorage<FaturaStokItem[]>(StorageKey.FATURA_STOK) || DEFAULT_FATURA_STOK);
-    };
-    window.addEventListener('storage_update', handler);
-    return () => window.removeEventListener('storage_update', handler);
-  }, []);
+  // Sync'ten doğrudan alias — useTableSync optimistik güncelleme yapar
+  const faturalar = syncFaturalar;
+  const faturaStok = syncFaturaStok;
 
   // Filtered
   const filtered = useMemo(() => {
@@ -368,9 +352,7 @@ export function FaturaPage() {
       createdAt: new Date().toISOString(),
     };
 
-    const updated = [newFatura, ...faturalar];
-    setFaturalar(updated);
-    setInStorage(StorageKey.FATURALAR, updated);
+    setInStorage(StorageKey.FATURALAR, [newFatura, ...faturalar]);
     addFaturaSync(newFatura);
 
     // ─── FATURA → STOK HAREKETİ (useTableSync ile senkron) ─────────────────
@@ -433,9 +415,7 @@ export function FaturaPage() {
     if (!fatura) return;
 
     const cancelledFatura = { ...fatura, status: 'iptal' as const, cancelledAt: new Date().toISOString(), cancelledBy: currentEmployee?.name || user?.name || '' };
-    const updated = faturalar.map(f => f.id === id ? cancelledFatura : f);
-    setFaturalar(updated);
-    setInStorage(StorageKey.FATURALAR, updated);
+    setInStorage(StorageKey.FATURALAR, faturalar.map(f => f.id === id ? cancelledFatura : f));
     updateFaturaSync(id, cancelledFatura);
 
     // ─── STOK GERİ ALMA (useTableSync ile senkron) ────────────────────────
@@ -538,9 +518,7 @@ export function FaturaPage() {
       return;
     }
     if (!confirm(t('fatura.err.confirmDelete'))) return;
-    const updated = faturalar.filter(f => f.id !== id);
-    setFaturalar(updated);
-    setInStorage(StorageKey.FATURALAR, updated);
+    setInStorage(StorageKey.FATURALAR, faturalar.filter(f => f.id !== id));
     deleteFaturaSync(id);
     if (selectedFatura?.id === id) { setSelectedFatura(null); setIsDetailOpen(false); }
     sec.auditLog('delete', id, `fatura_silindi:${fatura.type}:${fatura.grossAmount}`);
@@ -570,9 +548,7 @@ export function FaturaPage() {
       linkedStockId: linkedStock?.id,
       linkedStockName: linkedStock?.name,
     };
-    const updated = [...faturaStok, newItem];
-    setFaturaStok(updated);
-    setInStorage(StorageKey.FATURA_STOK, updated);
+    setInStorage(StorageKey.FATURA_STOK, [...faturaStok, newItem]);
     addFaturaStokSync(newItem);
     setNewFaturaStokName('');
     setNewFaturaStokLinked('');
@@ -585,11 +561,9 @@ export function FaturaPage() {
   const removeFaturaStokItem = (id: string) => {
     if (!canDelete) { toast.error(t('fatura.err.noPermStokDelete')); return; }
     const item = faturaStok.find(fs => fs.id === id);
-    const usedInFatura = faturalar.some(f => f.status === 'aktif' && (f.faturaItems || []).some(fi => fi.name === item?.name));
+    const usedInFatura = faturalar.some(f => f.status === 'aktif' && (f.faturaItems || []).some((fi: any) => fi.name === item?.name));
     if (usedInFatura && !confirm(`"${item?.name}" ${t('fatura.err.stokInUse')}`)) return;
-    const updated = faturaStok.filter(s => s.id !== id);
-    setFaturaStok(updated);
-    setInStorage(StorageKey.FATURA_STOK, updated);
+    setInStorage(StorageKey.FATURA_STOK, faturaStok.filter(s => s.id !== id));
     deleteFaturaStokSync(id);
     sec.auditLog('delete', id, `fatura_stok_silindi:${item?.name}`);
     emit('faturaStok:deleted', { id, name: item?.name });
@@ -600,7 +574,7 @@ export function FaturaPage() {
   const faturaStokUsage = useMemo(() => {
     const usage: Record<string, { name: string; totalQty: number; totalAmount: number; faturaCount: number; linkedStockName?: string }> = {};
     faturalar.filter(f => f.status === 'aktif').forEach(f => {
-      (f.faturaItems || []).forEach(item => {
+      (f.faturaItems || []).forEach((item: any) => {
         const key = item.name;
         if (!usage[key]) {
           const fsItem = faturaStok.find(fs => fs.name === item.name);
@@ -921,7 +895,7 @@ export function FaturaPage() {
               {/* Items preview */}
               {(fatura.faturaItems || []).length > 0 && (
                 <div className="mt-3 pt-3 border-t border-white/5 flex flex-wrap gap-2">
-                  {(fatura.faturaItems || []).slice(0, 4).map((item, i) => (
+                  {(fatura.faturaItems || []).slice(0, 4).map((item: any, i: number) => (
                     <span key={i} className="px-2 py-1 bg-white/5 rounded-lg text-[10px] text-gray-400">
                       {item.name} • {item.quantity} {item.unit} • ₺{item.totalPrice.toFixed(2)}
                     </span>

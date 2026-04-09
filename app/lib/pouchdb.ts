@@ -255,6 +255,7 @@ const TABLE_STORAGE_KEYS: Record<string, string> = {
   fatura_stok:           'isleyen_et_fatura_stok',
   tahsilatlar:           'isleyen_et_tahsilatlar_data',
   guncelleme_notlari:    '', // localStorage'da yok — DB'ye doğrudan seed edilir
+  stok_giris:            'isleyen_et_stok_giris_data',
 };
 
 /** Tablo adının Türkçe görüntü adı */
@@ -275,6 +276,7 @@ export const TABLE_DISPLAY_NAMES: Record<string, string> = {
   fatura_stok:          'Fatura Stok',
   tahsilatlar:          'Tahsilatlar',
   guncelleme_notlari:   'Güncelleme Notları',
+  stok_giris:           'Manuel Stok Girişleri',
   mert_kv_store:        'KV Store',
 };
 
@@ -371,8 +373,8 @@ export async function seedPouchDbFromLocalStorage(
 
 /**
  * Uygulama başlangıcında otomatik çağrılır.
- * Sadece PouchDB'si boş (doc_count === 0) olan tabloları localStorage'dan doldurur.
- * Zaten veri olan tablolara dokunmaz → idempotent & güvenli.
+ * localStorage'daki her kaydı kontrol eder; PouchDB'de olmayan kayıtları ekler.
+ * Kısmi dolu tablolara da dokunur (diff tabanlı) — idempotent & güvenli.
  * PouchDB dolunca çalışan startAllSync() bu verileri otomatik CouchDB'ye iter.
  */
 export async function autoSeedIfEmpty(
@@ -384,19 +386,26 @@ export async function autoSeedIfEmpty(
 
   for (const [tableName, storageKey] of Object.entries(TABLE_STORAGE_KEYS)) {
     try {
-      const db = getDb(tableName);
-      const info = await db.info();
-      if (info.doc_count > 0) continue; // zaten veri var, atla
+      if (!storageKey) continue; // localStorage'da karşılığı olmayan tablo (ör. guncelleme_notlari)
 
       const raw = localStorage.getItem(storageKey);
       if (!raw) continue;
       const items: any[] = JSON.parse(raw);
       if (!Array.isArray(items) || items.length === 0) continue;
 
+      const db = getDb(tableName);
+
+      // Mevcut doc ID'lerini çek — sadece eksik olanları ekle (diff tabanlı)
+      const existing = await db.allDocs({ include_docs: false });
+      const existingIds = new Set(existing.rows.map((r: any) => r.id));
+
       const toDb = transforms?.[tableName];
 
       const toInsert = items
-        .filter(item => item.id || item._id)
+        .filter(item => {
+          const id = item.id || item._id;
+          return id && !existingIds.has(id); // sadece PouchDB'de olmayan kayıtlar
+        })
         .map(item => {
           // toDb dönüşümü varsa uygula (camelCase → snake_case), yoksa ham veriyi kullan
           const dbRow = toDb ? toDb(item) : (() => {

@@ -6,6 +6,7 @@ import * as Dialog from '@radix-ui/react-dialog';
 import { toast } from 'sonner';
 import { getFromStorage, setInStorage, StorageKey } from '../utils/storage';
 import { kvGet, kvSet } from '../lib/pouchdb-kv';
+import { getDb } from '../lib/pouchdb';
 import { useEmployee } from '../contexts/EmployeeContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useLanguage } from '../contexts/LanguageContext';
@@ -256,6 +257,19 @@ export function FisHistoryPage() {
             return { ...stock, currentStock: stock.currentStock + netReversal, movements: filteredMovements };
           });
           setInStorage(StorageKey.STOK_DATA, updatedStokList);
+
+          // PouchDB senkronizasyonu — değişen stok kayıtlarını CouchDB'ye de yansıt
+          const changedProducts = updatedStokList.filter((p: any, i: number) => {
+            const orig = existingStokList[i];
+            return orig && p.currentStock !== orig.currentStock;
+          });
+          changedProducts.forEach(async (product: any) => {
+            try {
+              const db = getDb('urunler');
+              const existing = await db.get(product.id) as any;
+              await db.put({ ...existing, current_stock: product.currentStock });
+            } catch {}
+          });
         }
 
         // ─── Cari bakiyesi geri al ───────────────────────────────

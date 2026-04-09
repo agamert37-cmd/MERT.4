@@ -235,3 +235,9 @@ export function getVersionGroups(notes: UpdateNote[]) {
 
 // Geriye dönük uyumluluk — eski kod UPDATE_NOTES'u referans alıyorsa bozulmasın
 export const UPDATE_NOTES = SEED_NOTES;
+
+/** Mevcut tüm versiyonları sıralı döndür (en yeni önce). */
+export function getAllVersions(notes: UpdateNote[] = SEED_NOTES): string[] {
+  const versions = [...new Set(notes.map(n => n.version))];
+  return versions.sort((a, b) => b.localeCompare(a, undefined, { numeric: true }));
+}

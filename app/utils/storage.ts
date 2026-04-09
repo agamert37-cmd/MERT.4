@@ -36,6 +36,8 @@ export const StorageKey = {
   PAZARLAMA_CONTENT: 'pazarlama_content',
   LOGIN_CONTENT: 'login_content',
   DELETED_FISLER: 'deleted_fisler',
+  STOK_GIRIS: 'stok_giris_data',
+  SILINEN_STOKLAR: 'silinen_stoklar',
   BACKUPS: 'local_backups',
   VITRIN_ANALYTICS: 'vitrin_analytics',
   USER_ACTIVITY_LOG: 'user_activity_log',
