@@ -5,7 +5,7 @@ import {
   ChevronRight, X, ArrowDownRight, ArrowUpRight, RefreshCcw, Tag, Edit,
   Trash2, AlertTriangle, Factory, Link2, Settings, BarChart3, Bell,
   FolderOpen, ArrowUpDown, Eye, Download, Filter, Layers, ShoppingCart,
-  Minus, MoreVertical, Warehouse, Scale, Clock, Flame, History, PieChart
+  Minus, MoreVertical, Warehouse, Scale, Clock, Flame, History, PieChart, Archive
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { staggerContainer, staggerItem, hover, tap, rowItem } from '../utils/animations';
@@ -136,7 +136,7 @@ export function productFromDb(row: any): Product {
 
 const DEFAULT_CATEGORIES: string[] = ['Dana', 'Kuzu', 'Sakatat', 'Tavuk', 'Islenmiş Et', 'Fatura Stoku', 'Diger'];
 
-type TabKey = 'urunler' | 'uyarilar' | 'kategoriler' | 'ozet';
+type TabKey = 'urunler' | 'uyarilar' | 'kategoriler' | 'ozet' | 'silinen';
 type SortKey = 'name' | 'stock' | 'cost' | 'category';
 type SortDir = 'asc' | 'desc';
 
@@ -474,6 +474,11 @@ export function StokPage() {
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [detailProduct, setDetailProduct] = useState<Product | null>(null);
 
+  // Silinen stoklar arşivi
+  const [silindenStoklar, setSilinenStoklar] = useState<any[]>(() =>
+    getFromStorage<any[]>(StorageKey.SILINEN_STOKLAR) || []
+  );
+
   // Movement form state
   const [partySearch, setPartySearch] = useState('');
   const [showCariSuggestions, setShowCariSuggestions] = useState(false);
@@ -621,11 +626,24 @@ export function StokPage() {
     if (!canDelete) { sec.logUnauthorized('stok_delete', `Kullanici ${productName} urunu silmeye calisti.`); return; }
     if (!sec.checkRate('delete')) return;
     if (confirm(`"${productName}" urununu silmek istediginize emin misiniz?`)) {
+      // Silinen ürünü arşive kaydet
+      const product = products.find(p => p.id === productId);
+      if (product) {
+        const archivedEntry = {
+          ...product,
+          deletedAt: new Date().toISOString(),
+          deletedBy: currentEmployee?.name || user?.name || 'Bilinmeyen',
+        };
+        const updated = [archivedEntry, ...silindenStoklar].slice(0, 200);
+        setSilinenStoklar(updated);
+        setInStorage(StorageKey.SILINEN_STOKLAR, updated);
+      }
+
       deleteItem(productId);
       emit('stok:deleted', { productId, productName });
       sec.auditLog('stok_delete', productId, productName);
       logActivity('employee_update', 'Urun Silindi', { employeeName: user?.name, page: 'Stok', description: `${productName} urunu sistemden silindi.` });
-      toast.success('Urun silindi');
+      toast.success('Ürün silindi ve arşivlendi');
     }
   };
 
@@ -761,6 +779,7 @@ export function StokPage() {
     { key: 'uyarilar', label: 'Uyarilar', icon: <Bell className="w-4 h-4" />, badge: stats.critical.length + stats.negative.length },
     { key: 'kategoriler', label: 'Kategoriler', icon: <FolderOpen className="w-4 h-4" />, badge: categories.length },
     { key: 'ozet', label: 'Ozet & Rapor', icon: <BarChart3 className="w-4 h-4" /> },
+    { key: 'silinen', label: 'Silinen Stoklar', icon: <Archive className="w-4 h-4" />, badge: silindenStoklar.length || undefined },
   ];
 
   const toggleSort = (key: SortKey) => {
@@ -1485,6 +1504,75 @@ export function StokPage() {
         </motion.div>
         );
       })()}
+
+      {/* ─── Silinen Stoklar ─── */}
+      {activeTab === 'silinen' && (
+        <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-lg font-bold text-white flex items-center gap-2">
+                <Archive className="w-5 h-5 text-red-400" />
+                Silinen Stoklar
+              </h2>
+              <p className="text-xs text-gray-500 mt-0.5">Sistemden silinen ürünlerin arşivi. Son 200 kayıt tutulur.</p>
+            </div>
+            {silindenStoklar.length > 0 && (
+              <button
+                onClick={() => {
+                  if (confirm('Silinen stok arşivi temizlensin mi?')) {
+                    setSilinenStoklar([]);
+                    setInStorage(StorageKey.SILINEN_STOKLAR, []);
+                    toast.success('Arşiv temizlendi');
+                  }
+                }}
+                className="px-3 py-1.5 text-xs bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 rounded-xl transition-all"
+              >
+                Arşivi Temizle
+              </button>
+            )}
+          </div>
+
+          {silindenStoklar.length === 0 ? (
+            <div className="card-premium rounded-2xl p-12 flex flex-col items-center text-center">
+              <Archive className="w-12 h-12 text-gray-700 mb-3" />
+              <p className="text-gray-500 font-bold">Silinen ürün yok</p>
+              <p className="text-xs text-gray-600 mt-1">Silinen ürünler burada arşivlenecek</p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {silindenStoklar.map((p: any, i: number) => (
+                <motion.div
+                  key={p.id + i}
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  className="card-premium rounded-xl p-4 flex items-center gap-4"
+                >
+                  <div className="w-10 h-10 rounded-xl bg-red-500/10 flex items-center justify-center shrink-0">
+                    <Trash2 className="w-4 h-4 text-red-400" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-bold text-white text-sm truncate">{p.name}</p>
+                    <div className="flex flex-wrap gap-2 mt-1">
+                      <span className="text-xs text-gray-500">{p.category || '—'}</span>
+                      <span className="text-xs text-gray-600">·</span>
+                      <span className="text-xs text-gray-500">Son stok: {p.currentStock ?? p.current_stock ?? 0} {p.unit || 'AD'}</span>
+                      {p.deletedBy && <><span className="text-xs text-gray-600">·</span><span className="text-xs text-gray-500">Silen: {p.deletedBy}</span></>}
+                    </div>
+                  </div>
+                  <div className="text-right shrink-0">
+                    <p className="text-xs text-gray-500 font-mono">
+                      {p.deletedAt ? new Date(p.deletedAt).toLocaleDateString('tr-TR') : '—'}
+                    </p>
+                    <p className="text-[10px] text-gray-600">
+                      {p.deletedAt ? new Date(p.deletedAt).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' }) : ''}
+                    </p>
+                  </div>
+                </motion.div>
+              ))}
+            </div>
+          )}
+        </motion.div>
+      )}
 
       {/* ═══════════════ MODALS ═══════════════ */}
 

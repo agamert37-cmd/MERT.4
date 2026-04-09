@@ -95,6 +95,7 @@ const TABLE_SYNC_CONFIGS: TableSyncConfig[] = [
   { tableName: 'fatura_stok',      storageKey: StorageKey.FATURA_STOK,   orderBy: 'created_at', orderAsc: false },
   { tableName: 'tahsilatlar',         storageKey: 'tahsilatlar_data',          orderBy: 'tarih',      orderAsc: false },
   { tableName: 'guncelleme_notlari',  storageKey: StorageKey.GUNCELLEME_NOTLARI, orderBy: 'date',     orderAsc: false },
+  { tableName: 'stok_giris',          storageKey: StorageKey.STOK_GIRIS,         orderBy: 'date',     orderAsc: false },
 ];
 
 // ─── Genel tablo senkronizasyon bileşeni ──────────────────────────────────────

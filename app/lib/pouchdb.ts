@@ -255,6 +255,7 @@ const TABLE_STORAGE_KEYS: Record<string, string> = {
   fatura_stok:           'isleyen_et_fatura_stok',
   tahsilatlar:           'isleyen_et_tahsilatlar_data',
   guncelleme_notlari:    '', // localStorage'da yok — DB'ye doğrudan seed edilir
+  stok_giris:            'isleyen_et_stok_giris_data',
 };
 
 /** Tablo adının Türkçe görüntü adı */
@@ -275,6 +276,7 @@ export const TABLE_DISPLAY_NAMES: Record<string, string> = {
   fatura_stok:          'Fatura Stok',
   tahsilatlar:          'Tahsilatlar',
   guncelleme_notlari:   'Güncelleme Notları',
+  stok_giris:           'Manuel Stok Girişleri',
   mert_kv_store:        'KV Store',
 };
 
