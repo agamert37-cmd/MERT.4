@@ -288,8 +288,8 @@ export function StokPage() {
     tableName: 'urunler',
     storageKey: 'stok_data',
     initialData: [],
-    orderBy: 'created_at',
-    orderAsc: false,
+    orderBy: 'name',
+    orderAsc: true,
     toDb: productToDb,
     fromDb: productFromDb,
   });

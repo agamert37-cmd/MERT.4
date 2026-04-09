@@ -723,9 +723,41 @@ export function CariPage() {
   const [showFormRegionManager, setShowFormRegionManager] = useState(false);
   const [formStep, setFormStep] = useState(0); // 0: tip, 1: firma, 2: iletişim, 3: sınıflandırma, 4: fatura
 
+  // Önceki bakiye girişleri — her biri bir Transaction olarak kaydedilir
+  const [openingEntries, setOpeningEntries] = useState<Array<{
+    id: string; date: string; description: string; amount: string; type: 'debit' | 'credit';
+  }>>([]);
+
+  const addOpeningEntry = () => {
+    setOpeningEntries(prev => [...prev, {
+      id: crypto.randomUUID(),
+      date: new Date().toISOString().slice(0, 10),
+      description: '',
+      amount: '',
+      type: 'debit',
+    }]);
+  };
+
+  const updateOpeningEntry = (id: string, field: string, value: string) => {
+    setOpeningEntries(prev => prev.map(e => e.id === id ? { ...e, [field]: value } : e));
+  };
+
+  const removeOpeningEntry = (id: string) => {
+    setOpeningEntries(prev => prev.filter(e => e.id !== id));
+  };
+
+  // Tüm girişlerin net toplamı (debit = alacak +, credit = borç -)
+  const openingTotal = useMemo(() =>
+    openingEntries.reduce((sum, e) => {
+      const amt = parseFloat(e.amount) || 0;
+      return sum + (e.type === 'debit' ? amt : -amt);
+    }, 0),
+  [openingEntries]);
+
   const resetForm = () => {
     setFormData({ type: 'Müşteri', companyName: '', contactPerson: '', phone: '', email: '', address: '', taxNumber: '', taxOffice: '', approvedBusinessNo: '', region: '', category: '', invoiceMode: 'yok' as 'tam' | 'kismi' | 'yok', defaultKdvRate: 20, openingBalance: 0 });
     setFormRegion('');
+    setOpeningEntries([]);
   };
 
   // Filtered data
@@ -775,15 +807,46 @@ export function CariPage() {
       email: formData.email 
     })) return;
 
+    // Önceki bakiye girişlerinden Transaction listesi oluştur
+    const initialHistory: Transaction[] = openingEntries
+      .filter(e => e.description.trim() && (parseFloat(e.amount) || 0) > 0)
+      .map(e => ({
+        id: e.id,
+        date: new Date(e.date).toISOString(),
+        description: e.description.trim(),
+        amount: parseFloat(e.amount) || 0,
+        type: e.type,
+        category: 'Açılış Bakiyesi',
+      }));
+
+    // Basit açılış bakiyesi de varsa onu da ekle (çoklu giriş yoksa)
+    const simpleOpening = formData.openingBalance || 0;
+    if (initialHistory.length === 0 && simpleOpening !== 0) {
+      initialHistory.push({
+        id: crypto.randomUUID(),
+        date: new Date().toISOString(),
+        description: 'Açılış Bakiyesi',
+        amount: Math.abs(simpleOpening),
+        type: simpleOpening > 0 ? 'debit' : 'credit',
+        category: 'Açılış Bakiyesi',
+      });
+    }
+
+    // Net bakiye = çoklu girişlerin toplamı veya basit bakiye
+    const computedBalance = initialHistory.length > 0
+      ? openingTotal
+      : simpleOpening;
+
     const newCari: Cari = {
       id: crypto.randomUUID(),
       ...sec.sanitizeAll(formData, ['companyName', 'contactPerson', 'address', 'email']),
       region: formRegion,
-      balance: formData.openingBalance || 0,
-      transactions: 0,
+      balance: computedBalance,
+      transactions: initialHistory.length,
+      transactionHistory: initialHistory,
       invoiceMode: formData.invoiceMode || 'yok',
       defaultKdvRate: formData.defaultKdvRate || 20,
-      openingBalance: formData.openingBalance || 0,
+      openingBalance: computedBalance,
     };
 
     await addItem(newCari);
@@ -1662,25 +1725,104 @@ export function CariPage() {
                         <p className="text-sm font-semibold text-gray-300">Bakiye & Fatura Ayarları</p>
                       </div>
 
-                      {/* Açılış Bakiyesi */}
+                      {/* Önceki Bakiyeler — çoklu giriş */}
                       <div>
-                        <label className="flex items-center gap-1.5 text-xs text-gray-500 mb-2 font-medium uppercase tracking-wider">
-                          <CreditCard className="w-3 h-3" /> Açılış Bakiyesi (Eski Bakiye)
-                        </label>
-                        <div className="relative">
-                          <input
-                            type="number"
-                            step="0.01"
-                            value={formData.openingBalance || ''}
-                            onChange={e => setFormData(f => ({ ...f, openingBalance: parseFloat(e.target.value) || 0 }))}
-                            placeholder="0.00 — Eski sisteme ait bakiye varsa girin"
-                            className="w-full px-4 py-3 bg-white/[0.04] border border-white/[0.08] rounded-xl text-white placeholder-gray-600 focus:border-blue-500/50 focus:bg-white/[0.06] transition-all text-sm outline-none"
-                          />
-                          <span className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-500 text-sm font-bold">₺</span>
+                        <div className="flex items-center justify-between mb-3">
+                          <label className="flex items-center gap-1.5 text-xs text-gray-500 font-medium uppercase tracking-wider">
+                            <CreditCard className="w-3 h-3" /> Önceki Bakiyeler
+                          </label>
+                          <button
+                            type="button"
+                            onClick={addOpeningEntry}
+                            className="flex items-center gap-1 px-3 py-1.5 bg-blue-600/20 hover:bg-blue-600/30 border border-blue-500/30 text-blue-400 text-xs rounded-lg transition-all"
+                          >
+                            <Plus className="w-3 h-3" /> Bakiye Ekle
+                          </button>
                         </div>
-                        <p className="text-[10px] text-gray-600 mt-1.5 ml-1">
-                          Pozitif = alacak (müşteri bize borçlu), Negatif = borç (biz müşteriye borçluyuz)
-                        </p>
+
+                        {openingEntries.length === 0 ? (
+                          /* Hiç giriş yoksa basit tek alan göster */
+                          <div className="space-y-2">
+                            <div className="relative">
+                              <input
+                                type="number"
+                                step="0.01"
+                                value={formData.openingBalance || ''}
+                                onChange={e => setFormData(f => ({ ...f, openingBalance: parseFloat(e.target.value) || 0 }))}
+                                placeholder="0.00 — Tek bir açılış bakiyesi girin"
+                                className="w-full px-4 py-3 bg-white/[0.04] border border-white/[0.08] rounded-xl text-white placeholder-gray-600 focus:border-blue-500/50 focus:bg-white/[0.06] transition-all text-sm outline-none"
+                              />
+                              <span className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-500 text-sm font-bold">₺</span>
+                            </div>
+                            <p className="text-[10px] text-gray-600 ml-1">
+                              Pozitif = alacak (müşteri bize borçlu) · Negatif = borç (biz borçluyuz) · Ya da "Bakiye Ekle" ile birden fazla kaydı ayrı ayrı girin.
+                            </p>
+                          </div>
+                        ) : (
+                          /* Çoklu giriş tablosu */
+                          <div className="space-y-2">
+                            {/* Başlık satırı */}
+                            <div className="grid grid-cols-[1fr_2fr_1fr_auto_auto] gap-2 px-2">
+                              {['Tarih', 'Açıklama', 'Tutar (₺)', 'Tür', ''].map(h => (
+                                <span key={h} className="text-[10px] text-gray-600 uppercase tracking-wider">{h}</span>
+                              ))}
+                            </div>
+                            {/* Giriş satırları */}
+                            {openingEntries.map(entry => (
+                              <div key={entry.id} className="grid grid-cols-[1fr_2fr_1fr_auto_auto] gap-2 items-center">
+                                <input
+                                  type="date"
+                                  value={entry.date}
+                                  onChange={e => updateOpeningEntry(entry.id, 'date', e.target.value)}
+                                  className="px-2 py-2 bg-white/[0.04] border border-white/[0.08] rounded-lg text-white text-xs outline-none focus:border-blue-500/40 transition-all"
+                                />
+                                <input
+                                  type="text"
+                                  value={entry.description}
+                                  onChange={e => updateOpeningEntry(entry.id, 'description', e.target.value)}
+                                  placeholder="Açıklama…"
+                                  className="px-3 py-2 bg-white/[0.04] border border-white/[0.08] rounded-lg text-white placeholder-gray-600 text-xs outline-none focus:border-blue-500/40 transition-all"
+                                />
+                                <input
+                                  type="number"
+                                  step="0.01"
+                                  min="0"
+                                  value={entry.amount}
+                                  onChange={e => updateOpeningEntry(entry.id, 'amount', e.target.value)}
+                                  placeholder="0.00"
+                                  className="px-3 py-2 bg-white/[0.04] border border-white/[0.08] rounded-lg text-white placeholder-gray-600 text-xs outline-none focus:border-blue-500/40 transition-all"
+                                />
+                                {/* Tür toggle */}
+                                <button
+                                  type="button"
+                                  onClick={() => updateOpeningEntry(entry.id, 'type', entry.type === 'debit' ? 'credit' : 'debit')}
+                                  className={`px-2 py-2 rounded-lg text-[10px] font-bold border transition-all whitespace-nowrap ${
+                                    entry.type === 'debit'
+                                      ? 'bg-green-600/20 border-green-500/30 text-green-400'
+                                      : 'bg-red-600/20 border-red-500/30 text-red-400'
+                                  }`}
+                                >
+                                  {entry.type === 'debit' ? 'Alacak' : 'Borç'}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => removeOpeningEntry(entry.id)}
+                                  className="p-2 text-gray-600 hover:text-red-400 transition-colors"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            ))}
+                            {/* Net toplam */}
+                            <div className="flex items-center justify-end gap-2 pt-2 border-t border-white/[0.06]">
+                              <span className="text-xs text-gray-500">Net Açılış Bakiyesi:</span>
+                              <span className={`text-sm font-bold ${openingTotal > 0 ? 'text-green-400' : openingTotal < 0 ? 'text-red-400' : 'text-gray-400'}`}>
+                                {openingTotal > 0 ? '+' : ''}₺{openingTotal.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}
+                              </span>
+                            </div>
+                            <p className="text-[10px] text-gray-600 ml-1">Alacak = müşteri bize borçlu (+) · Borç = biz müşteriye borçluyuz (−)</p>
+                          </div>
+                        )}
                       </div>
 
                       {/* Fatura Modu */}
