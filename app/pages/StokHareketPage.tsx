@@ -14,7 +14,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { staggerContainer, gridCard, rowItem, hover, tap } from '../utils/animations';
-import { getFromStorage, StorageKey } from '../utils/storage';
+import { useGlobalTableData } from '../contexts/GlobalTableSyncContext';
 import { useEmployee } from '../contexts/EmployeeContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useLanguage } from '../contexts/LanguageContext';
@@ -23,7 +23,6 @@ import { toast } from 'sonner';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { addPDFHeader, addPDFFooter, addReportInfoBox, tableStyles } from '../utils/reportGenerator';
-import { useModuleBus } from '../hooks/useModuleBus';
 import { getPagePermissions } from '../utils/permissions';
 import { usePageSecurity } from '../hooks/usePageSecurity';
 import { InteractiveDataPanel, type PanelColumn } from '../components/InteractiveDataPanel';
@@ -48,33 +47,12 @@ export function StokHareketPage() {
   const { currentEmployee } = useEmployee();
   const { user } = useAuth();
   const { t } = useLanguage();
-  const { on, onPrefix, emit } = useModuleBus();
   const { canView, canExport } = { ...getPagePermissions(user, currentEmployee, 'stok'), canExport: true };
   const sec = usePageSecurity('stok_hareket');
 
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState<'all' | 'giris' | 'cikis' | 'iade'>('all');
 
-  // Storage + ModuleBus dinle
-  const [refreshCounter, setRefreshCounter] = useState(0);
-  useEffect(() => {
-    const handler = () => setRefreshCounter(c => c + 1);
-    window.addEventListener('storage_update', handler);
-    window.addEventListener('storage', handler);
-    return () => {
-      window.removeEventListener('storage_update', handler);
-      window.removeEventListener('storage', handler);
-    };
-  }, []);
-
-  // Cross-module: stok/fis degisikliklerinde otomatik yenile
-  useEffect(() => {
-    const unsub1 = onPrefix('stok:', () => setRefreshCounter(c => c + 1));
-    const unsub2 = onPrefix('fis:', () => setRefreshCounter(c => c + 1));
-    const unsub3 = on('uretim:completed', () => setRefreshCounter(c => c + 1));
-    const unsub4 = on('system:backup_restored', () => setRefreshCounter(c => c + 1));
-    return () => { unsub1(); unsub2(); unsub3(); unsub4(); };
-  }, [on, onPrefix]);
 
   // Log mount
   useEffect(() => {
@@ -90,7 +68,7 @@ export function StokHareketPage() {
   });
 
   // Fislerden stok hareketleri cikar
-  const rawFisler = useMemo(() => getFromStorage<any[]>(StorageKey.FISLER) || [], [refreshCounter]);
+  const rawFisler = useGlobalTableData<any>('fisler');
 
   const hareketler = useMemo(() => {
     const results: StokHareket[] = [];

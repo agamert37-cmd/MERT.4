@@ -1,4 +1,5 @@
 import React, { useState, useRef, useMemo, useCallback } from 'react';
+import { useGlobalTableData } from '../contexts/GlobalTableSyncContext';
 import { useEmployee } from '../contexts/EmployeeContext';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
@@ -91,9 +92,9 @@ export function TahsilatPage() {
     storageKey: StorageKey.KASA_DATA,
   });
 
+  const rawBankalar = useGlobalTableData<any>('bankalar');
   const demoBanks = useMemo(() => {
-    const bankList = getFromStorage<any[]>(StorageKey.BANK_DATA);
-    if (!bankList || bankList.length === 0) {
+    if (rawBankalar.length === 0) {
       return [
         { id: '1', name: 'Ziraat Bankasi' },
         { id: '2', name: 'Is Bankasi' },
@@ -104,15 +105,12 @@ export function TahsilatPage() {
         { id: '7', name: 'Vakifbank' },
       ];
     }
-    return bankList.map(b => ({ id: b.id, name: b.name }));
-  }, []);
+    return rawBankalar.map(b => ({ id: b.id, name: b.name }));
+  }, [rawBankalar]);
 
-  const [refreshCounter, setRefreshCounter] = useState(0);
-
+  const rawCari = useGlobalTableData<any>('cari_hesaplar');
   const demoCustomers = useMemo(() => {
-    const cariList = getFromStorage<any[]>(StorageKey.CARI_DATA);
-    if (!cariList) return [];
-    return cariList
+    return rawCari
       .filter(c => (c.type === 'Müşteri' || c.type === 'Toptancı'))
       .map(c => ({
         id: c.id,
@@ -122,7 +120,7 @@ export function TahsilatPage() {
         type: c.type || 'Müşteri',
         transactionHistory: c.transactionHistory || [],
       }));
-  }, [refreshCounter]);
+  }, [rawCari]);
 
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [paymentType, setPaymentType] = useState<PaymentType>('nakit');
@@ -150,11 +148,11 @@ export function TahsilatPage() {
   );
 
   // Bugünkü tahsilat geçmişi
+  const rawKasa = useGlobalTableData<any>('kasa_islemleri');
   const todayPayments = useMemo(() => {
-    const kasaData = getFromStorage<any[]>(StorageKey.KASA_DATA) || [];
     const today = new Date().toLocaleDateString('tr-TR');
-    return kasaData.filter(k => k.category === 'Tahsilat' && k.date === today).reverse();
-  }, [refreshCounter]);
+    return rawKasa.filter(k => k.category === 'Tahsilat' && k.date === today).reverse();
+  }, [rawKasa]);
 
   const todayTotal = todayPayments.reduce((s, p) => s + (p.amount || 0), 0);
 
@@ -338,7 +336,6 @@ export function TahsilatPage() {
     }
 
     window.dispatchEvent(new Event('storage_update'));
-    setRefreshCounter(prev => prev + 1);
     emit('tahsilat:created', { cariId: selectedCustomer.id, amount: paymentAmount, type: paymentType });
     sec.auditLog('tahsilat_add', selectedCustomer.id, `${selectedCustomer.name || 'Bilinmeyen Cari'} - ₺${paymentAmount}`);
 
