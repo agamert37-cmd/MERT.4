@@ -9,6 +9,7 @@ import { useModuleBus } from '../hooks/useModuleBus';
 import { getPagePermissions } from '../utils/permissions';
 import { usePageSecurity } from '../hooks/usePageSecurity';
 import { useTableSync } from '../hooks/useTableSync';
+import { useGlobalTableData } from '../contexts/GlobalTableSyncContext';
 import { motion, AnimatePresence } from 'motion/react';
 import { toast } from 'sonner';
 import {
@@ -190,6 +191,9 @@ export function CeklerPage() {
 
   const { canAdd, canDelete, canEdit } = getPagePermissions(user, currentEmployee, 'cekler');
   const sec = usePageSecurity('cekler');
+
+  // Bankalar listesi (GlobalTableSyncContext'ten canlı)
+  const rawBankalar = useGlobalTableData<any>('bankalar');
 
   // PouchDB/CouchDB senkronizasyonu
   const { data: syncedCekler, deleteItem: deleteCek } = useTableSync<CekData>({
@@ -1250,8 +1254,13 @@ export function CeklerPage() {
                 </div>
                 <div>
                   <label className="text-sm font-medium text-foreground mb-1 block">Banka <span className="text-red-400">*</span></label>
-                  <input type="text" value={newAlinanCek.bankName} onChange={e => setNewAlinanCek({ ...newAlinanCek, bankName: e.target.value })} placeholder="Banka adı"
-                    className="w-full px-4 py-3 bg-card border border-border rounded-lg text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-purple-500/40" />
+                  <select value={newAlinanCek.bankName} onChange={e => setNewAlinanCek({ ...newAlinanCek, bankName: e.target.value })}
+                    className="w-full px-4 py-3 bg-card border border-border rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-purple-500/40">
+                    <option value="">Banka seçin</option>
+                    {rawBankalar.map((b: any) => (
+                      <option key={b.id} value={b.name}>{b.name}</option>
+                    ))}
+                  </select>
                 </div>
                 <div>
                   <label className="text-sm font-medium text-foreground mb-1 block">Vade Tarihi <span className="text-red-400">*</span></label>
@@ -1341,8 +1350,13 @@ export function CeklerPage() {
                 </div>
                 <div>
                   <label className="text-sm font-medium text-foreground mb-1 block">Banka <span className="text-red-400">*</span></label>
-                  <input type="text" value={newVerilenCek.bankName} onChange={e => setNewVerilenCek({ ...newVerilenCek, bankName: e.target.value })} placeholder="Banka adı"
-                    className="w-full px-4 py-3 bg-card border border-border rounded-lg text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-red-500/40" />
+                  <select value={newVerilenCek.bankName} onChange={e => setNewVerilenCek({ ...newVerilenCek, bankName: e.target.value })}
+                    className="w-full px-4 py-3 bg-card border border-border rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-red-500/40">
+                    <option value="">Banka seçin</option>
+                    {rawBankalar.map((b: any) => (
+                      <option key={b.id} value={b.name}>{b.name}</option>
+                    ))}
+                  </select>
                 </div>
                 <div>
                   <label className="text-sm font-medium text-foreground mb-1 block">Vade Tarihi <span className="text-red-400">*</span></label>
