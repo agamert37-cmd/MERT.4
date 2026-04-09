@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { useGlobalTableData } from '../contexts/GlobalTableSyncContext';
 import { useEmployee } from '../contexts/EmployeeContext';
 import { getFromStorage, setInStorage, StorageKey } from '../utils/storage';
 import { logActivity } from '../utils/activityLogger';
@@ -203,29 +204,11 @@ export function SalesPage() {
   // ────────────────────────────────��────────────────────────────────────────────
 
   // Storage'dan verileri yükle — reaktif state ile
-  const [banks, setBanks] = useState<any[]>(() => getFromStorage<any[]>(StorageKey.BANK_DATA) || []);
-  const [personelList, setPersonelList] = useState<any[]>(() => getFromStorage<any[]>(StorageKey.PERSONEL_DATA) || []);
-  const [vehicleList, setVehicleList] = useState<any[]>(() => getFromStorage<any[]>(StorageKey.ARAC_DATA) || []);
-  const [cariList, setCariList] = useState<Cari[]>(() => getFromStorage<Cari[]>(StorageKey.CARI_DATA) || []);
-  const [fisler, setFisler] = useState<any[]>(() => getFromStorage<any[]>(StorageKey.FISLER) || []);
-
-  // Modal açıldığında cari & fiş listesini taze yükle
-  useEffect(() => {
-    if (isNewFisModalOpen) {
-      setCariList(getFromStorage<Cari[]>(StorageKey.CARI_DATA) || []);
-      setPersonelList(getFromStorage<any[]>(StorageKey.PERSONEL_DATA) || []);
-      setBanks(getFromStorage<any[]>(StorageKey.BANK_DATA) || []);
-      setVehicleList(getFromStorage<any[]>(StorageKey.ARAC_DATA) || []);
-    }
-  }, [isNewFisModalOpen]);
-
-  // Fiş listesini her zaman taze tut
-  useEffect(() => {
-    const loadFisler = () => setFisler(getFromStorage<any[]>(StorageKey.FISLER) || []);
-    loadFisler();
-    window.addEventListener('storage_update', loadFisler);
-    return () => window.removeEventListener('storage_update', loadFisler);
-  }, []);
+  const banks = useGlobalTableData<any>('bankalar');
+  const personelList = useGlobalTableData<any>('personeller');
+  const vehicleList = useGlobalTableData<any>('araclar');
+  const cariList = syncCariList;
+  const fisler = syncFisler;
 
   // Cari arama
   const [cariSearchTerm, setCariSearchTerm] = useState('');
@@ -504,10 +487,6 @@ export function SalesPage() {
 
     // KV STORE SENKRONİZASYONU İLE EKLE
     addCariSync(newCari);
-    
-    // Geriye dönük uyumluluk için lokal listeyi de anlık güncelle
-    const updatedCariList = [...cariList, newCari];
-    setCariList(updatedCariList);
     setSelectedCari(newCari);
     setIsAddingNewCari(false);
     setNewCariForm({
@@ -1776,7 +1755,6 @@ export function SalesPage() {
                       addFisSync(fisData);
                       sec.auditLog('add', fisData.id, `fis:${selectedMode}:${calculateTotal()}`);
                       emit('fis:created', { fisId: fisData.id, mode: selectedMode || '', total: calculateTotal(), cariId: selectedCari?.id });
-                      setFisler(prev => [fisData, ...prev]);
 
                       // Stok güncelleme (Satış fişi)
                       const existingStokList = getFromStorage<any[]>(StorageKey.STOK_DATA) || [];
@@ -1932,8 +1910,6 @@ export function SalesPage() {
                           
                           // KV STORE SENKRONİZASYONU
                           updateCariSync(updatedCari.id, updatedCari);
-                          
-                          setCariList(prev => prev.map(c => c.id === updatedCari.id ? updatedCari : c));
                         }
                       }
 
@@ -2491,7 +2467,6 @@ export function SalesPage() {
                       addFisSync(giderFisData);
                       sec.auditLog('add', giderFisData.id, `gider:${giderAmount}`);
                       emit('fis:created', { fisId: giderFisData.id, mode: 'gider', total: giderAmount });
-                      setFisler(prev => [giderFisData, ...prev]);
 
                       // Kasa'ya gider olarak ekle
                       const newKasaEntry = {

@@ -1,5 +1,6 @@
 // [AJAN-2 | claude/serene-gagarin | 2026-03-25] Son düzenleyen: Claude Sonnet 4.6
 import React, { useState, useMemo, useEffect } from 'react';
+import { useGlobalTableData } from '../contexts/GlobalTableSyncContext';
 import { getFromStorage, setInStorage, StorageKey } from '../utils/storage';
 import { useAuth } from '../contexts/AuthContext';
 import { useEmployee } from '../contexts/EmployeeContext';
@@ -85,24 +86,11 @@ export function GunSonuPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Storage'dan veri yenileme counter'ı
-  const [refreshCounter, setRefreshCounter] = useState(0);
-
-  // Storage değişikliklerini dinle
-  useEffect(() => {
-    const handler = () => setRefreshCounter(c => c + 1);
-    window.addEventListener('storage_update', handler);
-    window.addEventListener('storage', handler);
-    return () => {
-      window.removeEventListener('storage_update', handler);
-      window.removeEventListener('storage', handler);
-    };
-  }, []);
+  const rawFisler = useGlobalTableData<any>('fisler');
+  const rawKasa = useGlobalTableData<any>('kasa_islemleri');
 
   // Gerçek verilerden bugünün işlemlerini yükle
   const transactions = useMemo(() => {
-    const rawFisler = getFromStorage<any[]>(StorageKey.FISLER) || [];
-    const rawKasa = getFromStorage<any[]>(StorageKey.KASA_DATA) || [];
     const result: Transaction[] = [];
 
     // Fişlerden bugünkü satış/alış işlemlerini al
@@ -185,7 +173,7 @@ export function GunSonuPage() {
       return parseInt(parts[0], 10) * 60 + parseInt(parts[1], 10);
     };
     return result.sort((a, b) => toMinutes(b.time) - toMinutes(a.time));
-  }, [todayISO, todayTR, refreshCounter]);
+  }, [todayISO, todayTR, rawFisler, rawKasa]);
 
   const totalSales = transactions
     .filter(t => t.type === 'sale')
@@ -210,7 +198,6 @@ export function GunSonuPage() {
   // ─── Dashboard çapraz doğrulama ────────────────────────────────────────────
   const crossValidation = useMemo(() => {
     // Dashboard ile aynı hesaplama mantığını kullan
-    const rawFisler = getFromStorage<any[]>(StorageKey.FISLER) || [];
     const todaySalesFisler = rawFisler.filter(
       f => (f.mode === 'sale' || f.mode === 'satis') && f.date?.startsWith(todayISO)
     );
@@ -231,12 +218,10 @@ export function GunSonuPage() {
     const match = diff < 1; // 1 TL tolerans
 
     return { dashboardRevenue, gunSonuSales: totalSales, match, diff };
-  }, [todayISO, totalSales, refreshCounter]);
+  }, [todayISO, totalSales, rawFisler]);
 
   // ─── Kasa çapraz doğrulama ─────────────────────────────────────────────────
   const kasaValidation = useMemo(() => {
-    const rawKasa = getFromStorage<any[]>(StorageKey.KASA_DATA) || [];
-    const rawFisler = getFromStorage<any[]>(StorageKey.FISLER) || [];
     const todayTRLocal = new Date().toLocaleDateString('tr-TR');
 
     const kasaTodayIncome = rawKasa
@@ -276,7 +261,7 @@ export function GunSonuPage() {
     const match = diff < 1;
 
     return { kasaTodayIncome, kasaTodayExpense, kasaNet, kasaTotalBalance, match, diff, kasaTodayPurchase };
-  }, [todayISO, netCash, refreshCounter]);
+  }, [todayISO, netCash, rawFisler, rawKasa]);
 
   // ─── PDF İndirme ───────────────────────────────────────────────────────────
   const handleDownloadPDF = () => {
