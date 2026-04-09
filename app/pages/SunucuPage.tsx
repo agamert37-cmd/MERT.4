@@ -160,7 +160,7 @@ export function SunucuPage() {
   // Auto-refresh
   useEffect(() => {
     if (!autoRefresh) return;
-    const id = setInterval(loadTableStatus, 30_000);
+    const id = setInterval(loadTableStatus, 5_000);
     return () => clearInterval(id);
   }, [autoRefresh, loadTableStatus]);
 
@@ -198,7 +198,7 @@ export function SunucuPage() {
             }`}
           >
             <Activity className="w-3.5 h-3.5" />
-            {autoRefresh ? 'Otomatik: Açık' : 'Otomatik: Kapalı'}
+            {autoRefresh ? 'Canlı (5s)' : 'Otomatik: Kapalı'}
           </button>
           <button
             onClick={() => { loadTableStatus(); handleTestConnection(); }}

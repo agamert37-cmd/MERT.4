@@ -349,12 +349,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const hashedPassword = await hashString(trimmedPassword);              // Eski format (tuzsuz)
     const hashedPasswordSalted = await hashStringWithSalt(trimmedPassword, saltKey); // Yeni format (tuzlu)
 
-    // Once tuzlu (yeni) hash dene, sonra tuzsuz (eski/migration) hash dene
+    // Önce tuzlu (yeni) hash dene, sonra tuzsuz (eski/migration) hash dene
     const isPasswordValid =
-      (userPassword && userPassword === hashedPassword) ||       // hash eşleşmesi
-      (userPin && userPin === hashedPassword) ||                  // PIN hash eşleşmesi
-      (userPassword && userPassword === trimmedPassword) ||       // düz metin fallback (migration)
-      (userPin && userPin === trimmedPassword);                   // PIN düz metin fallback
+      (userPassword && userPassword === hashedPasswordSalted) ||  // tuzlu hash (yeni format — yeni personeller)
+      (userPin     && userPin     === hashedPasswordSalted) ||    // PIN tuzlu hash
+      (userPassword && userPassword === hashedPassword) ||         // tuzsuz hash (eski format)
+      (userPin     && userPin     === hashedPassword) ||           // PIN tuzsuz hash (eski)
+      (userPassword && userPassword === trimmedPassword) ||        // düz metin fallback (migration)
+      (userPin     && userPin     === trimmedPassword);            // PIN düz metin fallback
     
     if (!isPasswordValid) {
       recordFailedAttempt();
