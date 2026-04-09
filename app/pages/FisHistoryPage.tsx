@@ -13,6 +13,7 @@ import { logActivity } from '../utils/activityLogger';
 import { useModuleBus } from '../hooks/useModuleBus';
 import { getPagePermissions } from '../utils/permissions';
 import { useTableSync } from '../hooks/useTableSync';
+import { useGlobalTableData } from '../contexts/GlobalTableSyncContext';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { getCompanyInfo } from './SettingsPage';
@@ -113,7 +114,7 @@ export function FisHistoryPage() {
     orderAsc: false,
   });
 
-  const [fisler, setFisler] = useState<Fis[]>([]);
+  const fisler = syncedFisler;
   const [searchTerm, setSearchTerm] = useState('');
   const [filterMode, setFilterMode] = useState<'all' | 'satis' | 'alis' | 'gider' | 'deleted'>('all');
   const [selectedFis, setSelectedFis] = useState<Fis | null>(null);
@@ -138,30 +139,17 @@ export function FisHistoryPage() {
   const [editPaymentAmount, setEditPaymentAmount] = useState(0);
 
   // Stok listesi (urun ekleme icin)
-  const [stokList, setStokList] = useState<any[]>([]);
+  const stokList = useGlobalTableData<any>('urunler');
   const [addProductSearch, setAddProductSearch] = useState('');
   const [showAddProduct, setShowAddProduct] = useState(false);
 
-  // useTableSync'ten gelen verileri senkronize et
+  // Silinen fişler için başlangıç yüklemesi (KV fallback dahil)
   useEffect(() => {
-    if (syncedFisler && syncedFisler.length > 0) {
-      setFisler(syncedFisler);
-    } else {
-      setFisler(getFromStorage<Fis[]>(StorageKey.FISLER) || []);
-    }
-  }, [syncedFisler]);
-
-  // LocalStorage'dan fisleri ve silinen fisleri yukle (storage events icin)
-  useEffect(() => {
-    const loadFisler = () => {
-      setFisler(getFromStorage<Fis[]>(StorageKey.FISLER) || []);
-      setDeletedFisler(getFromStorage<any[]>(StorageKey.DELETED_FISLER) || []);
-    };
-    const loadDeleted = () => setDeletedFisler(getFromStorage<any[]>(StorageKey.DELETED_FISLER) || []);
-    loadDeleted();
-    // [AJAN-2] KV fallback — localStorage boşsa silinen fiş geçmişini KV'den yükle
     const local = getFromStorage<any[]>(StorageKey.DELETED_FISLER);
-    if (!local || local.length === 0) {
+    if (local && local.length > 0) {
+      setDeletedFisler(local);
+    } else {
+      // [AJAN-2] KV fallback — localStorage boşsa silinen fiş geçmişini KV'den yükle
       kvGet<any[]>('deleted_fisler').then(kv => {
         if (kv && kv.length > 0) {
           setDeletedFisler(kv);
@@ -169,17 +157,7 @@ export function FisHistoryPage() {
         }
       }).catch(() => {});
     }
-    window.addEventListener('storage_update', loadFisler);
-    window.addEventListener('storage', loadFisler);
-    return () => {
-      window.removeEventListener('storage_update', loadFisler);
-      window.removeEventListener('storage', loadFisler);
-    };
   }, []);
-
-  useEffect(() => {
-    setStokList(getFromStorage<any[]>(StorageKey.STOK_DATA) || []);
-  }, [isEditModalOpen]);
 
   // Filtreleme + siralama
   const filteredFisler = fisler
@@ -317,8 +295,6 @@ export function FisHistoryPage() {
         kvSet('deleted_fisler', updatedDeleted).catch(() => {});
       }
 
-      const updated = fisler.filter(f => f.id !== id);
-      setFisler(updated);
       deleteFis(id).catch(e => console.warn('[FisHistory] PouchDB delete hatası:', e));
 
       emit('fis:deleted', { fisId: id, mode: fisToDelete?.mode });

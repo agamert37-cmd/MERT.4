@@ -272,7 +272,7 @@ export function LocalRepoPanel() {
     }
     const updated = saveCloudConfig(editCloudConfig);
     setCloudConfig(updated);
-    toast.success('Bulut (Online Supabase) ayarları kaydedildi! Bağlantı yeniden kurulacak.');
+    toast.success('Bulut (CouchDB) ayarları kaydedildi! Bağlantı yeniden kurulacak.');
     setTimeout(checkConnections, 500);
   };
 
@@ -439,7 +439,7 @@ export function LocalRepoPanel() {
             </div>
             <div>
               <h2 className="text-xl font-bold">Çok Katmanlı Veritabanı Yönetimi</h2>
-              <p className="text-xs text-gray-500">Site Deposu · Yerel Supabase · Online Supabase · Senkronizasyon</p>
+              <p className="text-xs text-gray-500">Site Deposu · PouchDB (Yerel) · CouchDB (Bulut) · Senkronizasyon</p>
             </div>
           </div>
 
@@ -483,8 +483,8 @@ export function LocalRepoPanel() {
                     <span>
                       <span className="text-white font-bold">Öncelik sırası:</span>{' '}
                       <span className="text-emerald-400">1. Site Deposu</span> →{' '}
-                      <span className="text-purple-400">2. Yerel Supabase</span> →{' '}
-                      <span className="text-cyan-400">3. Online Supabase</span>
+                      <span className="text-purple-400">2. PouchDB (Yerel)</span> →{' '}
+                      <span className="text-cyan-400">3. CouchDB (Bulut)</span>
                       . Veriler önce site deposuna yazılır, arka planda senkronize edilir.
                     </span>
                   </div>
@@ -504,7 +504,7 @@ export function LocalRepoPanel() {
                     />
                     <TierCard
                       tier={2}
-                      label="Yerel Supabase"
+                      label="PouchDB (Yerel)"
                       sublabel={config.enabled ? config.url : 'Devre dışı — Ayarlar sekmesinden etkinleştirin'}
                       icon={<HardDrive className="w-4 h-4 text-purple-400" />}
                       statusText={
@@ -521,7 +521,7 @@ export function LocalRepoPanel() {
                     />
                     <TierCard
                       tier={3}
-                      label="Online Supabase"
+                      label="CouchDB (Bulut)"
                       sublabel={cloudConfig.customized ? `${cloudConfig.url} (özel)` : `${cloudConfig.url} (varsayılan)`}
                       icon={<Cloud className="w-4 h-4 text-cyan-400" />}
                       statusText={
@@ -626,7 +626,7 @@ export function LocalRepoPanel() {
               {activeTab === 'config' && (
                 <div className="space-y-5">
                   <div>
-                    <label className={labelCls}>Yerel Supabase URL</label>
+                    <label className={labelCls}>PouchDB URL</label>
                     <input type="text" value={editConfig.url} onChange={e => setEditConfig(p => ({ ...p, url: e.target.value }))} placeholder="http://127.0.0.1:54321" className={inputCls} />
                   </div>
                   <div>
@@ -704,7 +704,7 @@ export function LocalRepoPanel() {
                   <div className="bg-cyan-500/10 border border-cyan-500/20 rounded-2xl p-4 flex items-start gap-3">
                     <Info className="w-4 h-4 text-cyan-400 shrink-0 mt-0.5" />
                     <div className="text-xs text-cyan-200/80 space-y-1">
-                      <p className="font-bold text-cyan-300">Online Supabase Ayarları (3. Öncelik)</p>
+                      <p className="font-bold text-cyan-300">CouchDB Ayarları (3. Öncelik)</p>
                       <p>Bu ayarlar kod dosyasına değil <strong>tarayıcı belleğine</strong> kaydedilir. İstediğiniz zaman değiştirebilirsiniz.</p>
                       {cloudConfig.customized && (
                         <p className="text-amber-300">⚡ Şu an özel ayar kullanılıyor (varsayılan koddan farklı)</p>
@@ -713,7 +713,7 @@ export function LocalRepoPanel() {
                   </div>
 
                   <div>
-                    <label className={labelCls}>Supabase Proje URL</label>
+                    <label className={labelCls}>CouchDB URL</label>
                     <input
                       type="text"
                       value={editCloudConfig.url}
@@ -877,7 +877,7 @@ export function LocalRepoPanel() {
                   <div className="bg-black/20 rounded-2xl border border-white/5 p-4 flex items-start gap-3">
                     <Info className="w-4 h-4 text-purple-400 shrink-0 mt-0.5" />
                     <p className="text-xs text-gray-500">
-                      Yedekler yerel Docker Supabase'de <code className="text-purple-400">backup_*</code> key'leri altında saklanır. 
+                      Yedekler yerel PouchDB / Docker'da <code className="text-purple-400">backup_*</code> key'leri altında saklanır.
                       Hem yerel hem bulut verileri tek bir snapshot'a birleştirilir. Otomatik yedekleme 
                       {config.autoBackup ? ` ${config.backupIntervalHours} saat arayla aktif.` : ' kapalı.'}
                     </p>
@@ -1050,12 +1050,12 @@ export function LocalRepoPanel() {
                     )}
                   </div>
 
-                  {/* supabase status örneği */}
+                  {/* docker status örneği */}
                   <div className="bg-purple-500/10 border border-purple-500/20 rounded-2xl p-4">
                     <div className="flex items-start gap-3">
                       <Server className="w-5 h-5 text-purple-400 shrink-0 mt-0.5" />
                       <div className="text-sm">
-                        <p className="font-bold text-purple-300 mb-2">supabase status çıktısı örneği:</p>
+                        <p className="font-bold text-purple-300 mb-2">docker status çıktısı örneği:</p>
                         <code className="block bg-black/40 text-gray-300 text-xs p-3 rounded-xl font-mono space-y-1 border border-white/5">
                           <div><span className="text-gray-500">API URL:</span> <span className="text-cyan-400">http://127.0.0.1:54321</span></div>
                           <div><span className="text-gray-500">anon key:</span> <span className="text-green-400">eyJhbGci...</span></div>
@@ -1084,15 +1084,15 @@ export function LocalRepoPanel() {
             </div>
             <div className="bg-black/20 rounded-2xl border border-white/5 p-5 text-center">
               <HardDrive className="w-10 h-10 text-gray-600 mx-auto mb-3" />
-              <p className="text-gray-400 font-bold mb-1">2. Öncelik: Yerel Supabase — Devre Dışı</p>
+              <p className="text-gray-400 font-bold mb-1">2. Öncelik: PouchDB (Yerel) — Devre Dışı</p>
               <p className="text-gray-600 text-sm max-w-md mx-auto">
-                Yukarıdaki anahtarı açarak Docker'da çalışan kendi Supabase'inizi ikincil depo olarak kullanabilirsiniz.
+                Yukarıdaki anahtarı açarak Docker'da çalışan kendi PouchDB/CouchDB'nizi ikincil depo olarak kullanabilirsiniz.
               </p>
             </div>
             <div className="bg-cyan-500/5 rounded-2xl border border-cyan-500/15 p-4 flex items-start gap-3">
               <Cloud className="w-5 h-5 text-cyan-400 shrink-0 mt-0.5" />
               <div>
-                <p className="font-bold text-cyan-300 text-sm">3. Öncelik: Online Supabase</p>
+                <p className="font-bold text-cyan-300 text-sm">3. Öncelik: CouchDB (Bulut)</p>
                 <p className="text-gray-500 text-xs mt-0.5">
                   {cloudConfig.customized ? 'Özel URL kullanılıyor.' : 'Varsayılan URL kullanılıyor.'}{' '}
                   <button onClick={() => { setEditConfig(p => ({ ...p, enabled: true })); }} className="text-cyan-400 underline">

@@ -1,5 +1,6 @@
 // [AJAN-2 | claude/serene-gagarin | 2026-03-25] Son düzenleyen: Claude Sonnet 4.6
 import React, { useState, useEffect, useMemo } from 'react';
+import { useGlobalTableData } from '../contexts/GlobalTableSyncContext';
 import { 
   ArrowUpCircle, 
   ArrowDownCircle, 
@@ -100,15 +101,8 @@ export function KasaPage() {
     orderAsc: false,
   });
 
-  const { data: personnelList } = useTableSync<any>({
-    tableName: 'personeller',
-    storageKey: 'personel_data',
-  });
-
-  const { data: vehicles } = useTableSync<any>({
-    tableName: 'araclar',
-    storageKey: 'arac_data',
-  });
+  const personnelList = useGlobalTableData<any>('personeller');
+  const vehicles = useGlobalTableData<any>('araclar');
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalType, setModalType] = useState<'Gelir' | 'Gider'>('Gelir');

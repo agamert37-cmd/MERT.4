@@ -376,7 +376,9 @@ export async function seedPouchDbFromLocalStorage(
  * PouchDB dolunca çalışan startAllSync() bu verileri otomatik CouchDB'ye iter.
  */
 export async function autoSeedIfEmpty(
-  onDone?: (totalSeeded: number) => void
+  onDone?: (totalSeeded: number) => void,
+  /** Tablo adı → toDb dönüşüm fonksiyonu (ör. productToDb, cariToDb) */
+  transforms?: Record<string, (item: any) => any>
 ): Promise<void> {
   let totalSeeded = 0;
 
@@ -391,12 +393,18 @@ export async function autoSeedIfEmpty(
       const items: any[] = JSON.parse(raw);
       if (!Array.isArray(items) || items.length === 0) continue;
 
+      const toDb = transforms?.[tableName];
+
       const toInsert = items
         .filter(item => item.id || item._id)
         .map(item => {
-          // eslint-disable-next-line @typescript-eslint/no-unused-vars
-          const { _id, _rev, _deleted, ...rest } = item;
-          return { ...rest, _id: item.id || _id };
+          // toDb dönüşümü varsa uygula (camelCase → snake_case), yoksa ham veriyi kullan
+          const dbRow = toDb ? toDb(item) : (() => {
+            // eslint-disable-next-line @typescript-eslint/no-unused-vars
+            const { _id, _rev, _deleted, ...rest } = item;
+            return rest;
+          })();
+          return { ...dbRow, _id: item.id || item._id };
         });
       if (toInsert.length === 0) continue;
 

@@ -21,6 +21,7 @@ import { getPagePermissions } from '../utils/permissions';
 import { generateCariDetailPDF, generateSingleFisPDF } from '../utils/cariDetailPdf';
 import { useTableSync } from '../hooks/useTableSync';
 import { useModuleBus } from '../hooks/useModuleBus';
+import { useGlobalTableData } from '../contexts/GlobalTableSyncContext';
 import { cariToDb, cariFromDb } from './CariPage';
 import { getCompanyInfo } from './SettingsPage';
 
@@ -73,18 +74,7 @@ export function CariDetailPage() {
     fromDb: cariFromDb,
   });
 
-  const [refreshCounter, setRefreshCounter] = useState(0);
-  useEffect(() => {
-    const handler = () => setRefreshCounter(c => c + 1);
-    window.addEventListener('storage_update', handler);
-    window.addEventListener('storage', handler);
-    return () => {
-      window.removeEventListener('storage_update', handler);
-      window.removeEventListener('storage', handler);
-    };
-  }, []);
-
-  const cariList = useMemo(() => getFromStorage<any[]>(StorageKey.CARI_DATA) || [], [refreshCounter]);
+  const cariList = useGlobalTableData<any>('cari_hesaplar');
   const cari = useMemo(() => cariList.find(c => c.id === id), [cariList, id]);
 
   const [editForm, setEditForm] = useState({
@@ -111,7 +101,7 @@ export function CariDetailPage() {
     return fisler
       .filter(fis => fis.cariId === id || fis.cari_id === id || fis.cari?.id === id)
       .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-  }, [id, refreshCounter]);
+  }, [id]);
 
   const fisBalanceMap = useMemo(() => {
     const map = new Map<string, { previousBalance: number; newBalance: number }>();
@@ -302,7 +292,6 @@ export function CariDetailPage() {
     toast.success('Müşteri bilgileri güncellendi.');
     setIsEditModalOpen(false);
     setEditNote('');
-    setRefreshCounter(c => c + 1);
   };
 
   const handleOpenEditModal = () => {
@@ -402,7 +391,6 @@ export function CariDetailPage() {
     const updated = allFis.map(f => f.id === fisId ? updater(f) : f);
     setInStorage(StorageKey.FISLER, updated);
     window.dispatchEvent(new Event('storage_update'));
-    setRefreshCounter(c => c + 1);
     // Sync handled by useTableSync
   };
 
