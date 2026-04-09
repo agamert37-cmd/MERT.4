@@ -164,14 +164,22 @@ export function GlobalTableSyncProvider({ children }: GlobalTableSyncProviderPro
     startAllSync();
 
     const seedTimer = setTimeout(() => {
-      autoSeedIfEmpty((totalSeeded) => {
-        if (totalSeeded > 0) {
-          toast.success(
-            `${totalSeeded} kayıt PouchDB'ye aktarıldı — CouchDB'ye senkronize ediliyor…`,
-            { duration: 5000 }
-          );
+      // toDb dönüşümlerini geçir — localStorage'da camelCase duran veriyi
+      // PouchDB'ye snake_case olarak kaydet (productFromDb/cariFromDb ile uyumlu)
+      autoSeedIfEmpty(
+        (totalSeeded) => {
+          if (totalSeeded > 0) {
+            toast.success(
+              `${totalSeeded} kayıt PouchDB'ye aktarıldı — CouchDB'ye senkronize ediliyor…`,
+              { duration: 5000 }
+            );
+          }
+        },
+        {
+          urunler:       productToDb,
+          cari_hesaplar: cariToDb,
         }
-      });
+      );
     }, 1500);
 
     return () => {

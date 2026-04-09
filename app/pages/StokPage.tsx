@@ -77,6 +77,7 @@ export function productFromDb(row: any): Product {
   let parsed = { category: 'Diger' as ProductCategory, movements: [] as StockMovement[] };
   try {
     if (typeof row.supplier_entries === 'string') {
+      // productToDb formatı: supplier_entries JSON string içinde category + movements
       const data = JSON.parse(row.supplier_entries);
       if (Array.isArray(data)) {
         parsed.movements = data.map((entry: any) => ({
@@ -103,6 +104,10 @@ export function productFromDb(row: any): Product {
           price: entry.buyPrice || 0,
           totalAmount: entry.totalAmount || 0,
         }));
+    } else if (Array.isArray(row.movements)) {
+      // localStorage'dan doğrudan seed edilen format: movements dizi olarak gelir
+      parsed.movements = row.movements;
+      parsed.category = row.category || 'Diger';
     }
   } catch {}
 
@@ -121,9 +126,10 @@ export function productFromDb(row: any): Product {
     name: row.name || '',
     category: parsed.category,
     unit: normalizedUnit,
-    sellPrice: row.sell_price ?? 0,
-    currentStock: row.current_stock ?? 0,
-    minStock: row.min_stock ?? 0,
+    // snake_case (productToDb'den) veya camelCase (localStorage seed'den) her ikisini destekle
+    sellPrice:    row.sell_price    ?? row.sellPrice    ?? 0,
+    currentStock: row.current_stock ?? row.currentStock ?? 0,
+    minStock:     row.min_stock     ?? row.minStock     ?? 0,
     movements: parsed.movements,
   };
 }
