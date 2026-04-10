@@ -122,10 +122,12 @@ export function useTableSync<T extends { id: string }>(
   }, [sortData]);
 
   // ─── localStorage write-through (DashboardPage vb. için) ─────────────────
-  // Debounce: rapid changes collapse into a single write (100ms — azaltıldı)
+  // Debounce: rapid changes collapse into a single write (100ms)
+  // NOT: data.length === 0 kontrolü KALDIRILDI — silme işleminden sonra boş
+  // array da yazılmalı, aksi hâlde silinen kayıtlar eski session'da görünür.
   const storageWriteTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
-    if (!storageKey || data.length === 0) return;
+    if (!storageKey || !initialLoadDone.current) return; // ilk fetch tamamlanmadan yazma
     if (storageWriteTimer.current) clearTimeout(storageWriteTimer.current);
     storageWriteTimer.current = setTimeout(() => {
       setInStorage(storageKey, data);
