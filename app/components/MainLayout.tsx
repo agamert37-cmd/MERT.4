@@ -413,7 +413,7 @@ export function MainLayout() {
 
   return (
     <Tooltip.Provider delayDuration={200}>
-      <div className="min-h-screen bg-background flex relative overflow-hidden text-foreground">
+      <div className="min-h-screen bg-background flex relative overflow-x-hidden text-foreground">
         {/* Subtle Background Ambient Glow */}
         <div className="fixed inset-0 pointer-events-none z-0">
           <div className="absolute top-[-15%] left-[15%] w-[40%] h-[45%] bg-blue-600/[0.04] rounded-full blur-[160px]" />
@@ -1089,7 +1089,8 @@ export function MainLayout() {
           </header>
 
           {/* Page Content with Animated Transitions */}
-          <main className="flex-1 overflow-y-auto custom-scrollbar lg:pb-0">
+          {/* pb-[calc(3.5rem+env(safe-area-inset-bottom,0px))] = mobile bottom nav alanı için koruma */}
+          <main className="flex-1 overflow-y-auto overflow-x-hidden custom-scrollbar pb-[calc(3.5rem+env(safe-area-inset-bottom,0px))] lg:pb-0">
             <AnimatePresence mode="wait">
               <motion.div
                 key={location.pathname}

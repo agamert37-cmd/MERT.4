@@ -1,4 +1,5 @@
-// Senkronizasyon durum banner'ı — CouchDB bağlantısı koptuğunda görünür
+// Senkronizasyon durum göstergesi — SADECE desktop'ta görünür
+// Mobilde MobileBottomNav içindeki CouchDB göstergesi kullanılır
 import React, { useState } from 'react';
 import { WifiOff, RefreshCw, ChevronDown, ChevronUp } from 'lucide-react';
 import { useCouchDbStatus } from '../contexts/GlobalTableSyncContext';
@@ -10,16 +11,16 @@ export function SyncStatusBanner() {
   const [expanded, setExpanded] = useState(false);
   const navigate = useNavigate();
 
-  // null = henüz bilinmiyor (bağlantı denemeleri devam ediyor) → banner gösterme
+  // null = henüz bilinmiyor → banner gösterme
   // true = bağlı → banner gösterme
-  // false = bağlantı yok → banner göster
+  // false = bağlantı yok → banner göster (SADECE desktop lg+)
   if (couchdbConnected !== false) return null;
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 z-[200] select-none">
-      {/* Ana satır */}
+    // lg:flex — sadece desktop'ta görünür; mobilde MobileBottomNav gösteriyor
+    <div className="hidden lg:block fixed bottom-0 left-0 right-0 z-[200]">
       <div className="bg-amber-500/95 backdrop-blur-sm border-t border-amber-400/50 shadow-2xl">
-        <div className="flex items-center gap-2 px-3 py-2 max-w-4xl mx-auto">
+        <div className="flex items-center gap-2 px-4 py-2 max-w-4xl mx-auto">
           <WifiOff className="w-4 h-4 text-amber-900 flex-shrink-0" />
           <span className="text-amber-900 font-semibold text-xs flex-1">
             Sunucu bağlantısı yok — veriler yalnızca bu cihazda kaydediliyor
@@ -45,10 +46,8 @@ export function SyncStatusBanner() {
             {expanded ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronUp className="w-3.5 h-3.5" />}
           </button>
         </div>
-
-        {/* Genişletilmiş hata detayı */}
         {expanded && couchdbError && (
-          <div className="px-3 pb-2 pt-0 max-w-4xl mx-auto">
+          <div className="px-4 pb-2 max-w-4xl mx-auto">
             <div className="bg-amber-900/10 rounded-lg px-3 py-1.5 text-[10px] font-mono text-amber-900/80 break-all">
               {couchdbError}
             </div>
