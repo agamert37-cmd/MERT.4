@@ -77,6 +77,9 @@ export function CariDetailPage() {
   const cariList = useGlobalTableData<any>('cari_hesaplar');
   const cari = useMemo(() => cariList.find(c => c.id === id), [cariList, id]);
 
+  // Canlı PouchDB fişleri — GlobalTableSyncContext üzerinden reaktif
+  const globalFisler = useGlobalTableData<any>('fisler');
+
   const [editForm, setEditForm] = useState({
     companyName: cari?.companyName || '',
     contactPerson: cari?.contactPerson || '',
@@ -97,7 +100,10 @@ export function CariDetailPage() {
   const companyInfo = useMemo(() => getCompanyInfo(), []);
 
   const allFisler = useMemo(() => {
-    const fisler = getFromStorage<any[]>(StorageKey.FISLER) || [];
+    // PouchDB canlı veri önce, yoksa localStorage fallback
+    const fisler = globalFisler.length > 0
+      ? globalFisler
+      : (getFromStorage<any[]>(StorageKey.FISLER) || []);
     const deletedIds = new Set(
       (getFromStorage<any[]>(StorageKey.DELETED_FISLER) || []).map((f: any) => f.id)
     );
@@ -107,7 +113,7 @@ export function CariDetailPage() {
         (fis.cariId === id || fis.cari_id === id || fis.cari?.id === id)
       )
       .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-  }, [id]);
+  }, [id, globalFisler]);
 
   const fisBalanceMap = useMemo(() => {
     const map = new Map<string, { previousBalance: number; newBalance: number }>();

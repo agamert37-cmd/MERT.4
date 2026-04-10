@@ -1,5 +1,6 @@
 // [AJAN-2 | claude/serene-gagarin | 2026-03-24] Son düzenleyen: Claude Sonnet 4.6
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { useSearchParams } from 'react-router';
 import { FileText, Edit2, Trash2, Search, Calendar, User, DollarSign, X, Download, FileDown, Camera, Eye, Image as ImageIcon, Plus, Package, ArrowUpDown, Save, ZoomIn, Sparkles, RotateCcw, Archive, CalendarDays, ChevronDown, ChevronRight, Layers } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import * as Dialog from '@radix-ui/react-dialog';
@@ -98,6 +99,7 @@ const ImageLightbox = ({ src, onClose }: { src: string; onClose: () => void }) =
 );
 
 export function FisHistoryPage() {
+  const [searchParams, setSearchParams] = useSearchParams();
   const { currentEmployee } = useEmployee();
   const { user } = useAuth();
   const { t } = useLanguage();
@@ -159,6 +161,19 @@ export function FisHistoryPage() {
       }).catch(() => {});
     }
   }, []);
+
+  // URL param ?fisId=... → fiş otomatik seç + düzenleme modalı aç
+  useEffect(() => {
+    const fisId = searchParams.get('fisId');
+    if (!fisId || fisler.length === 0) return;
+    const target = fisler.find(f => f.id === fisId);
+    if (target) {
+      setSelectedFis(target);
+      setIsDetailModalOpen(true);
+      // URL'yi temizle (geri gelince tekrar açmasın)
+      setSearchParams({}, { replace: true });
+    }
+  }, [fisler, searchParams]);
 
   // Filtreleme + siralama
   const filteredFisler = fisler
@@ -455,7 +470,7 @@ export function FisHistoryPage() {
   };
 
   // Fis guncelleme
-  const handleUpdate = () => {
+  const handleUpdate = async () => {
     if (!selectedFis) return;
 
     const isSatisAlis = selectedFis.mode === 'satis' || selectedFis.mode === 'sale' || selectedFis.mode === 'alis';
@@ -538,6 +553,13 @@ export function FisHistoryPage() {
           return { ...cari, balance: cari.balance + balanceDelta };
         });
         setInStorage(StorageKey.CARI_DATA, updatedCariList);
+
+        // PouchDB cari_hesaplar tablosunu da güncelle (CouchDB sync için)
+        try {
+          const db = getDb('cari_hesaplar');
+          const doc = await db.get(selectedFis.cari.id) as any;
+          await db.put({ ...doc, balance: (doc.balance || 0) + balanceDelta });
+        } catch {}
       }
     }
 
