@@ -1,6 +1,7 @@
 // [AJAN-2 | claude/serene-gagarin | 2026-03-25] Son düzenleyen: Claude Opus 4.6
 import { RouterProvider } from 'react-router';
 import { GlobalTableSyncProvider } from './contexts/GlobalTableSyncContext';
+import { SyncStatusBanner } from './components/SyncStatusBanner';
 import { router } from './routes';
 import { Toaster } from 'sonner';
 import { useEffect } from 'react';
@@ -17,6 +18,7 @@ export default function App() {
       {/* Tüm tabloları PouchDB ↔ CouchDB ile senkronize et */}
       <GlobalTableSyncProvider>
         <RouterProvider router={router} />
+        <SyncStatusBanner />
       </GlobalTableSyncProvider>
       <Toaster
         position="top-right"

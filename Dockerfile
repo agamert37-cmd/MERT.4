@@ -46,15 +46,21 @@ server {
     index index.html;
 
     # CouchDB reverse proxy — CORS sorunlarını önler
+    # NOT: HTTP/1.1 + Connection "" olmadan CouchDB _changes long-polling
+    # bağlantıları nginx tarafından erken kapatılır (mobilde sık bağlantı kopuşu).
     location /couchdb/ {
         proxy_pass http://couchdb:5984/;
+        proxy_http_version 1.1;
+        proxy_set_header Connection "";
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
         proxy_set_header Authorization $http_authorization;
         proxy_buffering off;
-        proxy_read_timeout 300s;
+        proxy_read_timeout 600s;
+        proxy_connect_timeout 10s;
+        proxy_send_timeout 60s;
     }
 
     # SPA route yönlendirmesi

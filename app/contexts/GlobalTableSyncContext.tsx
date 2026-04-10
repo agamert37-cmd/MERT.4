@@ -38,6 +38,9 @@ interface GlobalSyncTablesContextValue {
   setTableData: (name: string, data: any[]) => void;
   tableDataRef: React.MutableRefObject<Map<string, any[]>>;
   tableVersions: Record<string, number>;
+  /** CouchDB sunucu bağlantı durumu: null=henüz bilinmiyor, true=bağlı, false=bağlantı yok */
+  couchdbConnected: boolean | null;
+  couchdbError: string | null;
 }
 
 const GlobalSyncTablesContext = createContext<GlobalSyncTablesContextValue>({
@@ -46,10 +49,18 @@ const GlobalSyncTablesContext = createContext<GlobalSyncTablesContextValue>({
   setTableData: () => {},
   tableDataRef: { current: new Map() },
   tableVersions: {},
+  couchdbConnected: null,
+  couchdbError: null,
 });
 
 export function useGlobalSyncTables() {
   return useContext(GlobalSyncTablesContext);
+}
+
+/** CouchDB bağlantı durumunu izle */
+export function useCouchDbStatus() {
+  const { couchdbConnected, couchdbError } = useContext(GlobalSyncTablesContext);
+  return { couchdbConnected, couchdbError };
 }
 
 /**
@@ -143,6 +154,57 @@ export function GlobalTableSyncProvider({ children }: GlobalTableSyncProviderPro
   const tableDataRef = useRef<Map<string, any[]>>(new Map());
   const [tableVersions, setTableVersions] = useState<Record<string, number>>({});
 
+  // ─── CouchDB bağlantı durumu ──────────────────────────────────────────────
+  const [couchdbConnected, setCouchdbConnected] = useState<boolean | null>(null);
+  const [couchdbError, setCouchdbError] = useState<string | null>(null);
+
+  // Hata toast'u sadece bir kez göster (her hatalı sync olayında gösterme)
+  const shownErrorToastRef = useRef(false);
+  const shownConnectedToastRef = useRef(false);
+
+  useEffect(() => {
+    function handleSyncEvent(e: Event) {
+      const { type, errorMsg } = (e as CustomEvent).detail as {
+        type: 'error' | 'connected' | 'paused';
+        dbName: string;
+        errorMsg?: string;
+      };
+
+      if (type === 'error') {
+        setCouchdbConnected(false);
+        setCouchdbError(errorMsg || 'Bağlantı hatası');
+        shownConnectedToastRef.current = false; // Reconnect toast için sıfırla
+        if (!shownErrorToastRef.current) {
+          shownErrorToastRef.current = true;
+          toast.error(
+            '⚠️ CouchDB sunucusuna bağlanılamıyor — veriler yalnızca bu cihazda kaydedilir.',
+            {
+              duration: 6000,
+              description: errorMsg
+                ? `Hata: ${errorMsg.substring(0, 80)}`
+                : 'Sunucu sayfasından bağlantıyı kontrol edin.',
+            }
+          );
+        }
+      } else if (type === 'connected' || type === 'paused') {
+        // paused hatasız = catch-up tamamlandı, bağlantı sağlıklı
+        const wasDisconnected = couchdbConnected === false;
+        setCouchdbConnected(true);
+        setCouchdbError(null);
+        shownErrorToastRef.current = false; // Yeni hata için sıfırla
+        if (wasDisconnected && !shownConnectedToastRef.current) {
+          shownConnectedToastRef.current = true;
+          toast.success('✅ CouchDB bağlantısı yeniden kuruldu — senkronizasyon devam ediyor.', {
+            duration: 4000,
+          });
+        }
+      }
+    }
+
+    window.addEventListener('pouchdb:sync_status', handleSyncEvent);
+    return () => window.removeEventListener('pouchdb:sync_status', handleSyncEvent);
+  }, [couchdbConnected]);
+
   const registerTable = useCallback((status: TableSyncStatus) => {
     setTables(prev => {
       const idx = prev.findIndex(t => t.name === status.name);
@@ -159,7 +221,7 @@ export function GlobalTableSyncProvider({ children }: GlobalTableSyncProviderPro
   }, []);
 
   // PouchDB ↔ CouchDB continuous sync başlat (kademeli — 200ms aralık)
-  // Ağ kurtarma: pouchdb.ts'deki online event listener otomatik restartAllSync() çağırır.
+  // Ağ kurtarma: pouchdb.ts'deki online/visibilitychange listener'ları otomatik restartAllSync() çağırır.
   // Ardından: PouchDB boşsa localStorage'dan otomatik doldur → sync CouchDB'ye iter.
   useEffect(() => {
     startAllSync();
@@ -190,7 +252,10 @@ export function GlobalTableSyncProvider({ children }: GlobalTableSyncProviderPro
   }, []);
 
   return (
-    <GlobalSyncTablesContext.Provider value={{ tables, registerTable, setTableData, tableDataRef, tableVersions }}>
+    <GlobalSyncTablesContext.Provider value={{
+      tables, registerTable, setTableData, tableDataRef, tableVersions,
+      couchdbConnected, couchdbError,
+    }}>
       {TABLE_SYNC_CONFIGS.map(config => (
         <TableSyncNode key={config.tableName} {...config} />
       ))}
