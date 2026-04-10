@@ -77,6 +77,9 @@ export function CariDetailPage() {
   const cariList = useGlobalTableData<any>('cari_hesaplar');
   const cari = useMemo(() => cariList.find(c => c.id === id), [cariList, id]);
 
+  // Canlı PouchDB fişleri — GlobalTableSyncContext üzerinden reaktif
+  const globalFisler = useGlobalTableData<any>('fisler');
+
   const [editForm, setEditForm] = useState({
     companyName: cari?.companyName || '',
     contactPerson: cari?.contactPerson || '',
@@ -97,11 +100,20 @@ export function CariDetailPage() {
   const companyInfo = useMemo(() => getCompanyInfo(), []);
 
   const allFisler = useMemo(() => {
-    const fisler = getFromStorage<any[]>(StorageKey.FISLER) || [];
+    // PouchDB canlı veri önce, yoksa localStorage fallback
+    const fisler = globalFisler.length > 0
+      ? globalFisler
+      : (getFromStorage<any[]>(StorageKey.FISLER) || []);
+    const deletedIds = new Set(
+      (getFromStorage<any[]>(StorageKey.DELETED_FISLER) || []).map((f: any) => f.id)
+    );
     return fisler
-      .filter(fis => fis.cariId === id || fis.cari_id === id || fis.cari?.id === id)
+      .filter(fis =>
+        !deletedIds.has(fis.id) &&
+        (fis.cariId === id || fis.cari_id === id || fis.cari?.id === id)
+      )
       .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-  }, [id]);
+  }, [id, globalFisler]);
 
   const fisBalanceMap = useMemo(() => {
     const map = new Map<string, { previousBalance: number; newBalance: number }>();
@@ -384,6 +396,28 @@ export function CariDetailPage() {
   // ─── FATURA SİSTEMİ ──────────────────────────────────────────────────
   const [invoiceKdvRate, setInvoiceKdvRate] = useState(cari?.defaultKdvRate || 20);
   const [invoicePhoto, setInvoicePhoto] = useState<string>('');
+
+  const compressImage = (file: File, maxWidth = 1200, quality = 0.75): Promise<string> =>
+    new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onerror = reject;
+      reader.onloadend = () => {
+        const img = new Image();
+        img.onerror = reject;
+        img.onload = () => {
+          let { width, height } = img;
+          if (width > maxWidth) { height = Math.round((height * maxWidth) / width); width = maxWidth; }
+          const canvas = document.createElement('canvas');
+          canvas.width = width; canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          if (!ctx) { reject(new Error('Canvas yok')); return; }
+          ctx.drawImage(img, 0, 0, width, height);
+          resolve(canvas.toDataURL('image/jpeg', quality));
+        };
+        img.src = reader.result as string;
+      };
+      reader.readAsDataURL(file);
+    });
 
   const updateFisInStorage = (fisId: string, updater: (fis: any) => any) => {
     const allFis = getFromStorage<any[]>(StorageKey.FISLER) || [];
@@ -853,11 +887,7 @@ export function CariDetailPage() {
                             <span className="text-xs text-gray-400">{invoicePhoto ? 'Fotoğraf yüklendi ✓' : 'Fotoğraf yükle...'}</span>
                             <input type="file" accept="image/*" className="hidden" onChange={(e) => {
                               const file = e.target.files?.[0];
-                              if (file) {
-                                const reader = new FileReader();
-                                reader.onload = (ev) => setInvoicePhoto(ev.target?.result as string);
-                                reader.readAsDataURL(file);
-                              }
+                              if (file) compressImage(file).then(setInvoicePhoto).catch(() => toast.error('Fotoğraf yüklenemedi'));
                             }} />
                           </label>
                           {invoicePhoto && <img src={invoicePhoto} alt="preview" className="mt-2 max-h-24 rounded-lg border border-white/10" />}

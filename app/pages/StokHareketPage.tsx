@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
+import { useNavigate } from 'react-router';
 import {
   ArrowDownCircle,
   ArrowUpCircle,
@@ -12,6 +13,7 @@ import {
   X,
   History,
   Tag,
+  ExternalLink,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { staggerContainer, gridCard, hover } from '../utils/animations';
@@ -45,6 +47,7 @@ interface StokHareket {
   cari: string;
   employee: string;
   fisMode: string;
+  fisId?: string;               // gerçek fiş ID'si (navigate için)
   tag?: 'eski_stok' | 'manuel';  // manuel/geçmiş girişler için etiket
 }
 
@@ -65,6 +68,7 @@ interface StokGiris {
 }
 
 export function StokHareketPage() {
+  const navigate = useNavigate();
   const { currentEmployee } = useEmployee();
   const { user } = useAuth();
   const { t } = useLanguage();
@@ -142,6 +146,7 @@ export function StokHareketPage() {
           cari: cariName,
           employee: empName,
           fisMode: fis.mode || '-',
+          fisId: fis.id,
         });
       });
     });
@@ -528,11 +533,20 @@ export function StokHareketPage() {
         emptyMessage="Seçili filtrelere uygun stok hareketi bulunamadı"
         accentColor="#3b82f6"
         renderExpanded={(h) => (
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs items-end">
             <div><span className="text-muted-foreground/60 block mb-0.5">Personel</span><span className="text-foreground font-medium">{h.employee}</span></div>
             <div><span className="text-muted-foreground/60 block mb-0.5">Fiş No</span><span className="text-foreground font-mono">#{h.source}</span></div>
             <div><span className="text-muted-foreground/60 block mb-0.5">İşlem Modu</span><span className="text-foreground">{h.fisMode}</span></div>
             <div><span className="text-muted-foreground/60 block mb-0.5">Birim</span><span className="text-foreground">{h.unit}</span></div>
+            {h.fisId && (
+              <button
+                onClick={(e) => { e.stopPropagation(); navigate(`/fis-gecmisi?fisId=${h.fisId}`); }}
+                className="col-span-2 sm:col-span-4 flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600/15 hover:bg-blue-600/30 border border-blue-500/25 text-blue-400 text-[11px] font-semibold transition-all w-fit mt-1"
+              >
+                <ExternalLink className="w-3 h-3" />
+                Fişi Görüntüle / Düzenle
+              </button>
+            )}
           </div>
         )}
         footer={filteredHareketler.length > 0 ? (

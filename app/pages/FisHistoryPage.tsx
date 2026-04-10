@@ -1,6 +1,7 @@
 // [AJAN-2 | claude/serene-gagarin | 2026-03-24] Son düzenleyen: Claude Sonnet 4.6
-import React, { useState, useEffect, useMemo } from 'react';
-import { FileText, Edit2, Trash2, Search, Calendar, User, DollarSign, X, Download, FileDown, Camera, Eye, Image as ImageIcon, Plus, Package, ArrowUpDown, Save, ZoomIn, Sparkles, RotateCcw, Archive, CalendarDays, ChevronDown, ChevronRight, Layers } from 'lucide-react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { useSearchParams } from 'react-router';
+import { FileText, Edit2, Trash2, Search, Calendar, User, DollarSign, X, Download, FileDown, Camera, Eye, Image as ImageIcon, Plus, Package, ArrowUpDown, Save, ZoomIn, Sparkles, RotateCcw, Archive, CalendarDays, ChevronDown, ChevronRight, Layers, Printer } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import * as Dialog from '@radix-ui/react-dialog';
 import { toast } from 'sonner';
@@ -19,6 +20,7 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { getCompanyInfo } from './SettingsPage';
 import { addPDFHeader, addPDFFooter, addReportInfoBox, tableStyles } from '../utils/reportGenerator';
+import { thermalPrint } from '../utils/thermalPrint';
 
 // Turkce karakter sanitize
 const sanitizePDF = (str: any) => {
@@ -98,6 +100,7 @@ const ImageLightbox = ({ src, onClose }: { src: string; onClose: () => void }) =
 );
 
 export function FisHistoryPage() {
+  const [searchParams, setSearchParams] = useSearchParams();
   const { currentEmployee } = useEmployee();
   const { user } = useAuth();
   const { t } = useLanguage();
@@ -159,6 +162,19 @@ export function FisHistoryPage() {
       }).catch(() => {});
     }
   }, []);
+
+  // URL param ?fisId=... → fiş otomatik seç + düzenleme modalı aç
+  useEffect(() => {
+    const fisId = searchParams.get('fisId');
+    if (!fisId || fisler.length === 0) return;
+    const target = fisler.find(f => f.id === fisId);
+    if (target) {
+      setSelectedFis(target);
+      setIsDetailModalOpen(true);
+      // URL'yi temizle (geri gelince tekrar açmasın)
+      setSearchParams({}, { replace: true });
+    }
+  }, [fisler, searchParams]);
 
   // Filtreleme + siralama
   const filteredFisler = fisler
@@ -379,19 +395,31 @@ export function FisHistoryPage() {
     setIsDetailModalOpen(true);
   };
 
-  const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      if (file.size > 2 * 1024 * 1024) {
-        toast.error('Dosya boyutu cok buyuk (Max: 2MB)');
-        return;
-      }
+  const compressImage = (file: File, maxWidth = 1200, quality = 0.75): Promise<string> =>
+    new Promise((resolve, reject) => {
       const reader = new FileReader();
+      reader.onerror = reject;
       reader.onloadend = () => {
-        setPhotoPreview(reader.result as string);
+        const img = new Image();
+        img.onerror = reject;
+        img.onload = () => {
+          let { width, height } = img;
+          if (width > maxWidth) { height = Math.round((height * maxWidth) / width); width = maxWidth; }
+          const canvas = document.createElement('canvas');
+          canvas.width = width; canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          if (!ctx) { reject(new Error('Canvas yok')); return; }
+          ctx.drawImage(img, 0, 0, width, height);
+          resolve(canvas.toDataURL('image/jpeg', quality));
+        };
+        img.src = reader.result as string;
       };
       reader.readAsDataURL(file);
-    }
+    });
+
+  const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) compressImage(file).then(setPhotoPreview).catch(() => toast.error('Fotoğraf yüklenemedi'));
   };
 
   // ── Edit: urun guncelle ──
@@ -443,7 +471,7 @@ export function FisHistoryPage() {
   };
 
   // Fis guncelleme
-  const handleUpdate = () => {
+  const handleUpdate = async () => {
     if (!selectedFis) return;
 
     const isSatisAlis = selectedFis.mode === 'satis' || selectedFis.mode === 'sale' || selectedFis.mode === 'alis';
@@ -496,6 +524,17 @@ export function FisHistoryPage() {
         return { ...stock, currentStock: stock.currentStock + delta };
       });
       setInStorage(StorageKey.STOK_DATA, updatedStokList);
+
+      // PouchDB urunler tablosunu da güncelle (CouchDB sync için)
+      updatedStokList.forEach(async (product: any, i: number) => {
+        const orig = existingStokList[i];
+        if (!orig || product.currentStock === orig.currentStock) return;
+        try {
+          const db = getDb('urunler');
+          const doc = await db.get(product.id) as any;
+          await db.put({ ...doc, current_stock: product.currentStock });
+        } catch {}
+      });
     }
 
     // ─── Cari bakiyesi delta güncelle ─────────────────────────
@@ -515,6 +554,13 @@ export function FisHistoryPage() {
           return { ...cari, balance: cari.balance + balanceDelta };
         });
         setInStorage(StorageKey.CARI_DATA, updatedCariList);
+
+        // PouchDB cari_hesaplar tablosunu da güncelle (CouchDB sync için)
+        try {
+          const db = getDb('cari_hesaplar');
+          const doc = await db.get(selectedFis.cari.id) as any;
+          await db.put({ ...doc, balance: (doc.balance || 0) + balanceDelta });
+        } catch {}
       }
     }
 
@@ -562,6 +608,11 @@ export function FisHistoryPage() {
     if (mode === 'satis' || mode === 'sale') return 'green';
     if (mode === 'alis') return 'blue';
     return 'red';
+  };
+
+  // ════════════ Termal Yazıcı Baskı ════════════
+  const handleThermalPrint = (fis: Fis) => {
+    thermalPrint(fis, getCompanyInfo());
   };
 
   // ════════════ PDF - Tek Fis (Detayli Adisyon) ════════════
@@ -1798,6 +1849,14 @@ export function FisHistoryPage() {
                                     </motion.button>
                                     <motion.button
                                       whileTap={{ scale: 0.85 }}
+                                      onClick={() => handleThermalPrint(fis)}
+                                      className="hidden sm:block p-1.5 rounded-lg bg-emerald-600/15 hover:bg-emerald-600/30 text-emerald-400 hover:text-emerald-300 transition-all"
+                                      title="Termal Yazıcı"
+                                    >
+                                      <Printer className="w-3.5 h-3.5" />
+                                    </motion.button>
+                                    <motion.button
+                                      whileTap={{ scale: 0.85 }}
                                       onClick={() => handleDownloadSingleFisPDF(fis)}
                                       className="hidden sm:block p-1.5 rounded-lg bg-purple-600/15 hover:bg-purple-600/30 text-purple-400 hover:text-purple-300 transition-all"
                                       title="PDF Indir"
@@ -1953,6 +2012,15 @@ export function FisHistoryPage() {
                           title="Detay"
                         >
                           <Eye className="w-4 h-4" />
+                        </motion.button>
+                        <motion.button
+                          whileHover={{ scale: 1.1 }}
+                          whileTap={{ scale: 0.9 }}
+                          onClick={() => handleThermalPrint(fis)}
+                          className="p-2 rounded-lg bg-emerald-600/15 hover:bg-emerald-600/30 text-emerald-400 hover:text-emerald-300 transition-all"
+                          title="Termal Yazıcı"
+                        >
+                          <Printer className="w-4 h-4" />
                         </motion.button>
                         <motion.button
                           whileHover={{ scale: 1.1 }}
@@ -2344,9 +2412,31 @@ export function FisHistoryPage() {
                     </Dialog.Description>
                   </div>
                 </div>
-                <Dialog.Close className="p-2 hover:bg-secondary/50 active:bg-secondary/70 rounded-xl transition-colors">
-                  <X className="w-5 h-5 text-muted-foreground" />
-                </Dialog.Close>
+                <div className="flex items-center gap-1.5">
+                  {selectedFis && (
+                    <>
+                      <button
+                        onClick={() => handleThermalPrint(selectedFis)}
+                        className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-emerald-600/15 hover:bg-emerald-600/30 text-emerald-400 text-xs font-semibold transition-all"
+                        title="Termal Yazıcı ile Yazdır"
+                      >
+                        <Printer className="w-3.5 h-3.5" />
+                        <span className="hidden sm:inline">Termal</span>
+                      </button>
+                      <button
+                        onClick={() => handleDownloadSingleFisPDF(selectedFis)}
+                        className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-purple-600/15 hover:bg-purple-600/30 text-purple-400 text-xs font-semibold transition-all"
+                        title="A4 PDF İndir"
+                      >
+                        <Download className="w-3.5 h-3.5" />
+                        <span className="hidden sm:inline">A4 PDF</span>
+                      </button>
+                    </>
+                  )}
+                  <Dialog.Close className="p-2 hover:bg-secondary/50 active:bg-secondary/70 rounded-xl transition-colors">
+                    <X className="w-5 h-5 text-muted-foreground" />
+                  </Dialog.Close>
+                </div>
               </div>
 
               {selectedFis && (

@@ -653,14 +653,33 @@ export function FaturaPage() {
     return faturaMovements.sort((a, b) => b.movements.length - a.movements.length);
   }, [faturalar, stokList]);
 
-  // Photo upload handler
+  // Photo upload handler — canvas sıkıştırmalı
+  const compressImage = (file: File, maxWidth = 1200, quality = 0.75): Promise<string> =>
+    new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onerror = reject;
+      reader.onloadend = () => {
+        const img = new Image();
+        img.onerror = reject;
+        img.onload = () => {
+          let { width, height } = img;
+          if (width > maxWidth) { height = Math.round((height * maxWidth) / width); width = maxWidth; }
+          const canvas = document.createElement('canvas');
+          canvas.width = width; canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          if (!ctx) { reject(new Error('Canvas yok')); return; }
+          ctx.drawImage(img, 0, 0, width, height);
+          resolve(canvas.toDataURL('image/jpeg', quality));
+        };
+        img.src = reader.result as string;
+      };
+      reader.readAsDataURL(file);
+    });
+
   const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (file.size > 10 * 1024 * 1024) { toast.error(t('fatura.err.fileTooBig')); return; }
-    const reader = new FileReader();
-    reader.onload = (ev) => setForm(f => ({ ...f, photo: ev.target?.result as string }));
-    reader.readAsDataURL(file);
+    compressImage(file).then(photo => setForm(f => ({ ...f, photo }))).catch(() => toast.error(t('fatura.err.fileTooBig')));
   };
 
   return (
