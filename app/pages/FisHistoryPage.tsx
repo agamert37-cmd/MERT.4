@@ -1,7 +1,7 @@
 // [AJAN-2 | claude/serene-gagarin | 2026-03-24] Son düzenleyen: Claude Sonnet 4.6
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useSearchParams } from 'react-router';
-import { FileText, Edit2, Trash2, Search, Calendar, User, DollarSign, X, Download, FileDown, Camera, Eye, Image as ImageIcon, Plus, Package, ArrowUpDown, Save, ZoomIn, Sparkles, RotateCcw, Archive, CalendarDays, ChevronDown, ChevronRight, Layers } from 'lucide-react';
+import { FileText, Edit2, Trash2, Search, Calendar, User, DollarSign, X, Download, FileDown, Camera, Eye, Image as ImageIcon, Plus, Package, ArrowUpDown, Save, ZoomIn, Sparkles, RotateCcw, Archive, CalendarDays, ChevronDown, ChevronRight, Layers, Printer } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import * as Dialog from '@radix-ui/react-dialog';
 import { toast } from 'sonner';
@@ -20,6 +20,7 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { getCompanyInfo } from './SettingsPage';
 import { addPDFHeader, addPDFFooter, addReportInfoBox, tableStyles } from '../utils/reportGenerator';
+import { thermalPrint } from '../utils/thermalPrint';
 
 // Turkce karakter sanitize
 const sanitizePDF = (str: any) => {
@@ -607,6 +608,11 @@ export function FisHistoryPage() {
     if (mode === 'satis' || mode === 'sale') return 'green';
     if (mode === 'alis') return 'blue';
     return 'red';
+  };
+
+  // ════════════ Termal Yazıcı Baskı ════════════
+  const handleThermalPrint = (fis: Fis) => {
+    thermalPrint(fis, getCompanyInfo());
   };
 
   // ════════════ PDF - Tek Fis (Detayli Adisyon) ════════════
@@ -1843,6 +1849,14 @@ export function FisHistoryPage() {
                                     </motion.button>
                                     <motion.button
                                       whileTap={{ scale: 0.85 }}
+                                      onClick={() => handleThermalPrint(fis)}
+                                      className="hidden sm:block p-1.5 rounded-lg bg-emerald-600/15 hover:bg-emerald-600/30 text-emerald-400 hover:text-emerald-300 transition-all"
+                                      title="Termal Yazıcı"
+                                    >
+                                      <Printer className="w-3.5 h-3.5" />
+                                    </motion.button>
+                                    <motion.button
+                                      whileTap={{ scale: 0.85 }}
                                       onClick={() => handleDownloadSingleFisPDF(fis)}
                                       className="hidden sm:block p-1.5 rounded-lg bg-purple-600/15 hover:bg-purple-600/30 text-purple-400 hover:text-purple-300 transition-all"
                                       title="PDF Indir"
@@ -1998,6 +2012,15 @@ export function FisHistoryPage() {
                           title="Detay"
                         >
                           <Eye className="w-4 h-4" />
+                        </motion.button>
+                        <motion.button
+                          whileHover={{ scale: 1.1 }}
+                          whileTap={{ scale: 0.9 }}
+                          onClick={() => handleThermalPrint(fis)}
+                          className="p-2 rounded-lg bg-emerald-600/15 hover:bg-emerald-600/30 text-emerald-400 hover:text-emerald-300 transition-all"
+                          title="Termal Yazıcı"
+                        >
+                          <Printer className="w-4 h-4" />
                         </motion.button>
                         <motion.button
                           whileHover={{ scale: 1.1 }}
@@ -2389,9 +2412,31 @@ export function FisHistoryPage() {
                     </Dialog.Description>
                   </div>
                 </div>
-                <Dialog.Close className="p-2 hover:bg-secondary/50 active:bg-secondary/70 rounded-xl transition-colors">
-                  <X className="w-5 h-5 text-muted-foreground" />
-                </Dialog.Close>
+                <div className="flex items-center gap-1.5">
+                  {selectedFis && (
+                    <>
+                      <button
+                        onClick={() => handleThermalPrint(selectedFis)}
+                        className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-emerald-600/15 hover:bg-emerald-600/30 text-emerald-400 text-xs font-semibold transition-all"
+                        title="Termal Yazıcı ile Yazdır"
+                      >
+                        <Printer className="w-3.5 h-3.5" />
+                        <span className="hidden sm:inline">Termal</span>
+                      </button>
+                      <button
+                        onClick={() => handleDownloadSingleFisPDF(selectedFis)}
+                        className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-purple-600/15 hover:bg-purple-600/30 text-purple-400 text-xs font-semibold transition-all"
+                        title="A4 PDF İndir"
+                      >
+                        <Download className="w-3.5 h-3.5" />
+                        <span className="hidden sm:inline">A4 PDF</span>
+                      </button>
+                    </>
+                  )}
+                  <Dialog.Close className="p-2 hover:bg-secondary/50 active:bg-secondary/70 rounded-xl transition-colors">
+                    <X className="w-5 h-5 text-muted-foreground" />
+                  </Dialog.Close>
+                </div>
               </div>
 
               {selectedFis && (
