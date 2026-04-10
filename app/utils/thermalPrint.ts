@@ -106,10 +106,27 @@ function buildReceiptHtml(fis: any, company: CompanyInfo): string {
     }
   }
 
-  // Cari bakiye (varsa)
-  if (fis.cari?.balance !== undefined) {
+  // Cari bakiye (varsa) — önceki + bu işlem + yeni bakiye
+  if (!isGider && fis.cari?.id && fis.cari?.balance !== undefined) {
+    const currentBalance: number = fis.cari.balance;         // Bu işlem sonrası bakiye
+    const fisEffect = total - paid;                           // Bu işlemin bakiyeye etkisi (+borç)
+    const prevBalance = currentBalance - fisEffect;           // Bu işlem öncesi bakiye
+
     rows.push(`<tr class="divider"><td colspan="4"><hr/></td></tr>`);
-    rows.push(`<tr class="cari-balance"><td colspan="3">Cari Bakiye</td><td class="money ${fis.cari.balance > 0 ? 'debt' : 'credit'}">${fmtMoney(Math.abs(fis.cari.balance))} ${fis.cari.balance > 0 ? '(Borç)' : '(Alacak)'}</td></tr>`);
+    rows.push(`<tr class="section-header"><td colspan="4">CARİ BAKİYE</td></tr>`);
+
+    // Önceki bakiye (eğer sıfırdan farklıysa)
+    if (Math.abs(prevBalance) > 0.01) {
+      rows.push(`<tr class="cari-balance"><td colspan="3">Önceki Bakiye</td><td class="money ${prevBalance > 0 ? 'debt' : 'credit'}">${fmtMoney(Math.abs(prevBalance))} ${prevBalance > 0 ? '(Borç)' : '(Alacak)'}</td></tr>`);
+    }
+
+    // Bu işlemin etkisi
+    if (Math.abs(fisEffect) > 0.01) {
+      rows.push(`<tr class="cari-balance"><td colspan="3">${isSatis ? 'Bu Satış' : 'Bu Alış'}${paid > 0 ? ' - Ödeme' : ''}</td><td class="money ${fisEffect > 0 ? 'debt' : 'credit'}">${fisEffect > 0 ? '+' : '-'}${fmtMoney(Math.abs(fisEffect))}</td></tr>`);
+    }
+
+    // Yeni (güncel) bakiye — her zaman göster
+    rows.push(`<tr class="total-row cari-new-balance"><td colspan="3"><b>Güncel Bakiye</b></td><td class="money ${currentBalance > 0.01 ? 'debt' : currentBalance < -0.01 ? 'credit' : ''}"><b>${currentBalance > 0.01 ? fmtMoney(currentBalance) + ' (Borç)' : currentBalance < -0.01 ? fmtMoney(Math.abs(currentBalance)) + ' (Alacak)' : 'Hesap Kapalı'}</b></td></tr>`);
   }
 
   const fisNo = fis.fisNo || fis.id?.substring(0, 8)?.toUpperCase() || '-';
@@ -202,6 +219,8 @@ function buildReceiptHtml(fis: any, company: CompanyInfo): string {
   .items-table .debt { color: #c00; }
   .items-table .credit { color: #060; }
   .items-table .sub-row td { font-size: 9px; }
+  .items-table .cari-new-balance td { border-top: 1px solid #000; padding-top: 3px; font-size: 11px; }
+  .items-table .section-header td { font-size: 9px; text-transform: uppercase; color: #555; border-bottom: 1px solid #ccc; padding-top: 4px; }
 
   .footer {
     text-align: center;
