@@ -379,19 +379,31 @@ export function FisHistoryPage() {
     setIsDetailModalOpen(true);
   };
 
-  const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      if (file.size > 2 * 1024 * 1024) {
-        toast.error('Dosya boyutu cok buyuk (Max: 2MB)');
-        return;
-      }
+  const compressImage = (file: File, maxWidth = 1200, quality = 0.75): Promise<string> =>
+    new Promise((resolve, reject) => {
       const reader = new FileReader();
+      reader.onerror = reject;
       reader.onloadend = () => {
-        setPhotoPreview(reader.result as string);
+        const img = new Image();
+        img.onerror = reject;
+        img.onload = () => {
+          let { width, height } = img;
+          if (width > maxWidth) { height = Math.round((height * maxWidth) / width); width = maxWidth; }
+          const canvas = document.createElement('canvas');
+          canvas.width = width; canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          if (!ctx) { reject(new Error('Canvas yok')); return; }
+          ctx.drawImage(img, 0, 0, width, height);
+          resolve(canvas.toDataURL('image/jpeg', quality));
+        };
+        img.src = reader.result as string;
       };
       reader.readAsDataURL(file);
-    }
+    });
+
+  const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) compressImage(file).then(setPhotoPreview).catch(() => toast.error('Fotoğraf yüklenemedi'));
   };
 
   // ── Edit: urun guncelle ──
@@ -496,6 +508,17 @@ export function FisHistoryPage() {
         return { ...stock, currentStock: stock.currentStock + delta };
       });
       setInStorage(StorageKey.STOK_DATA, updatedStokList);
+
+      // PouchDB urunler tablosunu da güncelle (CouchDB sync için)
+      updatedStokList.forEach(async (product: any, i: number) => {
+        const orig = existingStokList[i];
+        if (!orig || product.currentStock === orig.currentStock) return;
+        try {
+          const db = getDb('urunler');
+          const doc = await db.get(product.id) as any;
+          await db.put({ ...doc, current_stock: product.currentStock });
+        } catch {}
+      });
     }
 
     // ─── Cari bakiyesi delta güncelle ─────────────────────────

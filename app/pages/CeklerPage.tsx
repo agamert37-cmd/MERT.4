@@ -541,13 +541,35 @@ export function CeklerPage() {
     toast.success(t('checks.exportSuccess'));
   };
 
+  // Fotoğrafı canvas ile sıkıştır — localStorage dolmaması için (max 1200px, %75 JPEG)
+  const compressImage = (file: File, maxWidth = 1200, quality = 0.75): Promise<string> =>
+    new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onerror = reject;
+      reader.onloadend = () => {
+        const img = new Image();
+        img.onerror = reject;
+        img.onload = () => {
+          let { width, height } = img;
+          if (width > maxWidth) { height = Math.round((height * maxWidth) / width); width = maxWidth; }
+          const canvas = document.createElement('canvas');
+          canvas.width = width; canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          if (!ctx) { reject(new Error('Canvas yok')); return; }
+          ctx.drawImage(img, 0, 0, width, height);
+          resolve(canvas.toDataURL('image/jpeg', quality));
+        };
+        img.src = reader.result as string;
+      };
+      reader.readAsDataURL(file);
+    });
+
   const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>, setter: (val: string | null) => void) => {
     const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => setter(reader.result as string);
-      reader.readAsDataURL(file);
-    }
+    if (!file) return;
+    compressImage(file)
+      .then(setter)
+      .catch(() => toast.error('Fotoğraf yüklenemedi'));
   };
 
   // Tema renkleri
