@@ -103,6 +103,7 @@ export function KasaPage() {
 
   const personnelList = useGlobalTableData<any>('personeller');
   const vehicles = useGlobalTableData<any>('araclar');
+  const globalFisler = useGlobalTableData<any>('fisler');
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalType, setModalType] = useState<'Gelir' | 'Gider'>('Gelir');
@@ -148,7 +149,7 @@ export function KasaPage() {
 
   const kasaGunSonuValidation = useMemo(() => {
     const todayISO = new Date().toISOString().split('T')[0];
-    const rawFisler = getFromStorage<any[]>(StorageKey.FISLER) || [];
+    const rawFisler = globalFisler.length > 0 ? globalFisler : (getFromStorage<any[]>(StorageKey.FISLER) || []);
 
     const kasaTodayIncome = todayIncome;
     const kasaTodayExpense = todayExpense;
@@ -168,7 +169,7 @@ export function KasaPage() {
     }, 0);
 
     return { kasaTodayIncome, kasaTodayExpense, kasaNet, gunSonuSalesTotal, isDayClosed, totalAssets };
-  }, [todayIncome, todayExpense, isDayClosed, totalAssets]);
+  }, [todayIncome, todayExpense, isDayClosed, totalAssets, globalFisler]);
 
   const handleOpenModal = (type: 'Gelir' | 'Gider') => {
     setModalType(type);

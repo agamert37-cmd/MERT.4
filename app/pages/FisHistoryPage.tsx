@@ -288,6 +288,24 @@ export function FisHistoryPage() {
           });
         }
 
+        // ─── Gider → Kasa kaydını sil ────────────────────────────
+        if (fisToDelete.mode === 'gider') {
+          const kasaList = getFromStorage<any[]>(StorageKey.KASA_DATA) || [];
+          const kasaToDelete = kasaList.filter(k => k.receiptNo === id || k.fisId === id);
+          if (kasaToDelete.length > 0) {
+            const updatedKasa = kasaList.filter(k => k.receiptNo !== id && k.fisId !== id);
+            setInStorage(StorageKey.KASA_DATA, updatedKasa);
+            // PouchDB kasa_islemleri tablosundan da kaldır
+            kasaToDelete.forEach(async (entry: any) => {
+              try {
+                const db = getDb('kasa_islemleri');
+                const doc = await db.get(entry.id) as any;
+                await db.remove(doc._id, doc._rev);
+              } catch {}
+            });
+          }
+        }
+
         // ─── Cari bakiyesi geri al ───────────────────────────────
         if (isSatisAlis && fisToDelete.cari?.id) {
           const cariList = getFromStorage<any[]>(StorageKey.CARI_DATA) || [];
@@ -311,6 +329,17 @@ export function FisHistoryPage() {
             };
           });
           setInStorage(StorageKey.CARI_DATA, updatedCariList);
+          // PouchDB cari_hesaplar güncelle (cross-device / mobile sync için)
+          const updatedCari = updatedCariList.find((c: any) => c.id === fisToDelete.cari.id);
+          if (updatedCari) {
+            (async () => {
+              try {
+                const db = getDb('cari_hesaplar');
+                const doc = await db.get(fisToDelete.cari.id) as any;
+                await db.put({ ...doc, balance: updatedCari.balance, transactionHistory: updatedCari.transactionHistory });
+              } catch {}
+            })();
+          }
         }
 
         // ─── Silinen fişi geçmişe ekle ─────────────────────────

@@ -20,6 +20,7 @@ import { logActivity } from '../utils/activityLogger';
 import { getPagePermissions } from '../utils/permissions';
 import { generateCariDetailPDF, generateSingleFisPDF } from '../utils/cariDetailPdf';
 import { useTableSync } from '../hooks/useTableSync';
+import { getDb } from '../lib/pouchdb';
 import { useModuleBus } from '../hooks/useModuleBus';
 import { useGlobalTableData } from '../contexts/GlobalTableSyncContext';
 import { cariToDb, cariFromDb } from './CariPage';
@@ -55,7 +56,7 @@ export function CariDetailPage() {
 
   // Güvenlik kontrolleri (RBAC) - merkezi utility
   const { canEdit } = getPagePermissions(user, currentEmployee, 'cariler');
-  const { emit } = useModuleBus();
+  const { emit, on } = useModuleBus();
   
   const [selectedExtract, setSelectedExtract] = useState<RealDailyExtract | null>(null);
   const [isOrderDetailOpen, setIsOrderDetailOpen] = useState(false);
@@ -99,21 +100,28 @@ export function CariDetailPage() {
 
   const companyInfo = useMemo(() => getCompanyInfo(), []);
 
+  // Silinen fişler için reaktif Set — fis:deleted event'i gelince anında güncellenir
+  const [deletedFisIds, setDeletedFisIds] = useState<Set<string>>(
+    () => new Set((getFromStorage<any[]>(StorageKey.DELETED_FISLER) || []).map((f: any) => f.id))
+  );
+  useEffect(() => {
+    return on('fis:deleted', ({ fisId }: any) => {
+      setDeletedFisIds(prev => new Set([...prev, fisId]));
+    });
+  }, [on]);
+
   const allFisler = useMemo(() => {
     // PouchDB canlı veri önce, yoksa localStorage fallback
     const fisler = globalFisler.length > 0
       ? globalFisler
       : (getFromStorage<any[]>(StorageKey.FISLER) || []);
-    const deletedIds = new Set(
-      (getFromStorage<any[]>(StorageKey.DELETED_FISLER) || []).map((f: any) => f.id)
-    );
     return fisler
       .filter(fis =>
-        !deletedIds.has(fis.id) &&
+        !deletedFisIds.has(fis.id) &&
         (fis.cariId === id || fis.cari_id === id || fis.cari?.id === id)
       )
       .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-  }, [id, globalFisler]);
+  }, [id, globalFisler, deletedFisIds]);
 
   const fisBalanceMap = useMemo(() => {
     const map = new Map<string, { previousBalance: number; newBalance: number }>();
@@ -421,11 +429,20 @@ export function CariDetailPage() {
 
   const updateFisInStorage = (fisId: string, updater: (fis: any) => any) => {
     const allFis = getFromStorage<any[]>(StorageKey.FISLER) || [];
-    const updatedFis = allFis.find(f => f.id === fisId);
     const updated = allFis.map(f => f.id === fisId ? updater(f) : f);
     setInStorage(StorageKey.FISLER, updated);
     window.dispatchEvent(new Event('storage_update'));
-    // Sync handled by useTableSync
+    // PouchDB güncelle — cross-device sync için
+    const updatedFis = updated.find(f => f.id === fisId);
+    if (updatedFis) {
+      (async () => {
+        try {
+          const db = getDb('fisler');
+          const doc = await db.get(fisId) as any;
+          await db.put({ ...doc, ...updatedFis, _id: doc._id, _rev: doc._rev });
+        } catch {}
+      })();
+    }
   };
 
   const handleAddInvoice = (fisId: string) => {
