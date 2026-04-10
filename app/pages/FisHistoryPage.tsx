@@ -329,6 +329,17 @@ export function FisHistoryPage() {
             };
           });
           setInStorage(StorageKey.CARI_DATA, updatedCariList);
+          // PouchDB cari_hesaplar güncelle (cross-device / mobile sync için)
+          const updatedCari = updatedCariList.find((c: any) => c.id === fisToDelete.cari.id);
+          if (updatedCari) {
+            (async () => {
+              try {
+                const db = getDb('cari_hesaplar');
+                const doc = await db.get(fisToDelete.cari.id) as any;
+                await db.put({ ...doc, balance: updatedCari.balance, transactionHistory: updatedCari.transactionHistory });
+              } catch {}
+            })();
+          }
         }
 
         // ─── Silinen fişi geçmişe ekle ─────────────────────────
