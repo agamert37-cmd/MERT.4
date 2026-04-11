@@ -496,13 +496,13 @@ export function CariDetailPage() {
     <div className="p-3 sm:p-6 lg:p-10 space-y-4 sm:space-y-6 lg:space-y-8 bg-background min-h-screen text-white font-sans pb-4 sm:pb-6">
       
       {/* ─── Header ─── */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
-        <div className="flex items-center gap-4">
-          <button onClick={() => navigate('/cari')} className="w-12 h-12 flex items-center justify-center bg-white/5 hover:bg-white/10 border border-white/10 rounded-2xl transition-all">
-            <ArrowLeft className="w-6 h-6 text-gray-400" />
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-6">
+        <div className="flex items-center gap-3 sm:gap-4">
+          <button onClick={() => navigate('/cari')} className="w-10 h-10 sm:w-12 sm:h-12 flex items-center justify-center bg-white/5 hover:bg-white/10 border border-white/10 rounded-2xl transition-all shrink-0">
+            <ArrowLeft className="w-5 h-5 sm:w-6 sm:h-6 text-gray-400" />
           </button>
-          <div>
-            <h1 className="text-3xl lg:text-4xl font-extrabold tracking-tight">{cari.companyName}</h1>
+          <div className="min-w-0">
+            <h1 className="text-xl sm:text-3xl lg:text-4xl font-extrabold tracking-tight truncate">{cari.companyName}</h1>
             <p className="text-gray-400 mt-1 flex items-center gap-2">
               <span className={`w-2 h-2 rounded-full ${cari.type === 'Toptancı' ? 'bg-orange-500' : 'bg-blue-500'}`}></span>
               Müşteri Cari Özeti
@@ -514,27 +514,27 @@ export function CariDetailPage() {
             </p>
           </div>
         </div>
-        <div className="flex gap-3 w-full md:w-auto">
-          <button onClick={handleOpenEditModal} className="flex-1 md:flex-none flex items-center justify-center gap-2 px-5 py-3 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl font-bold transition-all">
+        <div className="flex gap-2 sm:gap-3 w-full sm:w-auto">
+          <button onClick={handleOpenEditModal} className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 sm:px-5 py-2.5 sm:py-3 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl font-bold transition-all text-sm sm:text-base">
             <Edit className="w-4 h-4" /> Düzenle
           </button>
-          <button onClick={() => handleExportPDF()} className="flex-1 md:flex-none flex items-center justify-center gap-2 px-5 py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-xl font-bold transition-all shadow-lg shadow-blue-600/20">
+          <button onClick={() => handleExportPDF()} className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 sm:px-5 py-2.5 sm:py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-xl font-bold transition-all shadow-lg shadow-blue-600/20 text-sm sm:text-base">
             <FileArchive className="w-4 h-4" /> Ekstre Al
           </button>
         </div>
       </div>
 
       {/* ─── Grid: Info & Stats ─── */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
+
         {/* Company Info */}
-        <div className="lg:col-span-2 p-8 rounded-3xl bg-white/5 border border-white/10 relative overflow-hidden">
+        <div className="lg:col-span-2 p-4 sm:p-8 rounded-3xl bg-white/5 border border-white/10 relative overflow-hidden">
           <div className="absolute top-0 right-0 w-64 h-64 bg-blue-600/5 rounded-bl-full blur-3xl" />
-          <h3 className="text-xl font-bold mb-6 text-white flex items-center gap-2">
-            <Building2 className="w-5 h-5 text-blue-400" /> İletişim & Vergi Bilgileri
+          <h3 className="text-base sm:text-xl font-bold mb-4 sm:mb-6 text-white flex items-center gap-2">
+            <Building2 className="w-4 h-4 sm:w-5 sm:h-5 text-blue-400" /> İletişim & Vergi Bilgileri
           </h3>
-          
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-6 gap-x-8 relative z-10">
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-4 sm:gap-y-6 gap-x-4 sm:gap-x-8 relative z-10">
             <div>
               <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1">Yetkili Kişi</p>
               <p className="font-medium text-lg">{cari.contactPerson || 'Belirtilmemiş'}</p>
@@ -563,10 +563,10 @@ export function CariDetailPage() {
         </div>
 
         {/* Stats Column */}
-        <div className="flex flex-col gap-6">
-          <div className={`p-8 rounded-3xl border flex-1 flex flex-col justify-center ${totalBalance < 0 ? 'bg-red-950/20 border-red-500/30' : 'bg-emerald-950/20 border-emerald-500/30'}`}>
+        <div className="flex flex-col gap-4 sm:gap-6">
+          <div className={`p-4 sm:p-8 rounded-3xl border flex-1 flex flex-col justify-center ${totalBalance < 0 ? 'bg-red-950/20 border-red-500/30' : 'bg-emerald-950/20 border-emerald-500/30'}`}>
             <p className="text-xs font-bold uppercase tracking-widest mb-2 opacity-70">Güncel Bakiye</p>
-            <p className={`text-5xl font-black tracking-tighter ${totalBalance < 0 ? 'text-red-400' : 'text-emerald-400'}`}>
+            <p className={`text-3xl sm:text-5xl font-black tracking-tighter ${totalBalance < 0 ? 'text-red-400' : 'text-emerald-400'}`}>
               {totalBalance > 0 ? '+' : ''}₺{Math.abs(totalBalance).toLocaleString()}
             </p>
             <div className="mt-4 flex items-center gap-2">
@@ -575,28 +575,28 @@ export function CariDetailPage() {
               </span>
             </div>
           </div>
-          <div className="grid grid-cols-3 gap-4">
-            <div className="p-6 bg-white/5 border border-white/10 rounded-3xl">
-              <Receipt className="w-6 h-6 text-blue-400 mb-3" />
-              <p className="text-2xl font-bold">{totalFisler}</p>
-              <p className="text-xs text-gray-500 uppercase mt-1">İşlem Fişi</p>
+          <div className="grid grid-cols-3 gap-2 sm:gap-4">
+            <div className="p-3 sm:p-6 bg-white/5 border border-white/10 rounded-2xl sm:rounded-3xl">
+              <Receipt className="w-4 h-4 sm:w-6 sm:h-6 text-blue-400 mb-1.5 sm:mb-3" />
+              <p className="text-lg sm:text-2xl font-bold">{totalFisler}</p>
+              <p className="text-[10px] sm:text-xs text-gray-500 uppercase mt-0.5 sm:mt-1">İşlem Fişi</p>
             </div>
-            <div className="p-6 bg-white/5 border border-white/10 rounded-3xl">
-              <Calendar className="w-6 h-6 text-purple-400 mb-3" />
-              <p className="text-2xl font-bold">{dailyExtracts.length}</p>
-              <p className="text-xs text-gray-500 uppercase mt-1">İşlem Günü</p>
+            <div className="p-3 sm:p-6 bg-white/5 border border-white/10 rounded-2xl sm:rounded-3xl">
+              <Calendar className="w-4 h-4 sm:w-6 sm:h-6 text-purple-400 mb-1.5 sm:mb-3" />
+              <p className="text-lg sm:text-2xl font-bold">{dailyExtracts.length}</p>
+              <p className="text-[10px] sm:text-xs text-gray-500 uppercase mt-0.5 sm:mt-1">İşlem Günü</p>
             </div>
-            <div className="p-6 bg-white/5 border border-white/10 rounded-3xl cursor-pointer hover:bg-white/10 transition-all" onClick={() => setIsNoteModalOpen(true)}>
-              <StickyNote className="w-6 h-6 text-amber-400 mb-3" />
-              <p className="text-2xl font-bold">{cariNotes.length}</p>
-              <p className="text-xs text-gray-500 uppercase mt-1">Not</p>
+            <div className="p-3 sm:p-6 bg-white/5 border border-white/10 rounded-2xl sm:rounded-3xl cursor-pointer hover:bg-white/10 transition-all" onClick={() => setIsNoteModalOpen(true)}>
+              <StickyNote className="w-4 h-4 sm:w-6 sm:h-6 text-amber-400 mb-1.5 sm:mb-3" />
+              <p className="text-lg sm:text-2xl font-bold">{cariNotes.length}</p>
+              <p className="text-[10px] sm:text-xs text-gray-500 uppercase mt-0.5 sm:mt-1">Not</p>
             </div>
           </div>
         </div>
       </div>
 
       {/* ─── Tabs / Sections ─── */}
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 sm:gap-8">
         
         {/* Left: Ekstre */}
         <div className="space-y-4">
