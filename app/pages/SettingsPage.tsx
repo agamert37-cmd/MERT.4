@@ -310,14 +310,14 @@ export function SettingsPage() {
       
       {/* Header */}
       <motion.div
-        className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6"
+        className="flex flex-col sm:flex-row justify-between items-start md:items-center gap-6"
         initial={{ opacity: 0, y: -16 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
       >
         <div>
           <div className="flex items-center gap-3 mb-1">
-            <h1 className="text-3xl lg:text-4xl font-extrabold tracking-tight">Sistem Ayarları</h1>
+            <h1 className="text-xl sm:text-3xl lg:text-4xl font-extrabold tracking-tight">Sistem Ayarları</h1>
           </div>
           <p className="text-gray-400">Kurumsal profil, API bağlantıları ve güvenlik</p>
         </div>
@@ -327,13 +327,13 @@ export function SettingsPage() {
       </motion.div>
 
       <motion.div
-        className="grid grid-cols-1 lg:grid-cols-2 gap-8"
+        className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-8"
         variants={staggerContainer(0.1, 0.06)}
         initial="initial"
         animate="animate"
       >
         {/* Şirket Bilgileri */}
-        <motion.div variants={gridCard} className="p-8 rounded-3xl bg-[#111] border border-white/5">
+        <motion.div variants={gridCard} className="p-4 sm:p-8 rounded-2xl sm:rounded-3xl bg-[#111] border border-white/5">
           <div className="flex items-center gap-4 mb-6">
             <div className="w-12 h-12 rounded-2xl bg-blue-500/10 flex items-center justify-center border border-blue-500/20"><Building2 className="w-6 h-6 text-blue-400"/></div>
             <div><h2 className="text-xl font-bold">Şirket Profili</h2><p className="text-xs text-gray-500">PDF ve Fişlerde görünecek bilgiler</p></div>
@@ -350,9 +350,9 @@ export function SettingsPage() {
           <button onClick={handleSaveCompanyInfo} className="mt-6 w-full py-4 bg-blue-600 hover:bg-blue-500 text-white rounded-xl font-bold transition-all shadow-lg shadow-blue-600/20 flex items-center justify-center gap-2"><Save className="w-5 h-5"/> Kaydet</button>
         </motion.div>
 
-        <motion.div variants={gridCard} className="space-y-8">
+        <motion.div variants={gridCard} className="space-y-4 sm:space-y-8">
           {/* OpenAI Settings */}
-          <div className="p-8 rounded-3xl bg-[#111] border border-white/5">
+          <div className="p-4 sm:p-8 rounded-2xl sm:rounded-3xl bg-[#111] border border-white/5">
             <div className="flex items-center gap-4 mb-6">
               <div className="w-12 h-12 rounded-2xl bg-purple-500/10 flex items-center justify-center border border-purple-500/20"><Sparkles className="w-6 h-6 text-purple-400"/></div>
               <div className="flex-1"><h2 className="text-xl font-bold">OpenAI Yapılandırması</h2><p className="text-xs text-gray-500">AI Asistan entegrasyonu</p></div>
@@ -379,7 +379,7 @@ export function SettingsPage() {
           </div>
 
           {/* CouchDB Bağlantı Durumu */}
-          <div className="p-8 rounded-3xl bg-[#111] border border-white/5">
+          <div className="p-4 sm:p-8 rounded-2xl sm:rounded-3xl bg-[#111] border border-white/5">
             <div className="flex items-center gap-4 mb-6">
               <div className="w-12 h-12 rounded-2xl bg-emerald-500/10 flex items-center justify-center border border-emerald-500/20"><Database className="w-6 h-6 text-emerald-400"/></div>
               <div className="flex-1"><h2 className="text-xl font-bold">Veritabanı (CouchDB)</h2><p className="text-xs text-gray-500">PouchDB + CouchDB Sync</p></div>
@@ -399,8 +399,8 @@ export function SettingsPage() {
       </motion.div>
 
       {/* Data Integrity */}
-      <div className="p-8 rounded-3xl bg-[#111] border border-white/5">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-6">
+      <div className="p-4 sm:p-8 rounded-2xl sm:rounded-3xl bg-[#111] border border-white/5">
+        <div className="flex flex-col sm:flex-row md:items-center justify-between gap-6 mb-6">
           <div className="flex items-center gap-4">
             <div className="w-12 h-12 rounded-2xl bg-orange-500/10 flex items-center justify-center border border-orange-500/20"><Shield className="w-6 h-6 text-orange-400"/></div>
             <div><h2 className="text-xl font-bold">Veri Bütünlüğü Kontrolü</h2><p className="text-xs text-gray-500">Hatalı kayıtları tespit et ve onar</p></div>
@@ -471,12 +471,12 @@ export function SettingsPage() {
 
       {/* Login Branding Settings */}
       <motion.div
-        className="p-8 rounded-3xl bg-[#111] border border-white/5"
+        className="p-4 sm:p-8 rounded-2xl sm:rounded-3xl bg-[#111] border border-white/5"
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.45, delay: 0.25, ease: [0.16, 1, 0.3, 1] }}
       >
-        <div className="flex flex-col md:flex-row justify-between md:items-center mb-6 gap-4">
+        <div className="flex flex-col sm:flex-row justify-between md:items-center mb-6 gap-4">
           <div className="flex items-center gap-4">
             <div className="w-12 h-12 rounded-2xl bg-pink-500/10 flex items-center justify-center border border-pink-500/20"><Monitor className="w-6 h-6 text-pink-400"/></div>
             <div><h2 className="text-xl font-bold">Giriş Ekranı (Login) Görselleri</h2><p className="text-xs text-gray-500">Uygulama girişindeki slider içerikleri</p></div>
