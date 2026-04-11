@@ -718,7 +718,7 @@ export function LocalRepoPanel() {
                       type="text"
                       value={editCloudConfig.url}
                       onChange={e => setEditCloudConfig(p => ({ ...p, url: e.target.value }))}
-                      placeholder="https://xxxxx.supabase.co"
+                      placeholder="http://localhost:5984"
                       className={inputCls}
                     />
                   </div>
