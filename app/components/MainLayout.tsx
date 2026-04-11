@@ -1090,7 +1090,7 @@ export function MainLayout() {
 
           {/* Page Content with Animated Transitions */}
           {/* pb-[calc(3.5rem+env(safe-area-inset-bottom,0px))] = mobile bottom nav alanı için koruma */}
-          <main className="flex-1 overflow-y-auto overflow-x-hidden custom-scrollbar pb-[calc(3.5rem+env(safe-area-inset-bottom,0px))] lg:pb-0">
+          <main className="flex-1 overflow-y-auto overflow-x-hidden custom-scrollbar overscroll-contain pb-[calc(3.5rem+env(safe-area-inset-bottom,0px))] lg:pb-0">
             <AnimatePresence mode="wait">
               <motion.div
                 key={location.pathname}
