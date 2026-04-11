@@ -564,7 +564,7 @@ export function SalesPage() {
   };
 
   return (
-    <div className="p-3 sm:p-6 lg:p-8 space-y-4 sm:space-y-6 pb-28 sm:pb-6">
+    <div className="p-3 sm:p-6 lg:p-8 space-y-4 sm:space-y-6 pb-4 sm:pb-6">
       {/* Gün Sonu Kapalı Uyarısı */}
       {isDayClosed && (
         <motion.div

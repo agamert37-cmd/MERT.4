@@ -1,7 +1,20 @@
-// [AJAN-2 | claude/serene-gagarin | 2026-03-25]
+// [AJAN-2 | claude/debug-system-pages-M8P0c | 2026-04-10] Son düzenleyen: Claude Sonnet 4.6
 // PouchDB instance yöneticisi — tablo başına DB + CouchDB sync
 import PouchDB from 'pouchdb-browser';
-import { DB_PREFIX, KV_DB_NAME, TABLE_NAMES, getCouchDbAuthUrl, getCouchDbConfig, getPeerCouchDbUrl } from './db-config';
+import { DB_PREFIX, KV_DB_NAME, TABLE_NAMES, getCouchDbConfig, getPeerCouchDbUrl } from './db-config';
+
+// ── Sync Durum Olayları (Custom Events) ───────────────────────
+// pouchdb.ts React'tan bağımsız. Sync durumu değişince browser custom event yayınlanır.
+// GlobalTableSyncContext bu olayları dinleyerek kullanıcıya toast/banner gösterir.
+
+export type PouchSyncEventType = 'error' | 'connected' | 'paused';
+
+export function dispatchSyncEvent(type: PouchSyncEventType, dbName: string, errorMsg?: string): void {
+  if (typeof window === 'undefined') return;
+  window.dispatchEvent(new CustomEvent('pouchdb:sync_status', {
+    detail: { type, dbName, errorMsg },
+  }));
+}
 
 // ── Instance cache ─────────────────────────────────────────────
 const instances = new Map<string, PouchDB.Database>();
@@ -30,19 +43,23 @@ export function startSync(tableName: string): PouchDB.Replication.Sync<{}> | nul
   const dbName = tableName.startsWith(DB_PREFIX) ? tableName : DB_PREFIX + tableName;
   if (syncs.has(dbName)) return syncs.get(dbName)!;
 
-  const couchUrl = getCouchDbAuthUrl();
-  if (!couchUrl) return null;
+  // ─── KRİTİK: URL'e credential GÖMME ─────────────────────────────────────────
+  // getCouchDbAuthUrl() user:pass@host formatı döndürüyor. Modern tarayıcılar
+  // (iOS Safari, Chrome Android 88+, Firefox 87+) URL'e gömülü credential'ları
+  // fetch() çağrılarında güvenlik nedeniyle bloke ediyor / çıkarıyor.
+  // Credential YALNIZCA Authorization header üzerinden iletilir (aşağıdaki fetch override).
+  const config = getCouchDbConfig();
+  if (!config.url) return null;
 
+  const couchUrl = config.url.replace(/\/$/, ''); // plain URL — credential yok
   const localDb = getDb(dbName);
 
-  // Auth header'ı her zaman HTTP isteğine ekle.
-  // Relative URL (nginx proxy) veya absolute URL (doğrudan CouchDB) fark etmez.
-  const { user, password } = getCouchDbConfig();
   const remoteDb = new PouchDB(`${couchUrl}/${dbName}`, {
     fetch(url: string, opts: RequestInit) {
-      if (user) {
+      // Her istekte Authorization header ekle — URL'deki credential'a güvenme
+      if (config.user) {
         const headers = new Headers((opts as any)?.headers);
-        headers.set('Authorization', 'Basic ' + btoa(`${user}:${password}`));
+        headers.set('Authorization', 'Basic ' + btoa(`${config.user}:${config.password}`));
         opts = { ...opts, headers };
       }
       return (PouchDB as any).fetch(url, opts);
@@ -55,16 +72,23 @@ export function startSync(tableName: string): PouchDB.Replication.Sync<{}> | nul
   })
     .on('error', (err: any) => {
       console.error(`[PouchDB] Sync hatası — ${dbName}:`, err?.message || err);
+      dispatchSyncEvent('error', dbName, err?.message || String(err));
     })
     .on('denied', (err: any) => {
       console.warn(`[PouchDB] Sync reddedildi — ${dbName}:`, err?.message || err);
+      dispatchSyncEvent('error', dbName, `Erişim reddedildi: ${err?.message || err}`);
     })
     .on('active', () => {
       console.info(`[PouchDB] Sync yeniden aktif — ${dbName}`);
+      dispatchSyncEvent('connected', dbName);
     })
     .on('paused', (err: any) => {
       if (err) {
         console.warn(`[PouchDB] Sync duraklatıldı (hata) — ${dbName}:`, err?.message || err);
+        dispatchSyncEvent('paused', dbName, err?.message || String(err));
+      } else {
+        // Hatasız pause = catch-up tamamlandı, bağlantı sağlıklı
+        dispatchSyncEvent('connected', dbName);
       }
     });
 
@@ -124,25 +148,55 @@ export function restartAllSync(): void {
   startAllSync();
 }
 
-// ── Ağ Kurtarma (online event) ────────────────────────────────
-// Tarayıcı çevrimiçi durumuna geçtiğinde tüm sync'leri yeniden başlat.
-// PouchDB'nin retry mekanizması çoğu durumda bunu kendisi yapar; bu, Wi-Fi/VPN
-// değişimi gibi uç durumlara karşı ek bir güvence katmanıdır.
+// ── Ağ & Görünürlük Kurtarma ──────────────────────────────────
+// Tarayıcı çevrimiçi durumuna geçtiğinde veya sayfa arka plandan öne geldiğinde
+// tüm sync'leri yeniden başlat.
+//
+// Neden gerekli?
+// - PouchDB retry:true çoğu durumu halleder; ancak Wi-Fi/4G geçişinde veya
+//   iOS/Android uygulama arka plana alındığında bağlantı nesnesi tamamen ölür.
+// - visibilitychange: Mobil kullanıcı ekranı kapattıktan sonra geri gelince
+//   sync otomatik olarak yeniden başlar.
 
-let _onlineListenerAttached = false;
+let _recoveryListenersAttached = false;
 
-function _attachOnlineListener(): void {
-  if (_onlineListenerAttached || typeof window === 'undefined') return;
-  _onlineListenerAttached = true;
+function _attachRecoveryListeners(): void {
+  if (_recoveryListenersAttached || typeof window === 'undefined') return;
+  _recoveryListenersAttached = true;
 
+  // Ağ bağlantısı geri gelince
   window.addEventListener('online', () => {
     console.info('[PouchDB] Ağ bağlantısı yeniden kuruldu — sync yeniden başlatılıyor…');
-    // 1 saniyelik gecikme: ağ arayüzü stabilize olsun
     setTimeout(() => restartAllSync(), 1000);
+  });
+
+  // Mobil: ekran kilidi açıldığında / sekmeye geri dönüldüğünde
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') {
+      console.info('[PouchDB] Sayfa görünür oldu — sync kontrol ediliyor…');
+      // Kısa bir gecikme: ağ arayüzü stabilize olsun
+      setTimeout(() => {
+        // Aktif sync varsa dokunma; hiç sync yoksa yeniden başlat
+        if (syncs.size === 0) {
+          restartAllSync();
+        } else {
+          // Ölü sync'leri tespit et ve yeniden başlat
+          let hasDeadSync = false;
+          for (const [name, sync] of syncs) {
+            // PouchDB sync nesnesi 'cancelled' ise ölü demektir
+            if ((sync as any).cancelled) {
+              syncs.delete(name);
+              hasDeadSync = true;
+            }
+          }
+          if (hasDeadSync) restartAllSync();
+        }
+      }, 1500);
+    }
   });
 }
 
-_attachOnlineListener();
+_attachRecoveryListeners();
 
 // ── Peer (2. bilgisayar) Sync ──────────────────────────────────
 

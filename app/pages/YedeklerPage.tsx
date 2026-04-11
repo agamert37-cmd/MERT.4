@@ -432,7 +432,7 @@ export function YedeklerPage() {
   const inputClass = "w-full px-3 py-2.5 bg-secondary/50 border border-border/30 rounded-xl text-white text-sm placeholder-muted-foreground/40 focus:outline-none focus:ring-1 focus:ring-blue-500/40 transition-all";
 
   return (
-    <div className="p-3 sm:p-5 lg:p-6 max-w-[1400px] mx-auto space-y-4 sm:space-y-5 pb-28 sm:pb-6">
+    <div className="p-3 sm:p-5 lg:p-6 max-w-[1400px] mx-auto space-y-4 sm:space-y-5 pb-4 sm:pb-6">
       {/* ── Header ──────────────────────────────────────────────── */}
       <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
         <div>

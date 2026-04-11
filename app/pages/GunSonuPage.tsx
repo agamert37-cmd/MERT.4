@@ -396,7 +396,7 @@ export function GunSonuPage() {
   };
 
   return (
-    <div className="p-3 sm:p-6 lg:p-8 space-y-4 sm:space-y-6 pb-28 sm:pb-6">
+    <div className="p-3 sm:p-6 lg:p-8 space-y-4 sm:space-y-6 pb-4 sm:pb-6">
       {/* Header */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4">
         <div>

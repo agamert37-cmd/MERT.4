@@ -886,7 +886,7 @@ export function CariPage() {
   };
 
   return (
-    <div className="p-3 sm:p-6 lg:p-10 space-y-4 sm:space-y-6 lg:space-y-8 pb-28 sm:pb-6">
+    <div className="p-3 sm:p-6 lg:p-10 space-y-4 sm:space-y-6 lg:space-y-8 pb-4 sm:pb-6">
       <SyncStatusBar tableName="cari_hesaplar" />
 
       {/* Header */}

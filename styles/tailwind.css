@@ -1,8 +1,10 @@
 @import "tailwindcss";
 
 /* ─── Scrollbar Utilities ─────────────────────────────────────────────────── */
-.no-scrollbar::-webkit-scrollbar { display: none; }
-.no-scrollbar {
+.no-scrollbar::-webkit-scrollbar,
+.scrollbar-hide::-webkit-scrollbar { display: none; }
+.no-scrollbar,
+.scrollbar-hide {
   -ms-overflow-style: none;
   scrollbar-width: none;
 }
@@ -97,4 +99,61 @@
 @keyframes shimmer {
   0%   { transform: translateX(-100%); }
   100% { transform: translateX(100%); }
+}
+
+/* ─── iOS/Android Global Fixes ───────────────────────────────────────────── */
+
+/* Tap highlight kaldır — kendi active state'lerimiz var */
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Overscroll — iOS rubber-band olmadan sayfa içi scroll */
+.overscroll-contain {
+  overscroll-behavior: contain;
+}
+
+/* Mobil yatay taşmayı önle */
+html, body {
+  overflow-x: hidden;
+  max-width: 100vw;
+}
+
+/* ─── Responsive Font Scaling ────────────────────────────────────────────── */
+/* Küçük ekranlarda (< 360px) içerik sığmasın diye %90 ölçek */
+@media (max-width: 360px) {
+  html {
+    font-size: 14px;
+  }
+}
+
+/* ─── Input Focus — iOS Zoom Önleme ──────────────────────────────────────── */
+/* 16px altı font-size iOS'ta input'a odaklanınca sayfa zoom'lar */
+@supports (-webkit-touch-callout: none) {
+  input[type="text"],
+  input[type="number"],
+  input[type="email"],
+  input[type="tel"],
+  input[type="password"],
+  input[type="search"],
+  input[type="date"],
+  select,
+  textarea {
+    font-size: max(16px, 1em);
+  }
+}
+
+/* ─── Momentum Scroll for All Scroll Containers ─────────────────────────── */
+.overflow-y-auto,
+.overflow-x-auto,
+.overflow-auto {
+  -webkit-overflow-scrolling: touch;
+}
+
+/* ─── Haptic-ready Button — smooth press feedback ────────────────────────── */
+@media (pointer: coarse) {
+  button:active,
+  [role="button"]:active {
+    transition: transform 60ms ease, opacity 60ms ease;
+  }
 }

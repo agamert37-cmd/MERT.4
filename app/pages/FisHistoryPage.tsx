@@ -1405,7 +1405,7 @@ export function FisHistoryPage() {
   );
 
   return (
-    <div className="p-3 sm:p-6 lg:p-8 space-y-4 sm:space-y-6 pb-28 sm:pb-6">
+    <div className="p-3 sm:p-6 lg:p-8 space-y-4 sm:space-y-6 pb-4 sm:pb-6">
       {/* Lightbox */}
       <AnimatePresence>
         {lightboxImage && <ImageLightbox src={lightboxImage} onClose={() => setLightboxImage(null)} />}
@@ -1459,16 +1459,16 @@ export function FisHistoryPage() {
               initial={{ opacity: 0, y: 20, scale: 0.95 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
               transition={{ delay: index * 0.08, type: 'spring', stiffness: 200, damping: 20 }}
-              className={`relative overflow-hidden rounded-2xl border bg-gradient-to-br ${colorMap[stat.color]} p-5 group hover:scale-[1.02] transition-transform duration-300`}
+              className={`relative overflow-hidden rounded-2xl border bg-gradient-to-br ${colorMap[stat.color]} p-3 sm:p-5 group hover:scale-[1.02] transition-transform duration-300`}
             >
               <div className="absolute top-0 right-0 w-24 h-24 bg-gradient-to-bl from-white/[0.03] to-transparent rounded-bl-full" />
-              <div className="flex items-center gap-2.5 mb-3">
-                <div className={`w-9 h-9 rounded-xl bg-gradient-to-br from-white/10 to-white/5 flex items-center justify-center ${iconColorMap[stat.color]}`}>
-                  <Icon className="w-4.5 h-4.5" />
+              <div className="flex items-center gap-2 sm:gap-2.5 mb-2 sm:mb-3">
+                <div className={`w-7 h-7 sm:w-9 sm:h-9 rounded-xl bg-gradient-to-br from-white/10 to-white/5 flex items-center justify-center shrink-0 ${iconColorMap[stat.color]}`}>
+                  <Icon className="w-3.5 h-3.5 sm:w-4.5 sm:h-4.5" />
                 </div>
-                <span className="text-muted-foreground text-xs font-medium uppercase tracking-wider">{stat.label}</span>
+                <span className="text-muted-foreground text-[10px] sm:text-xs font-medium uppercase tracking-wider truncate">{stat.label}</span>
               </div>
-              <p className={`text-2xl md:text-3xl font-bold ${stat.isCurrency ? valueColorMap[stat.color] : 'text-white'}`}>
+              <p className={`text-lg sm:text-2xl md:text-3xl font-bold ${stat.isCurrency ? valueColorMap[stat.color] : 'text-white'}`}>
                 {stat.isCurrency ? <AnimatedCounter value={stat.value} prefix="₺" /> : <AnimatedCounter value={stat.value} />}
               </p>
             </motion.div>
@@ -1481,7 +1481,7 @@ export function FisHistoryPage() {
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.3 }}
-        className="card-premium rounded-2xl p-5"
+        className="card-premium rounded-2xl p-3 sm:p-5"
       >
         <div className="flex flex-col gap-3 sm:gap-4">
           <div className="flex-1 relative group">
@@ -1716,9 +1716,9 @@ export function FisHistoryPage() {
                   {/* Gün Başlığı */}
                   <div
                     onClick={() => toggleDayCollapse(dayGroup.dateKey)}
-                    className="flex items-center gap-4 px-5 py-4 cursor-pointer hover:bg-secondary/20 transition-colors border-b border-border/20"
+                    className="flex items-center gap-2 sm:gap-4 px-3 sm:px-5 py-3 sm:py-4 cursor-pointer hover:bg-secondary/20 transition-colors border-b border-border/20"
                   >
-                    <div className={`w-12 h-12 rounded-xl flex flex-col items-center justify-center flex-shrink-0 ${
+                    <div className={`w-10 h-10 sm:w-12 sm:h-12 rounded-xl flex flex-col items-center justify-center flex-shrink-0 ${
                       isToday ? 'bg-gradient-to-br from-blue-600 to-indigo-600 shadow-lg shadow-blue-600/20' :
                       isYesterday ? 'bg-gradient-to-br from-accent to-accent' :
                       'bg-gradient-to-br from-accent/60 to-secondary/60'
@@ -1801,10 +1801,10 @@ export function FisHistoryPage() {
                                 transition={{ delay: Math.min(index * 0.03, 0.3) }}
                                 className={`border-l-[3px] ${borderColorMap[modeColor]} hover:bg-secondary/20 transition-all duration-200`}
                               >
-                                <div className="flex items-center gap-3 px-5 py-3">
+                                <div className="flex items-center gap-2 sm:gap-3 px-3 sm:px-5 py-2.5 sm:py-3">
                                   {/* Saat */}
-                                  <div className="flex-shrink-0 w-12 text-center">
-                                    <span className="text-white font-mono text-sm font-bold">
+                                  <div className="flex-shrink-0 w-10 sm:w-12 text-center">
+                                    <span className="text-white font-mono text-xs sm:text-sm font-bold">
                                       {fis.date ? new Date(fis.date).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' }) : '--:--'}
                                     </span>
                                   </div>
