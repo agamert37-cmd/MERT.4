@@ -801,7 +801,7 @@ export function DashboardPage() {
             exit={{ opacity: 0, height: 0 }}
             transition={{ type: 'spring', stiffness: 200, damping: 30 }}
             className="rounded-2xl bg-[#0d111b] border border-white/[0.08] overflow-hidden"
-            style={{ minHeight: '580px' }}
+            style={{ minHeight: isMobile ? '360px' : '580px' }}
           >
             <DashboardAIChat onClose={() => setShowAIChat(false)} />
           </motion.div>
@@ -844,7 +844,7 @@ export function DashboardPage() {
               <AnimatedCounter value={realtimeRevenue} prefix="₺" />
             </motion.p>
             <div className="mt-2 sm:mt-3 flex items-center gap-2">
-              <Sparkline data={dailySparkData} color="#3b82f6" width={80} height={28} />
+              <div className="hidden sm:block"><Sparkline data={dailySparkData} color="#3b82f6" width={80} height={28} /></div>
               <div className="flex flex-col">
                 <span className="text-[9px] sm:text-[10px] text-gray-500">7 gün</span>
                 {dailySparkData.length >= 2 && (
@@ -950,7 +950,7 @@ export function DashboardPage() {
               <AnimatedCounter value={todayNetProfit} prefix="₺" />
             </motion.p>
             <div className="mt-2 flex items-center gap-2">
-              <Sparkline data={profitTrend.map(d => d.kar)} color={todayNetProfit >= 0 ? '#a855f7' : '#f97316'} width={60} height={22} />
+              <div className="hidden sm:block"><Sparkline data={profitTrend.map(d => d.kar)} color={todayNetProfit >= 0 ? '#a855f7' : '#f97316'} width={60} height={22} /></div>
               <span className="text-[9px] sm:text-[10px] text-gray-500">7 gün kâr</span>
             </div>
           </div>
@@ -1458,7 +1458,7 @@ export function DashboardPage() {
             </div>
           </div>
           
-          <div className="grid grid-cols-3 gap-2 sm:gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-3">
             {[
               { path: '/sales', icon: ShoppingCart, label: 'Yeni Satış', color: '#3b82f6', bg: 'blue' },
               { path: '/stok', icon: Package, label: 'Stok Girişi', color: '#6366f1', bg: 'indigo' },
@@ -1543,13 +1543,23 @@ export function DashboardPage() {
 
       {/* ─── Mobil: Gelişmiş Analitik Toggle ─── */}
       {isMobile && (
-        <button
+        <motion.button
+          whileTap={{ scale: 0.97 }}
           onClick={() => setShowAdvancedMobile(v => !v)}
-          className="w-full py-3 px-4 rounded-2xl border border-white/10 bg-white/[0.03] hover:bg-white/[0.06] transition-all flex items-center justify-center gap-2 text-sm font-bold text-gray-400"
+          className="w-full py-3.5 px-4 rounded-2xl border transition-all flex items-center justify-center gap-2.5 text-sm font-bold"
+          style={showAdvancedMobile
+            ? { borderColor: 'rgba(59,130,246,0.3)', background: 'rgba(59,130,246,0.06)', color: '#93c5fd' }
+            : { borderColor: 'rgba(255,255,255,0.08)', background: 'rgba(255,255,255,0.02)', color: '#6b7280' }
+          }
         >
-          <BarChart3 className="w-4 h-4 text-blue-400" />
-          {showAdvancedMobile ? 'Gelişmiş Analizleri Gizle ▲' : 'Gelişmiş Analizleri Göster ▼'}
-        </button>
+          <BarChart3 className="w-4 h-4" style={{ color: showAdvancedMobile ? '#60a5fa' : '#6b7280' }} />
+          <span>{showAdvancedMobile ? 'Gelişmiş Analizleri Gizle' : 'Gelişmiş Analizleri Göster'}</span>
+          <motion.span
+            animate={{ rotate: showAdvancedMobile ? 180 : 0 }}
+            transition={{ duration: 0.25 }}
+            className="text-xs"
+          >▼</motion.span>
+        </motion.button>
       )}
 
       {/* ─── Advanced Analytics Row ─── */}
