@@ -173,7 +173,7 @@ export function SunucuPage() {
   const liveError     = syncTables.filter(t => t.syncState === 'error').length;
 
   return (
-    <div className="p-3 sm:p-6 lg:p-10 space-y-6 min-h-screen bg-background text-white pb-28 sm:pb-10">
+    <div className="p-3 sm:p-6 lg:p-10 space-y-6 min-h-screen bg-background text-white pb-4 sm:pb-8">
 
       {/* ── Header ─────────────────────────────────────── */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">

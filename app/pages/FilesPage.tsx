@@ -387,7 +387,7 @@ export function FilesPage() {
   const exportLogs = getFromStorage<any[]>('export_logs') || [];
 
   return (
-    <div className="p-3 sm:p-6 lg:p-10 space-y-4 sm:space-y-6 lg:space-y-8 pb-28 sm:pb-6">
+    <div className="p-3 sm:p-6 lg:p-10 space-y-4 sm:space-y-6 lg:space-y-8 pb-4 sm:pb-6">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl sm:text-3xl font-bold text-white mb-2">Dosyalar & PDF Yedekleme</h1>

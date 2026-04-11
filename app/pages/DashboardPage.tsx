@@ -712,7 +712,7 @@ export function DashboardPage() {
 
   // ─── RENDER ────────────────────────────────────────────────────────────────
   return (
-    <div className="p-3 sm:p-6 lg:p-10 space-y-4 sm:space-y-6 lg:space-y-8 bg-background min-h-screen text-white font-sans pb-28 sm:pb-6 lg:pb-10">
+    <div className="p-3 sm:p-6 lg:p-10 space-y-4 sm:space-y-6 lg:space-y-8 bg-background min-h-screen text-white font-sans pb-4 sm:pb-6 lg:pb-8">
       
       {/* AI Banner — API key eksikse paneli açmaya davet et */}
       {!isOpenAIConfigured() && !showAIChat && (
