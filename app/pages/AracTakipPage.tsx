@@ -114,8 +114,8 @@ export function AracTakipPage() {
   // Güvenlik kontrolleri (RBAC) - merkezi utility
   const { canAdd, canDelete, canEdit } = getPagePermissions(user, currentEmployee, 'araclar');
 
-  // useTableSync ile KV store senkronizasyonu
-  const { data: syncedShifts, addItem: addShiftToSupabase } = useTableSync<VehicleShift>({
+  // useTableSync — PouchDB arac_shifts tablosu
+  const { data: syncedShifts, addItem: addShiftToPouchDB, updateItem: updateShiftInPouchDB } = useTableSync<VehicleShift>({
     tableName: 'arac_shifts',
     storageKey: StorageKey.ARAC_SHIFTS,
     initialData: [],
@@ -123,8 +123,8 @@ export function AracTakipPage() {
     orderAsc: false,
   });
 
-  // KM logları için Supabase sync — BUG FIX [AJAN-2]: daha önce sadece localStorage'a yazılıyordu
-  const { addItem: addKmLogToSupabase } = useTableSync<KmLog>({
+  // PouchDB arac_km_logs tablosu
+  const { addItem: addKmLogToPouchDB } = useTableSync<KmLog>({
     tableName: 'arac_km_logs',
     storageKey: StorageKey.ARAC_KM_LOGS,
     initialData: [],
@@ -296,8 +296,9 @@ export function AracTakipPage() {
 
     persistShift(newShift);
     persistLogs([newLog, ...kmLogs]);
-    // BUG FIX [AJAN-2]: KM logunu Supabase'e yaz
-    addKmLogToSupabase(newLog).catch(e => console.error('[AracTakip] km log sync:', e));
+    // Başlayan vardiyayı ve KM logunu PouchDB'ye yaz
+    addShiftToPouchDB(newShift).catch(e => console.error('[AracTakip] shift PouchDB:', e));
+    addKmLogToPouchDB(newLog).catch(e => console.error('[AracTakip] km log PouchDB:', e));
 
     logActivity('vehicle_shift_start', `Vardiya baslatildi: ${vehicle.plate}`, {
       employeeId: currentEmployee?.id,
@@ -352,9 +353,11 @@ export function AracTakipPage() {
     persistLogs([newLog, ...kmLogs]);
     persistHistory([completedShift, ...shiftHistory]);
     persistShift(null);
-    // BUG FIX [AJAN-2]: Vardiya ve KM logunu Supabase'e yaz
-    addShiftToSupabase(completedShift).catch(e => console.error('[AracTakip] shift sync:', e));
-    addKmLogToSupabase(newLog).catch(e => console.error('[AracTakip] km log sync:', e));
+    // Tamamlanan vardiyayı güncelle (başlarken eklenmişti) + KM logunu yaz
+    updateShiftInPouchDB(completedShift.id, completedShift).catch(() =>
+      addShiftToPouchDB(completedShift).catch(e => console.error('[AracTakip] shift PouchDB:', e))
+    );
+    addKmLogToPouchDB(newLog).catch(e => console.error('[AracTakip] km log PouchDB:', e));
 
     logActivity('vehicle_shift_end', `Vardiya bitirildi: ${activeShift.vehiclePlate}`, {
       employeeId: currentEmployee?.id,
@@ -435,10 +438,13 @@ export function AracTakipPage() {
     persistLogs([startLog, endLog, ...kmLogs]);
     persistHistory([completedShift, ...shiftHistory]);
     persistShift(newShift);
-    // BUG FIX [AJAN-2]: Vardiya ve KM loglarını Supabase'e yaz
-    addShiftToSupabase(completedShift).catch(e => console.error('[AracTakip] shift sync:', e));
-    addKmLogToSupabase(endLog).catch(e => console.error('[AracTakip] km log sync:', e));
-    addKmLogToSupabase(startLog).catch(e => console.error('[AracTakip] km log sync:', e));
+    // Eski vardiyayı güncelle, yeni vardiyayı ekle, KM loglarını yaz
+    updateShiftInPouchDB(completedShift.id, completedShift).catch(() =>
+      addShiftToPouchDB(completedShift).catch(e => console.error('[AracTakip] shift PouchDB:', e))
+    );
+    addShiftToPouchDB(newShift).catch(e => console.error('[AracTakip] new shift PouchDB:', e));
+    addKmLogToPouchDB(endLog).catch(e => console.error('[AracTakip] km log PouchDB:', e));
+    addKmLogToPouchDB(startLog).catch(e => console.error('[AracTakip] km log PouchDB:', e));
 
     logActivity('vehicle_change', `Arac degistirildi: ${activeShift.vehiclePlate} -> ${vehicle.plate}`, {
       employeeId: currentEmployee?.id,

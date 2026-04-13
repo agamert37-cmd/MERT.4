@@ -28,6 +28,7 @@ import {
 import { toast } from 'sonner';
 import { getFromStorage, setInStorage, StorageKey } from '../utils/storage';
 import { kvGet, kvSet } from '../lib/pouchdb-kv';
+import { getDb } from '../lib/pouchdb';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useEmployee } from '../contexts/EmployeeContext';
@@ -1545,8 +1546,7 @@ export function UretimPage() {
     setInStorage(StorageKey.URETIM_DEFAULTS, newDefaults);
     kvSet('uretim_defaults', newDefaults).catch(() => {});
 
-    // ─── KV SYNC: Değişen stok kalemlerini Supabase'e de yaz ───
-    // useTableSync StokPage'de KV'den veri çektiğinde güncel data görsün
+    // ─── POUCHDB SYNC: Değişen stok kalemlerini urunler tablosuna yaz ───
     const changedItems: any[] = [];
     // Hammadde (stoktan düşülen)
     const updatedHammadde = updatedStok.find((s: any) => s.id === form.hammaddeStokId);
@@ -1555,14 +1555,19 @@ export function UretimPage() {
     const updatedCikti = updatedStok.find((s: any) => s.id === newKayit.ciktiStokId);
     if (updatedCikti && updatedCikti.id !== updatedHammadde?.id) changedItems.push(updatedCikti);
     if (changedItems.length > 0) {
-      try {
-        await Promise.all([
-          syncStokItemsToKV(changedItems),
-          syncStokItemsToSupabase(changedItems),
-        ]);
-        console.log('[UretimPage] KV+Supabase sync completed for', changedItems.length, 'items');
-      } catch (e) {
-        console.error('[UretimPage] sync failed (data saved locally):', e);
+      const urunlerDb = getDb('urunler');
+      for (const item of changedItems) {
+        try {
+          const dbRow = productToDb(item as Product);
+          const existing = await urunlerDb.get(item.id).catch(() => null);
+          if (existing) {
+            await urunlerDb.put({ ...dbRow, _id: item.id, _rev: (existing as any)._rev });
+          } else {
+            await urunlerDb.put({ ...dbRow, _id: item.id });
+          }
+        } catch (e) {
+          console.error('[UretimPage] urunler PouchDB yazma hatası:', e);
+        }
       }
     }
 

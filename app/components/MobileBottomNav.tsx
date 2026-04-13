@@ -13,7 +13,7 @@ import {
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useEmployee } from '../contexts/EmployeeContext';
-import { startAllSync } from '../lib/pouchdb';
+import { restartAllSync, testCouchDbConnection } from '../lib/pouchdb';
 import { toast } from 'sonner';
 
 interface NavItem {
@@ -144,10 +144,23 @@ export function MobileBottomNav() {
     setIsSyncing(true);
     haptic('medium');
     try {
-      startAllSync();
-      toast.success('Veriler güncellendi', { id: 'mobile-sync', duration: 2000 });
-    } catch {
-      toast.error('Senkronizasyon başarısız', { id: 'mobile-sync', duration: 2000 });
+      // Önce bağlantı testi yap
+      const result = await testCouchDbConnection();
+      if (!result.ok) {
+        toast.error(`Sunucuya ulaşılamıyor: ${result.error || 'Bağlantı hatası'}`, {
+          id: 'mobile-sync',
+          duration: 3000,
+        });
+        return;
+      }
+      // Bağlantı tamam — tüm sync'leri yeniden başlat
+      restartAllSync();
+      toast.success('Senkronizasyon başlatıldı', { id: 'mobile-sync', duration: 2000 });
+    } catch (e: any) {
+      toast.error(`Senkronizasyon hatası: ${e?.message || 'Bilinmeyen hata'}`, {
+        id: 'mobile-sync',
+        duration: 3000,
+      });
     } finally {
       setIsSyncing(false);
     }

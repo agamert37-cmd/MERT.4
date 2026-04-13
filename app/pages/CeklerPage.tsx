@@ -191,8 +191,13 @@ export function CeklerPage() {
   const { canAdd, canDelete, canEdit } = getPagePermissions(user, currentEmployee, 'cekler');
   const sec = usePageSecurity('cekler');
 
-  // [AJAN-2]: deleteItem artık cekler Supabase tablosundan da siliyor
-  const { data: syncedCekler, deleteItem: deleteCekFromSupabase } = useTableSync<CekData>({
+  // PouchDB CRUD — addItem/updateItem/deleteItem PouchDB'ye yazar, CouchDB sync otomatik
+  const {
+    data: syncedCekler,
+    addItem: addCekToPouchDB,
+    updateItem: updateCekInPouchDB,
+    deleteItem: deleteCekFromPouchDB,
+  } = useTableSync<CekData>({
     tableName: 'cekler',
     storageKey: StorageKey.CEKLER_DATA,
     initialData: [],
@@ -384,6 +389,7 @@ export function CeklerPage() {
     if (!sec.checkRate('edit')) return;
     let updated: CekData = { ...modalCek, status: newStatus, statusNote: statusNote || modalCek.statusNote, updatedAt: new Date().toISOString() };
     updated = addAuditEntry(updated, 'status_change', `Durum → ${newStatus}${statusNote ? ` - ${statusNote}` : ''}`, userName);
+    updateCekInPouchDB(updated.id, updated).catch(e => console.error('[CeklerPage] updateCek PouchDB hatası:', e));
     saveCek(updated);
     sec.auditLog('cek_status_change', updated.id, updated.bankName);
     emit('cek:status_changed', { cekId: updated.id, newStatus, bankName: updated.bankName, direction: updated.direction });
@@ -401,6 +407,7 @@ export function CeklerPage() {
       ...modalCek, status: 'ciro', endorsedTo: endorseTo, endorseDate, updatedAt: new Date().toISOString(),
     };
     updated = addAuditEntry(updated, 'endorse', `Ciro → ${endorseTo}`, userName);
+    updateCekInPouchDB(updated.id, updated).catch(e => console.error('[CeklerPage] updateCek PouchDB hatası:', e));
     saveCek(updated);
     sec.auditLog('cek_endorse', updated.id, `${updated.bankName} → ${endorseTo}`);
     emit('cek:status_changed', { cekId: updated.id, newStatus: 'ciro', bankName: updated.bankName });
@@ -424,6 +431,7 @@ export function CeklerPage() {
       updatedAt: new Date().toISOString(),
     };
     updated = addAuditEntry(updated, 'partial_collect', `Kısmi tahsilat ₺${pAmount.toLocaleString()} (Toplam: ₺${collected.toLocaleString()})`, userName);
+    updateCekInPouchDB(updated.id, updated).catch(e => console.error('[CeklerPage] updateCek PouchDB hatası:', e));
     saveCek(updated);
     sec.auditLog('cek_partial_collect', updated.id, `₺${pAmount}`);
     setCekler(getCekler());
@@ -457,6 +465,7 @@ export function CeklerPage() {
       createdBy: userName,
       auditLog: [{ id: `audit-${Date.now()}`, timestamp: new Date().toISOString(), action: 'created', detail: 'Alınan çek oluşturuldu', user: userName }],
     };
+    addCekToPouchDB(cek).catch(e => console.error('[CeklerPage] addCek PouchDB hatası:', e));
     saveCek(cek);
     sec.auditLog('cek_add', cek.id, `ALINAN - ${cek.bankName} - ₺${cek.amount}`);
     emit('cek:created', { cekId: cek.id, direction: 'alinan', amount: cek.amount });
@@ -494,6 +503,7 @@ export function CeklerPage() {
       createdBy: userName,
       auditLog: [{ id: `audit-${Date.now()}`, timestamp: new Date().toISOString(), action: 'created', detail: 'Verilen çek oluşturuldu', user: userName }],
     };
+    addCekToPouchDB(cek).catch(e => console.error('[CeklerPage] addCek PouchDB hatası:', e));
     saveCek(cek);
     sec.auditLog('cek_add', cek.id, `VERİLEN - ${cek.bankName} - ₺${cek.amount} → ${cek.recipientName}`);
     emit('cek:created', { cekId: cek.id, direction: 'verilen', amount: cek.amount });
@@ -511,8 +521,8 @@ export function CeklerPage() {
     const existing = getFromStorage<CekData[]>(StorageKey.CEKLER_DATA) || [];
     setInStorage(StorageKey.CEKLER_DATA, existing.filter(c => c.id !== id));
     setCekler(existing.filter(c => c.id !== id));
-    // [AJAN-2]: Supabase cekler tablosundan da sil
-    deleteCekFromSupabase(id).catch(e => console.warn('[CeklerPage] Supabase delete hatası:', e));
+    // PouchDB cekler tablosundan sil (CouchDB ile senkronize olur)
+    deleteCekFromPouchDB(id).catch(e => console.warn('[CeklerPage] PouchDB delete hatası:', e));
     emit('cek:deleted', { cekId: id, bankName });
     setSelectedCek(null);
     sec.auditLog('cek_delete', id, bankName);

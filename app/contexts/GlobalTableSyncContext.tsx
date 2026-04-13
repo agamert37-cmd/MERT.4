@@ -22,7 +22,8 @@ import type { SyncState } from '../hooks/useTableSync';
 import { cariFromDb, cariToDb } from '../pages/CariPage';
 import { productFromDb, productToDb } from '../pages/StokPage';
 import { StorageKey } from '../utils/storage';
-import { startAllSync, stopAllSync } from '../lib/pouchdb';
+import { startAllSync, stopAllSync, startPeerSync, stopPeerSync } from '../lib/pouchdb';
+import { getCouchDbConfig } from '../lib/db-config';
 
 // ─── Per-tablo sync durumu context ────────────────────────────────────────────
 
@@ -197,9 +198,15 @@ export function GlobalTableSyncProvider({ children }: GlobalTableSyncProviderPro
   }, []);
 
   // PouchDB ↔ CouchDB continuous sync başlat (kademeli — 200ms aralık)
+  // Peer URL yapılandırılmışsa eş senkronizasyonu da başlat
   useEffect(() => {
     startAllSync();
-    return () => stopAllSync();
+    const cfg = getCouchDbConfig();
+    if (cfg.peerUrl) startPeerSync();
+    return () => {
+      stopAllSync();
+      stopPeerSync();
+    };
   }, []);
 
   return (

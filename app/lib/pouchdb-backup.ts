@@ -1,6 +1,9 @@
-// [2026-03-26] PouchDB Yedekleme Sistemi
+// [AJAN-3 | claude/multi-db-sync-setup-3DmYn | 2026-04-11]
+// PouchDB Yedekleme Sistemi
 // Tüm PouchDB tablolarını IndexedDB'den okur, JSON olarak dışa aktarır/içe aktarır.
+// Yedek verisi IndexedDB'ye (mert_backups) kaydedilir — localStorage 5MB sınırına takılmaz.
 
+import PouchDB from 'pouchdb-browser';
 import { getDb, getAllDbStats } from './pouchdb';
 import { TABLE_NAMES, KV_DB_NAME } from './db-config';
 
@@ -35,6 +38,56 @@ export interface RestoreResult {
   errors: string[];
 }
 
+// ─── Yedek Verisi IndexedDB Depolama (mert_backups) ───────────────────────────
+
+const BACKUP_DB_NAME = 'mert_backups';
+let _backupDb: PouchDB.Database | null = null;
+
+function getBackupDb(): PouchDB.Database {
+  if (!_backupDb) {
+    _backupDb = new PouchDB(BACKUP_DB_NAME);
+  }
+  return _backupDb;
+}
+
+/** Yedek verisini IndexedDB'ye kaydet */
+export async function saveBackupData(id: string, backup: PouchBackupData): Promise<void> {
+  const db = getBackupDb();
+  try {
+    const existing = await db.get(id).catch(() => null);
+    if (existing) {
+      await db.put({ _id: id, _rev: (existing as any)._rev, backup });
+    } else {
+      await db.put({ _id: id, backup });
+    }
+  } catch (e: any) {
+    console.error('[saveBackupData]', e.message);
+    throw e;
+  }
+}
+
+/** Yedek verisini IndexedDB'den oku */
+export async function getBackupData(id: string): Promise<PouchBackupData | null> {
+  try {
+    const db = getBackupDb();
+    const doc = await db.get(id) as any;
+    return doc.backup ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** Yedek verisini IndexedDB'den sil */
+export async function deleteBackupData(id: string): Promise<void> {
+  try {
+    const db = getBackupDb();
+    const doc = await db.get(id);
+    await db.remove(doc);
+  } catch {
+    // Yoksa sessizce geç
+  }
+}
+
 // ─── Yardımcılar ──────────────────────────────────────────────────────────────
 
 function cleanDoc(doc: any): any {
@@ -47,15 +100,20 @@ function cleanDoc(doc: any): any {
 
 /**
  * Tüm PouchDB tablolarını ve KV store'u oku, JSON yedek oluştur.
+ * @param onProgress Her tablo okunduktan sonra çağrılır (tableName, processed, total)
  */
-export async function createPouchBackup(): Promise<BackupResult> {
+export async function createPouchBackup(
+  onProgress?: (tableName: string, processed: number, total: number) => void
+): Promise<BackupResult> {
   try {
     const tables: Record<string, any[]> = {};
     const tableStats: Record<string, number> = {};
     let totalDocs = 0;
+    const total = TABLE_NAMES.length;
 
     // Her tabloyu oku
-    for (const tableName of TABLE_NAMES) {
+    for (let i = 0; i < TABLE_NAMES.length; i++) {
+      const tableName = TABLE_NAMES[i];
       try {
         const db = getDb(tableName);
         const result = await db.allDocs({ include_docs: true });
@@ -69,6 +127,7 @@ export async function createPouchBackup(): Promise<BackupResult> {
         tables[tableName] = [];
         tableStats[tableName] = 0;
       }
+      onProgress?.(tableName, i + 1, total);
     }
 
     // KV store'u oku
@@ -128,6 +187,11 @@ export function downloadBackup(backup: PouchBackupData, filename?: string): void
  * Mevcut belgelerle conflict'i önlemek için upsert mantığı kullanır.
  */
 export async function restorePouchBackup(backup: PouchBackupData): Promise<RestoreResult> {
+  // Format doğrulaması
+  if (!backup.format || backup.format !== 'pouchdb_full') {
+    return { ok: 0, fail: 0, tables: [], errors: ['Geçersiz yedek formatı'] };
+  }
+
   let totalOk = 0;
   let totalFail = 0;
   const restoredTables: string[] = [];
@@ -198,16 +262,92 @@ export async function restorePouchBackup(backup: PouchBackupData): Promise<Resto
 
 /**
  * Belirli tabloları seçici olarak geri yükle.
+ * @param onProgress Her tablo geri yüklendikten sonra çağrılır
  */
-export async function restoreSelectedTables(backup: PouchBackupData, tableNames: string[]): Promise<RestoreResult> {
-  const filtered: PouchBackupData = {
-    ...backup,
-    tables: Object.fromEntries(
-      Object.entries(backup.tables).filter(([name]) => tableNames.includes(name))
-    ),
-    kvEntries: tableNames.includes('kv_store') ? backup.kvEntries : [],
-  };
-  return restorePouchBackup(filtered);
+export async function restoreSelectedTables(
+  backup: PouchBackupData,
+  tableNames: string[],
+  onProgress?: (tableName: string, i: number, total: number) => void
+): Promise<RestoreResult> {
+  // Format doğrulaması
+  if (!backup.format || backup.format !== 'pouchdb_full') {
+    return { ok: 0, fail: 0, tables: [], errors: ['Geçersiz yedek formatı'] };
+  }
+
+  let totalOk = 0;
+  let totalFail = 0;
+  const restoredTables: string[] = [];
+  const errors: string[] = [];
+
+  const filteredEntries = Object.entries(backup.tables).filter(([name]) => tableNames.includes(name));
+  const total = filteredEntries.length + (tableNames.includes('kv_store') ? 1 : 0);
+  let processed = 0;
+
+  for (const [tableName, docs] of filteredEntries) {
+    if (!docs || docs.length === 0) {
+      processed++;
+      onProgress?.(tableName, processed, total);
+      continue;
+    }
+
+    try {
+      const db = getDb(tableName);
+      const ids = docs.map((d: any) => d._id).filter(Boolean);
+      const existing = ids.length > 0
+        ? await db.allDocs({ keys: ids }).catch(() => ({ rows: [] as any[] }))
+        : { rows: [] as any[] };
+
+      const revMap = new Map<string, string>();
+      existing.rows.forEach((r: any) => {
+        if (r.value?.rev) revMap.set(r.id, r.value.rev);
+      });
+
+      const bulkDocs = docs.map((doc: any) => {
+        const d = { ...doc };
+        if (!d._id && d.id) d._id = d.id;
+        const rev = revMap.get(d._id);
+        if (rev) d._rev = rev;
+        else delete d._rev;
+        return d;
+      }).filter((d: any) => d._id);
+
+      if (bulkDocs.length > 0) {
+        const results = await db.bulkDocs(bulkDocs);
+        let tableOk = 0;
+        let tableFail = 0;
+        results.forEach((r: any) => {
+          if (r.ok) tableOk++;
+          else tableFail++;
+        });
+        totalOk += tableOk;
+        totalFail += tableFail;
+        if (tableOk > 0) restoredTables.push(tableName);
+      }
+    } catch (e: any) {
+      errors.push(`${tableName}: ${e.message}`);
+      totalFail += docs.length;
+    }
+
+    processed++;
+    onProgress?.(tableName, processed, total);
+  }
+
+  // KV store geri yükle
+  if (tableNames.includes('kv_store') && backup.kvEntries && backup.kvEntries.length > 0) {
+    try {
+      const { kvSet } = await import('./pouchdb-kv');
+      for (const { key, value } of backup.kvEntries) {
+        await kvSet(key, value);
+        totalOk++;
+      }
+      processed++;
+      onProgress?.('kv_store', processed, total);
+    } catch (e: any) {
+      errors.push(`kv_store: ${e.message}`);
+    }
+  }
+
+  return { ok: totalOk, fail: totalFail, tables: restoredTables, errors };
 }
 
 // ─── Yedek Metadata Yönetimi ─────────────────────────────────────────────────
@@ -254,7 +394,12 @@ export interface AutoBackupConfig {
 
 export function getAutoBackupConfig(): AutoBackupConfig {
   try {
-    return JSON.parse(localStorage.getItem(AUTO_BACKUP_CONFIG_KEY) || '{}');
+    const stored = JSON.parse(localStorage.getItem(AUTO_BACKUP_CONFIG_KEY) || '{}');
+    return {
+      enabled: stored.enabled ?? false,
+      intervalHours: stored.intervalHours ?? 24,
+      lastRun: stored.lastRun ?? null,
+    };
   } catch { return { enabled: false, intervalHours: 24, lastRun: null }; }
 }
 
@@ -272,7 +417,6 @@ export function startAutoBackupScheduler(onBackup?: (meta: BackupMeta) => void):
   const runBackup = async () => {
     const result = await createPouchBackup();
     if (result.ok && result.backup) {
-      // Auto-backup: sadece metadata kaydet, indirme yok
       const meta: BackupMeta = {
         id: `auto_${Date.now()}`,
         timestamp: result.backup.createdAt,
@@ -281,6 +425,8 @@ export function startAutoBackupScheduler(onBackup?: (meta: BackupMeta) => void):
         sizeKB: result.sizeKB,
         tableStats: result.backup.meta.tableStats,
       };
+      // Veriyi IndexedDB'ye kaydet
+      await saveBackupData(meta.id, result.backup).catch(console.error);
       saveBackupMeta(meta);
       const cfg = getAutoBackupConfig();
       saveAutoBackupConfig({ ...cfg, lastRun: new Date().toISOString() });

@@ -264,32 +264,37 @@ export function useTableSync<T extends { id: string }>(
       prev.map(item => item.id === id ? { ...item, ...updates } : item)
     );
 
-    try {
-      const db = getDb(tableName);
-      let existing: any;
+    const MAX_RETRIES = 3;
+    for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
       try {
-        existing = await db.get(id);
-      } catch {
-        // Doc yok — oluştur
-        if (!oldItem) return;
-        const merged = { ...oldItem, ...updates };
-        const dbRow = toDbRef.current ? toDbRef.current(merged) : merged;
-        await db.put({ ...dbRow, _id: id });
-        return;
-      }
+        const db = getDb(tableName);
+        let existing: any;
+        try {
+          existing = await db.get(id);
+        } catch {
+          // Doc yok — oluştur (oldItem zorunlu değil, updates'ten oluştur)
+          const merged = { ...(oldItem ?? {}), ...(updates as any), id };
+          const dbRow = toDbRef.current ? toDbRef.current(merged as T) : merged;
+          await db.put({ ...dbRow, _id: id });
+          return;
+        }
 
-      const cleaned = cleanDoc(existing);
-      const currentItem = fromDbRef.current ? fromDbRef.current(cleaned) : cleaned as T;
-      const merged = { ...currentItem, ...updates };
-      const dbRow = toDbRef.current ? toDbRef.current(merged) : merged;
-      await db.put({ ...dbRow, _id: id, _rev: existing._rev });
-    } catch (e: any) {
-      console.error(`[updateItem] ${tableName}:`, e.message);
-      // Rollback
-      if (oldItem) {
-        setDataState(prev =>
-          prev.map(item => item.id === id ? oldItem : item)
-        );
+        const cleaned = cleanDoc(existing);
+        const currentItem = fromDbRef.current ? fromDbRef.current(cleaned) : cleaned as T;
+        const merged = { ...currentItem, ...updates };
+        const dbRow = toDbRef.current ? toDbRef.current(merged) : merged;
+        await db.put({ ...dbRow, _id: id, _rev: existing._rev });
+        return; // başarılı
+      } catch (e: any) {
+        if (e.status === 409 && attempt < MAX_RETRIES - 1) continue; // conflict retry
+        console.error(`[updateItem] ${tableName}:`, e.message);
+        // Rollback
+        if (oldItem) {
+          setDataState(prev =>
+            prev.map(item => item.id === id ? oldItem : item)
+          );
+        }
+        return;
       }
     }
   }, [tableName]);
@@ -345,10 +350,11 @@ export function useTableSync<T extends { id: string }>(
         const old = oldItems.get(u.id) || {} as any;
         const merged = { ...old, ...u.changes };
         const dbRow = toDbRef.current ? toDbRef.current(merged) : merged;
+        // _rev sadece mevcut doc varsa eklenir — yoksa insert olarak davranılır (conflict önleme)
         return {
           ...dbRow,
           _id: u.id,
-          _rev: row?.doc ? (row.doc as any)._rev : undefined,
+          ...(row?.doc?._rev ? { _rev: row.doc._rev } : {}),
         };
       });
 
