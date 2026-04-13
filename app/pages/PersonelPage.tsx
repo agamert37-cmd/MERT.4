@@ -538,10 +538,10 @@ export function PersonelPage() {
       <SyncStatusBar tableName="personeller" />
 
       {/* Header */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 sm:gap-6">
         <div>
           <div className="flex items-center gap-3 mb-1">
-            <h1 className="text-3xl lg:text-4xl font-extrabold tracking-tight">Personel Yönetimi</h1>
+            <h1 className="text-xl sm:text-3xl lg:text-4xl font-extrabold tracking-tight">Personel Yönetimi</h1>
             <SyncBadge tableName="personeller" />
           </div>
           <p className="text-gray-400">Sistem kullanıcıları, yetkiler ve güvenlik ayarları</p>
@@ -572,7 +572,7 @@ export function PersonelPage() {
                 {s.pulse && <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-emerald-400 animate-pulse shadow-[0_0_8px_#34d399]" />}
               </div>
               <div>
-                <p className="text-3xl font-black">{s.value}</p>
+                <p className="text-2xl sm:text-3xl font-black">{s.value}</p>
                 <p className="text-xs text-gray-500 font-bold uppercase tracking-widest mt-1">{s.label}</p>
               </div>
             </div>
@@ -859,7 +859,7 @@ export function PersonelPage() {
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div className="p-6 rounded-2xl border border-white/5 bg-white/5">
                     <p className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">Bugünkü İşlemler</p>
-                    <p className="text-4xl font-black">{employeeActivityData.todayCount}</p>
+                    <p className="text-3xl sm:text-4xl font-black">{employeeActivityData.todayCount}</p>
                   </div>
                   <div className="p-6 rounded-2xl border border-white/5 bg-white/5 md:col-span-2">
                     <p className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-4">Haftalık Aktivite</p>

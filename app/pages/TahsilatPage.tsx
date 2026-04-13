@@ -886,7 +886,7 @@ export function TahsilatPage() {
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
             className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4" onClick={() => setShowConfirmDialog(false)}>
             <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }}
-              className="modal-glass rounded-2xl p-6 w-full max-w-md border border-border" onClick={e => e.stopPropagation()}>
+              className="modal-glass rounded-2xl p-4 sm:p-6 w-[95vw] max-w-md max-h-[90vh] overflow-y-auto border border-border" onClick={e => e.stopPropagation()}>
               <h3 className="text-lg font-bold text-foreground mb-4 flex items-center gap-2">
                 <CheckCircle2 className="w-5 h-5 text-green-400" />
                 {t('collection.confirmPayment')}

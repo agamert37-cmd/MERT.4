@@ -434,7 +434,7 @@ export function YedeklerPage() {
   return (
     <div className="p-3 sm:p-5 lg:p-6 max-w-[1400px] mx-auto space-y-4 sm:space-y-5 pb-4 sm:pb-6">
       {/* ── Header ──────────────────────────────────────────────── */}
-      <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-xl md:text-2xl font-bold text-white tracking-tight flex items-center gap-2.5">
             <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-blue-500/20 to-cyan-500/10 border border-blue-500/20 flex items-center justify-center">
@@ -567,7 +567,7 @@ export function YedeklerPage() {
                   <motion.div key={backup.id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: idx * 0.03 }}
                     className="card-premium rounded-xl p-4 relative overflow-hidden group">
                     <div className="absolute inset-0 bg-gradient-to-r from-blue-500/[0.02] via-transparent to-cyan-500/[0.02] pointer-events-none" />
-                    <div className="flex flex-col md:flex-row md:items-center gap-3 relative z-10">
+                    <div className="flex flex-col sm:flex-row sm:items-center gap-3 relative z-10">
                       {/* Info */}
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 mb-1">
@@ -929,7 +929,7 @@ export function YedeklerPage() {
               className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50" onClick={() => !selectiveRestoring && setSelectiveModal(null)} />
             <motion.div initial={{ opacity: 0, scale: 0.95, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: 20 }}
               transition={{ type: 'spring', stiffness: 240, damping: 26 }}
-              className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-lg max-h-[85vh] overflow-y-auto z-50 card-premium rounded-2xl p-5 border border-border/30">
+              className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[95vw] max-w-lg max-h-[90vh] overflow-y-auto z-50 card-premium rounded-2xl p-4 sm:p-5 border border-border/30">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-base font-bold text-white flex items-center gap-2">
                   <RotateCcw className="w-5 h-5 text-amber-400" /> Seçici Geri Yükleme

@@ -971,7 +971,7 @@ export function CariPage() {
                 </div>
                 <p className="text-[11px] text-muted-foreground/70 uppercase tracking-wider font-bold">{s.label}</p>
               </div>
-              <p className={`text-3xl font-bold ${c.text} relative z-10 tech-number ml-1`}>{s.value}</p>
+              <p className={`text-2xl sm:text-3xl font-bold ${c.text} relative z-10 tech-number ml-1`}>{s.value}</p>
             </motion.div>
           );
         })}

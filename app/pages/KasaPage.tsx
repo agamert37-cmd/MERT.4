@@ -531,9 +531,9 @@ export function KasaPage() {
                       variants={rowItem}
                       whileHover={{ x: 3, borderColor: 'rgba(255,255,255,0.12)', transition: { duration: 0.15 } }}
                       whileTap={tap.card}
-                      className="group flex flex-col md:flex-row items-start md:items-center justify-between p-4 bg-white/5 border border-white/5 rounded-2xl transition-colors"
+                      className="group flex flex-col sm:flex-row items-start sm:items-center justify-between p-4 bg-white/5 border border-white/5 rounded-2xl transition-colors"
                     >
-                      <div className="flex items-center gap-4 w-full md:w-auto mb-4 md:mb-0">
+                      <div className="flex items-center gap-4 w-full sm:w-auto mb-3 sm:mb-0">
                         <div className={`p-3 rounded-xl flex-shrink-0 ${transaction.type === 'Gelir' ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}>
                           {transaction.type === 'Gelir' ? <TrendingUp className="w-6 h-6" /> : <TrendingDown className="w-6 h-6" />}
                         </div>
