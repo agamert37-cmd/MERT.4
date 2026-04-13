@@ -687,7 +687,7 @@ export function FaturaPage() {
       {/* ─── Header ─── */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-black flex items-center gap-3">
+          <h1 className="text-xl sm:text-3xl font-black flex items-center gap-3">
             <div className="p-2.5 rounded-2xl bg-gradient-to-br from-indigo-600/20 to-blue-600/10 border border-indigo-500/20">
               <FileText className="w-7 h-7 text-indigo-400" />
             </div>

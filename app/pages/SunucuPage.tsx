@@ -276,7 +276,8 @@ export function SunucuPage() {
           <p className="text-[10px] text-gray-600">Yerel / PouchDB / CouchDB / Canlı Sync</p>
         </div>
 
-        <div className="divide-y divide-white/5">
+        <div className="overflow-x-auto">
+        <div className="divide-y divide-white/5 min-w-[480px]">
           {/* Header row */}
           <div className="grid grid-cols-6 px-5 py-2 text-[10px] font-bold uppercase tracking-wider text-gray-600">
             <span className="col-span-2">Tablo</span>
@@ -337,6 +338,7 @@ export function SunucuPage() {
               Sync tabloları yükleniyor…
             </div>
           )}
+        </div>
         </div>
       </div>
 

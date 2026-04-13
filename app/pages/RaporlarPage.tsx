@@ -101,7 +101,7 @@ const StatCard = ({ title, value, numValue, icon: Icon, color, trend, delay = 0,
       </div>
       <div className="relative z-10">
         <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest mb-1">{title}</p>
-        <p className="text-3xl font-black text-white">
+        <p className="text-2xl sm:text-3xl font-black text-white">
           <AnimatedCounter value={numValue} prefix={prefix} duration={1200} />
         </p>
       </div>

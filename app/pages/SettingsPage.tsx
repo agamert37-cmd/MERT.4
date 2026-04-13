@@ -784,7 +784,8 @@ export function SettingsPage() {
             )}
 
             {tableStats.length > 0 && (
-              <div className="space-y-1.5 mt-2">
+              <div className="space-y-1.5 mt-2 overflow-x-auto">
+              <div className="min-w-[360px]">
                 {/* Başlık */}
                 <div className="grid grid-cols-5 gap-2 px-2 pb-1 border-b border-white/5">
                   <span className="text-[10px] text-gray-500 font-bold uppercase tracking-wider col-span-1">Tablo</span>
@@ -841,6 +842,7 @@ export function SettingsPage() {
                     {globalSyncTables.filter(g => g.syncState === 'synced').length}/{globalSyncTables.length}
                   </span>
                 </div>
+              </div>
               </div>
             )}
           </div>

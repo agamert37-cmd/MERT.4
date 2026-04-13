@@ -1030,7 +1030,7 @@ export function AracTakipPage() {
         <Dialog.Portal>
           <Dialog.Overlay className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50" />
           <Dialog.Content
-            className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-card border border-border rounded-2xl p-6 w-full max-w-md z-50 shadow-2xl max-h-[90vh] overflow-y-auto"
+            className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-card border border-border rounded-2xl p-4 sm:p-6 w-[95vw] max-w-md z-50 shadow-2xl max-h-[90vh] overflow-y-auto"
             aria-describedby={undefined}
           >
             <Dialog.Title className="text-xl font-bold text-white mb-5 flex items-center gap-3">
