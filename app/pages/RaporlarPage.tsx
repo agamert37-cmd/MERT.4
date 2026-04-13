@@ -367,7 +367,7 @@ export function RaporlarPage() {
     <div className="p-3 sm:p-6 lg:p-10 space-y-4 sm:space-y-6 lg:space-y-8 bg-background min-h-screen text-white font-sans pb-4 sm:pb-6">
       
       {/* Header */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 sm:gap-6">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 sm:gap-6">
         <div>
           <div className="flex items-center gap-3 mb-1">
             <h1 className="text-2xl sm:text-3xl lg:text-4xl font-extrabold tracking-tight">Kapsamlı Raporlar</h1>

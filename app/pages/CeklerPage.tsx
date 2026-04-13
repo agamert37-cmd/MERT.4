@@ -1498,7 +1498,7 @@ function Overlay({ children, onClose }: { children: React.ReactNode; onClose: ()
 function ModalCard({ children, title, icon, onClose, wide }: { children: React.ReactNode; title: string; icon: React.ReactNode; onClose: () => void; wide?: boolean }) {
   return (
     <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }}
-      className={`modal-glass rounded-2xl p-6 ${wide ? 'w-full max-w-2xl' : 'w-full max-w-md'} border border-border max-h-[85vh] overflow-y-auto`}
+      className={`modal-glass rounded-2xl p-4 sm:p-6 ${wide ? 'w-[95vw] max-w-2xl' : 'w-[95vw] max-w-md'} border border-border max-h-[90vh] overflow-y-auto`}
       onClick={(e) => e.stopPropagation()}>
       <div className="flex items-center justify-between mb-4">
         <h3 className="text-lg font-bold text-foreground flex items-center gap-2">{icon}{title}</h3>

@@ -2040,7 +2040,7 @@ export function UretimPage() {
   ];
 
   return (
-    <div className="p-3 md:p-8 space-y-4 md:space-y-6 max-w-[1400px] mx-auto pb-24 sm:pb-6">
+    <div className="p-3 sm:p-6 md:p-8 space-y-4 sm:space-y-6 max-w-[1400px] mx-auto pb-4 sm:pb-6">
       {/* Header */}
       <motion.div
         initial={{ opacity: 0, y: -20 }}

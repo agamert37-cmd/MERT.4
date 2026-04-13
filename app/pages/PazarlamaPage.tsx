@@ -1004,7 +1004,7 @@ export function PazarlamaPage() {
     <div className="p-3 sm:p-6 lg:p-10 space-y-4 sm:space-y-6 lg:space-y-8 bg-background min-h-screen text-white font-sans pb-4 sm:pb-6 max-w-[1600px] mx-auto">
       {/* ═══════════ HEADER ═══════════ */}
       <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }}
-        className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 mb-6">
+        className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
         <div className="flex items-center gap-4">
           <div className="w-14 h-14 rounded-2xl bg-pink-500/10 flex items-center justify-center border border-pink-500/20">
             <Megaphone className="w-7 h-7 text-pink-400" />

@@ -812,7 +812,7 @@ export function StokPage() {
       )}
 
       {/* ─── Header ─── */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <div className="flex items-center gap-3 mb-1.5">
             <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-2xl bg-gradient-to-br from-blue-600 to-blue-700 flex items-center justify-center shadow-lg shadow-blue-600/20 glow-blue">
@@ -907,7 +907,7 @@ export function StokPage() {
       {activeTab === 'urunler' && (
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-4">
           {/* Filter Bar */}
-          <GlassCard className="p-3 sm:p-4 flex flex-col md:flex-row gap-3">
+          <GlassCard className="p-3 sm:p-4 flex flex-col sm:flex-row gap-3">
             <div className="flex-1 relative">
               <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
               <input
