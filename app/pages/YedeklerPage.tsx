@@ -20,11 +20,15 @@ import { useModuleBus } from '../hooks/useModuleBus';
 import { getPagePermissions } from '../utils/permissions';
 import {
   createPouchBackup, downloadBackup, restorePouchBackup,
-  restoreSelectedTables, getBackupMetaList, saveBackupMeta,
+  restoreSelectedTables, getBackupMetaListAsync, saveBackupMeta,
   deleteBackupMeta, getBackupSystemStats, startAutoBackupScheduler,
   stopAutoBackupScheduler, getAutoBackupConfig, saveAutoBackupConfig,
   type BackupMeta, type PouchBackupData,
 } from '../lib/pouchdb-backup';
+import {
+  initializeCouchDbDatabases, seedPouchDbFromLocalStorage,
+  getCouchDbTableStatus, type CouchDbTableStatus,
+} from '../lib/pouchdb';
 
 const STORAGE_PREFIX = 'isleyen_et_';
 
@@ -88,7 +92,7 @@ export function YedeklerPage() {
   const [autoBackupInterval, setAutoBackupInterval] = useState(() => getAutoBackupConfig().intervalHours || 24);
   const [lastAutoBackup, setLastAutoBackup] = useState(() => getAutoBackupConfig().lastRun || null);
 
-  // ─── Cloud backup stubs (Supabase removed, CouchDB not yet configured) ──────
+  // ─── Cloud backup stubs (CouchDB sync otomatik — manuel bulut yedek henüz yok) ──────
   const [cloudBackups] = useState<BackupMeta[]>([]);
   const [filteredCloudBackups] = useState<BackupMeta[]>([]);
   const [verifyingId, setVerifyingId] = useState<string | null>(null);
@@ -132,6 +136,67 @@ export function YedeklerPage() {
   // ─── Local repo config stubs ──────────────────────────────────────────────
   const getLocalRepoConfig = useCallback(() => ({ enabled: false }), []);
   const isLocalHealthy = useCallback(() => false, []);
+
+  // ─── CouchDB kurulum state ────────────────────────────────────────────────
+  const [couchTableStatus, setCouchTableStatus] = useState<CouchDbTableStatus[]>([]);
+  const [couchStatusLoading, setCouchStatusLoading] = useState(false);
+  const [couchInitializing, setCouchInitializing] = useState(false);
+  const [couchSeeding, setCouchSeeding] = useState(false);
+  const [seedProgress, setSeedProgress] = useState('');
+  const [initResult, setInitResult] = useState<{ ok: number; fail: number; alreadyExisted: number } | null>(null);
+  const [seedResult, setSeedResult] = useState<Record<string, { seeded: number; existed: number; errors: number }> | null>(null);
+
+  const fetchCouchTableStatus = useCallback(async () => {
+    setCouchStatusLoading(true);
+    try {
+      const statuses = await getCouchDbTableStatus();
+      setCouchTableStatus(statuses);
+    } catch {
+      toast.error('CouchDB durumu alınamadı');
+    }
+    setCouchStatusLoading(false);
+  }, []);
+
+  const handleInitializeDatabases = useCallback(async () => {
+    setCouchInitializing(true);
+    setInitResult(null);
+    try {
+      const result = await initializeCouchDbDatabases();
+      setInitResult({
+        ok: result.ok.length,
+        fail: result.fail.length,
+        alreadyExisted: result.alreadyExisted.length,
+      });
+      if (result.fail.length === 0) {
+        toast.success(`${result.ok.length} veritabanı başarıyla oluşturuldu`);
+      } else {
+        toast.warning(`${result.ok.length} başarılı, ${result.fail.length} hatalı: ${result.fail.join(', ')}`);
+      }
+      await fetchCouchTableStatus();
+    } catch (e: any) {
+      toast.error('Veritabanı oluşturma hatası: ' + e.message);
+    }
+    setCouchInitializing(false);
+  }, [fetchCouchTableStatus]);
+
+  const handleSeedFromLocalStorage = useCallback(async () => {
+    setCouchSeeding(true);
+    setSeedProgress('Başlatılıyor...');
+    setSeedResult(null);
+    try {
+      const result = await seedPouchDbFromLocalStorage((tableName, count) => {
+        setSeedProgress(`${tableName}: ${count} kayıt aktarıldı`);
+      });
+      setSeedResult(result);
+      const total = Object.values(result).reduce((s, v) => s + v.seeded, 0);
+      toast.success(`${total} kayıt PouchDB'ye aktarıldı (CouchDB'ye otomatik sync edilecek)`);
+      await fetchCouchTableStatus();
+    } catch (e: any) {
+      toast.error('Veri aktarma hatası: ' + e.message);
+    }
+    setCouchSeeding(false);
+    setSeedProgress('');
+  }, [fetchCouchTableStatus]);
   // ─── Legacy / table restore stubs ──────────────────────────────────────────
   const handleLegacyBackup = useCallback(() => {
     const { data } = collectLocalStorageData();
@@ -159,8 +224,9 @@ export function YedeklerPage() {
     finally { setRestoringId(null); setRestoreProgress(''); }
   }, [canBackup]);
 
-  const fetchLocalBackups = useCallback(() => {
-    setLocalBackups(getBackupMetaList());
+  const fetchLocalBackups = useCallback(async () => {
+    const list = await getBackupMetaListAsync();
+    setLocalBackups(list);
   }, []);
 
   const fetchBackupStats = useCallback(async () => {
@@ -202,7 +268,7 @@ export function YedeklerPage() {
         sizeKB: result.sizeKB,
         tableStats: result.backup.meta.tableStats,
       };
-      saveBackupMeta(meta);
+      await saveBackupMeta(meta);
 
       // Yedek verisini localStorage'a kaydet (geri yükleme için)
       try {
@@ -228,9 +294,9 @@ export function YedeklerPage() {
   };
 
   // ─── Yerel yedek sil ─────────────────────────────────────────────────────
-  const handleDeleteLocalBackup = (id: string) => {
+  const handleDeleteLocalBackup = async (id: string) => {
     if (!window.confirm('Bu yedeği kalıcı olarak silmek istediğinize emin misiniz?')) return;
-    deleteBackupMeta(id);
+    await deleteBackupMeta(id);
     try { localStorage.removeItem(`pouchdb_backup_data_${id}`); } catch {}
     fetchLocalBackups();
     fetchBackupStats();
@@ -299,7 +365,7 @@ export function YedeklerPage() {
     reader.onload = (ev) => {
       try {
         const parsed = JSON.parse(ev.target?.result as string);
-        // Hem pouchdb_full hem eski supabase_tables formatını kabul et
+        // pouchdb_full formatını kabul et (eski supabase_tables formatıyla da uyumlu)
         if (!parsed.tables) { toast.error('Geçersiz yedek dosyası — "tables" alanı bulunamadı'); return; }
         setRestoreFileContent(parsed);
         setIsFileModalOpen(true);
@@ -366,9 +432,9 @@ export function YedeklerPage() {
   const inputClass = "w-full px-3 py-2.5 bg-secondary/50 border border-border/30 rounded-xl text-white text-sm placeholder-muted-foreground/40 focus:outline-none focus:ring-1 focus:ring-blue-500/40 transition-all";
 
   return (
-    <div className="p-3 sm:p-5 lg:p-6 max-w-[1400px] mx-auto space-y-4 sm:space-y-5 pb-28 sm:pb-6">
+    <div className="p-3 sm:p-5 lg:p-6 max-w-[1400px] mx-auto space-y-4 sm:space-y-5 pb-4 sm:pb-6">
       {/* ── Header ──────────────────────────────────────────────── */}
-      <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-xl md:text-2xl font-bold text-white tracking-tight flex items-center gap-2.5">
             <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-blue-500/20 to-cyan-500/10 border border-blue-500/20 flex items-center justify-center">
@@ -501,7 +567,7 @@ export function YedeklerPage() {
                   <motion.div key={backup.id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: idx * 0.03 }}
                     className="card-premium rounded-xl p-4 relative overflow-hidden group">
                     <div className="absolute inset-0 bg-gradient-to-r from-blue-500/[0.02] via-transparent to-cyan-500/[0.02] pointer-events-none" />
-                    <div className="flex flex-col md:flex-row md:items-center gap-3 relative z-10">
+                    <div className="flex flex-col sm:flex-row sm:items-center gap-3 relative z-10">
                       {/* Info */}
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 mb-1">
@@ -691,7 +757,7 @@ export function YedeklerPage() {
               <CheckCircle2 className="w-4 h-4 text-blue-400 flex-shrink-0 mt-0.5" />
               <div className="text-xs text-muted-foreground/60 space-y-1">
                 <p className="text-blue-400 font-medium">Otomatik Yedekleme Bilgisi</p>
-                <p>Uygulama açıkken belirtilen aralıklarda sunucu tarafında SHA-256 doğrulamalı tam yedek oluşturulur. Yedekler Supabase KV Store'da kalıcı olarak saklanır.</p>
+                <p>Uygulama açıkken belirtilen aralıklarda SHA-256 doğrulamalı tam yedek oluşturulur. Yedekler PouchDB/CouchDB üzerinde kalıcı olarak saklanır.</p>
               </div>
             </div>
           </div>
@@ -758,26 +824,97 @@ export function YedeklerPage() {
             </div>
           )}
 
-          {/* Dual supabase info */}
-          <div className="card-premium rounded-xl p-4">
-            <div className="flex items-center gap-2.5 mb-2">
-              <Server className="w-4 h-4 text-cyan-400" />
-              <h4 className="text-xs font-bold text-white">Yerel Depo (Dual Supabase)</h4>
+          {/* ── CouchDB Kurulum Paneli ── */}
+          <div className="card-premium rounded-xl p-5 space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <Database className="w-4 h-4 text-cyan-400" />
+                <h4 className="text-sm font-bold text-white">CouchDB Veritabanı Kurulumu</h4>
+              </div>
+              <button
+                onClick={fetchCouchTableStatus}
+                disabled={couchStatusLoading}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs bg-secondary/40 hover:bg-secondary/60 text-muted-foreground transition-all"
+              >
+                <RefreshCw className={`w-3 h-3 ${couchStatusLoading ? 'animate-spin' : ''}`} /> Kontrol Et
+              </button>
             </div>
-            {(() => {
-              const lc = getLocalRepoConfig() as any;
-              return lc.enabled ? (
-                <div className="flex items-center gap-3">
-                  <div className={`w-2.5 h-2.5 rounded-full ${isLocalHealthy() ? 'bg-emerald-400 animate-pulse' : 'bg-red-400'}`} />
-                  <span className="text-xs text-muted-foreground/60">
-                    {isLocalHealthy() ? `Bağlı — ${(lc as any).url ?? ''}` : `Bağlantı Kopuk — ${(lc as any).url ?? ''}`}
-                  </span>
-                  {(lc as any).lastSyncToCloud && <span className="text-[9px] text-muted-foreground/40">Son sync: {new Date((lc as any).lastSyncToCloud).toLocaleString('tr-TR')}</span>}
+
+            {/* Adım 1 — Veritabanlarını oluştur */}
+            <div className="p-4 rounded-xl bg-black/30 border border-white/5 space-y-2">
+              <p className="text-xs font-bold text-white flex items-center gap-2">
+                <span className="w-5 h-5 rounded-full bg-blue-500/20 text-blue-400 text-[10px] flex items-center justify-center font-black">1</span>
+                CouchDB Veritabanlarını Oluştur
+              </p>
+              <p className="text-xs text-muted-foreground/60">15 tablo + KV store CouchDB'de yoksa oluşturulur. Zaten varsa atlanır.</p>
+              <button
+                onClick={handleInitializeDatabases}
+                disabled={couchInitializing}
+                className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl transition-colors disabled:opacity-50"
+              >
+                {couchInitializing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Database className="w-3.5 h-3.5" />}
+                {couchInitializing ? 'Oluşturuluyor...' : 'Tüm Veritabanlarını Oluştur'}
+              </button>
+              {initResult && (
+                <div className="text-xs flex gap-3 mt-1">
+                  <span className="text-emerald-400">✓ {initResult.ok} başarılı</span>
+                  {initResult.alreadyExisted > 0 && <span className="text-blue-400">{initResult.alreadyExisted} zaten vardı</span>}
+                  {initResult.fail > 0 && <span className="text-red-400">✗ {initResult.fail} hatalı</span>}
                 </div>
-              ) : (
-                <p className="text-xs text-muted-foreground/40">Yerel Supabase devre dışı. Ayarlar sayfasından yapılandırabilirsiniz.</p>
-              );
-            })()}
+              )}
+            </div>
+
+            {/* Adım 2 — Yerel verileri aktar */}
+            <div className="p-4 rounded-xl bg-black/30 border border-white/5 space-y-2">
+              <p className="text-xs font-bold text-white flex items-center gap-2">
+                <span className="w-5 h-5 rounded-full bg-emerald-500/20 text-emerald-400 text-[10px] flex items-center justify-center font-black">2</span>
+                Yerel Verileri CouchDB'ye Aktar
+              </p>
+              <p className="text-xs text-muted-foreground/60">localStorage'daki tüm veriler PouchDB'ye yazılır. PouchDB otomatik olarak CouchDB'ye senkronize eder.</p>
+              <button
+                onClick={handleSeedFromLocalStorage}
+                disabled={couchSeeding}
+                className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl transition-colors disabled:opacity-50"
+              >
+                {couchSeeding ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <UploadCloud className="w-3.5 h-3.5" />}
+                {couchSeeding ? (seedProgress || 'Aktarılıyor...') : 'Verileri CouchDB\'ye Aktar'}
+              </button>
+              {seedResult && (
+                <div className="mt-2 grid grid-cols-2 gap-1">
+                  {Object.entries(seedResult).filter(([, v]) => v.seeded > 0 || v.errors > 0).map(([table, v]) => (
+                    <div key={table} className="text-[10px] flex justify-between px-2 py-1 rounded bg-white/[0.03]">
+                      <span className="text-muted-foreground/60 truncate">{table}</span>
+                      <span className={v.errors > 0 ? 'text-red-400' : 'text-emerald-400'}>
+                        +{v.seeded} {v.errors > 0 && `(${v.errors} hata)`}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Tablo durumu */}
+            {couchTableStatus.length > 0 && (
+              <div className="space-y-1.5">
+                <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Tablo Durumları</p>
+                <div className="grid grid-cols-1 gap-1">
+                  {couchTableStatus.map(t => (
+                    <div key={t.name} className="flex items-center justify-between px-3 py-2 rounded-lg bg-white/[0.03] border border-white/[0.05]">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <div className={`w-2 h-2 rounded-full flex-shrink-0 ${t.exists ? 'bg-emerald-400' : 'bg-red-400'}`} />
+                        <span className="text-xs text-white/80 truncate">{t.displayName}</span>
+                      </div>
+                      <div className="flex items-center gap-3 text-[10px] flex-shrink-0 ml-2">
+                        <span className="text-muted-foreground/50">LS: <span className="text-white/60">{t.localStorageCount}</span></span>
+                        <span className="text-muted-foreground/50">PDB: <span className="text-white/60">{t.localDocCount}</span></span>
+                        <span className={t.exists ? 'text-emerald-400' : 'text-red-400'}>CDB: {t.couchDocCount}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <p className="text-[10px] text-muted-foreground/40">LS = localStorage | PDB = PouchDB (yerel) | CDB = CouchDB (sunucu)</p>
+              </div>
+            )}
           </div>
         </motion.div>
       )}
@@ -792,7 +929,7 @@ export function YedeklerPage() {
               className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50" onClick={() => !selectiveRestoring && setSelectiveModal(null)} />
             <motion.div initial={{ opacity: 0, scale: 0.95, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: 20 }}
               transition={{ type: 'spring', stiffness: 240, damping: 26 }}
-              className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-lg max-h-[85vh] overflow-y-auto z-50 card-premium rounded-2xl p-5 border border-border/30">
+              className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[95vw] max-w-lg max-h-[90vh] overflow-y-auto z-50 card-premium rounded-2xl p-4 sm:p-5 border border-border/30">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-base font-bold text-white flex items-center gap-2">
                   <RotateCcw className="w-5 h-5 text-amber-400" /> Seçici Geri Yükleme

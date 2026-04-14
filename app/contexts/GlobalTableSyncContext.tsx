@@ -1,4 +1,4 @@
-// [AJAN-2 | claude/serene-gagarin | 2026-03-24] Son düzenleyen: Claude Sonnet 4.6
+// [AJAN-2 | claude/debug-system-pages-M8P0c | 2026-04-07] Son düzenleyen: Claude Sonnet 4.6
 /**
  * GlobalTableSyncContext — Uygulama Geneli Tablo Senkronizasyonu
  *
@@ -6,17 +6,15 @@
  * Mobilde localStorage boş olduğundan hiçbir veri görünmez.
  *
  * ÇÖZÜM: Bu provider app seviyesinde monte edilir. useTableSync hook'unu
- * her kritik Supabase tablosu için çalıştırır. Böylece uygulama açıldığında
+ * her CouchDB tablosu için çalıştırır. Böylece uygulama açıldığında
  * (hangi sayfa olursa olsun) tüm tablolar localStorage'a yüklenir ve
  * DashboardPage'in storage_update dinleyicisi tetiklenerek veriler görünür.
  *
- * Aktif tablolar:
- *   fisler, urunler, cari_hesaplar, kasa_islemleri, personeller,
- *   bankalar, cekler, araclar, arac_shifts, uretim_profilleri,
- *   uretim_kayitlari, faturalar, fatura_stok, tahsilatlar, arac_km_logs
+ * Yeni tablo eklemek için yalnızca TABLE_SYNC_CONFIGS dizisine kayıt ekleyin —
+ * başka hiçbir yere dokunmanız gerekmez.
  */
 
-import React, { useEffect, useContext, createContext, useState, useCallback } from 'react';
+import React, { useEffect, useContext, createContext, useState, useCallback, useRef } from 'react';
 import { useTableSync } from '../hooks/useTableSync';
 import type { SyncState } from '../hooks/useTableSync';
 import { cariFromDb, cariToDb } from '../pages/CariPage';
@@ -24,6 +22,8 @@ import { productFromDb, productToDb } from '../pages/StokPage';
 import { StorageKey } from '../utils/storage';
 import { startAllSync, stopAllSync, startPeerSync, stopPeerSync } from '../lib/pouchdb';
 import { getCouchDbConfig } from '../lib/db-config';
+import { startAllSync, stopAllSync, autoSeedIfEmpty } from '../lib/pouchdb';
+import { toast } from 'sonner';
 
 // ─── Per-tablo sync durumu context ────────────────────────────────────────────
 
@@ -37,137 +37,103 @@ export interface TableSyncStatus {
 interface GlobalSyncTablesContextValue {
   tables: TableSyncStatus[];
   registerTable: (status: TableSyncStatus) => void;
+  setTableData: (name: string, data: any[]) => void;
+  tableDataRef: React.MutableRefObject<Map<string, any[]>>;
+  tableVersions: Record<string, number>;
+  /** CouchDB sunucu bağlantı durumu: null=henüz bilinmiyor, true=bağlı, false=bağlantı yok */
+  couchdbConnected: boolean | null;
+  couchdbError: string | null;
 }
 
 const GlobalSyncTablesContext = createContext<GlobalSyncTablesContextValue>({
   tables: [],
   registerTable: () => {},
+  setTableData: () => {},
+  tableDataRef: { current: new Map() },
+  tableVersions: {},
+  couchdbConnected: null,
+  couchdbError: null,
 });
 
 export function useGlobalSyncTables() {
   return useContext(GlobalSyncTablesContext);
 }
 
-// ─── Alt bileşenler (her biri bir tablo için useTableSync çalıştırır) ────────
-// Not: Hook kuralları gereği her useTableSync ayrı bir bileşende olmalıdır,
-// yoksa koşullu render durumlarında sorun çıkabilir.
-
-function FislerSync() {
-  const { registerTable } = useGlobalSyncTables();
-  const { data, syncState, lastSync } = useTableSync({ tableName: 'fisler', storageKey: StorageKey.FISLER, orderBy: 'tarih', orderAsc: false });
-  useEffect(() => { registerTable({ name: 'fisler', syncState, lastSyncAt: lastSync, docCount: data.length }); }, [syncState, lastSync, data.length, registerTable]);
-  return null;
+/** CouchDB bağlantı durumunu izle */
+export function useCouchDbStatus() {
+  const { couchdbConnected, couchdbError } = useContext(GlobalSyncTablesContext);
+  return { couchdbConnected, couchdbError };
 }
 
-function UrunlerSync() {
-  const { registerTable } = useGlobalSyncTables();
+/**
+ * useGlobalTableData — okuma-only sayfalar için tablo verisini doğrudan
+ * GlobalTableSyncContext'ten al.
+ *
+ * Re-render mekanizması: tableVersions[tableName] değiştiğinde (veri güncellemesinde)
+ * consumer re-render olur. Diğer tabloların güncellemeleri bu hook'u tetiklemez.
+ */
+export function useGlobalTableData<T = any>(tableName: string): T[] {
+  const { tableDataRef, tableVersions } = useContext(GlobalSyncTablesContext);
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const _version = tableVersions[tableName] ?? 0;
+  return (tableDataRef.current.get(tableName) as T[]) ?? [];
+}
+
+// ─── Tablo konfigürasyon tablosu ──────────────────────────────────────────────
+// Yeni tablo eklemek için buraya bir satır ekleyin; başka hiçbir şeyi değiştirmenize gerek yok.
+
+interface TableSyncConfig {
+  tableName: string;
+  storageKey: string;
+  orderBy?: string;
+  orderAsc?: boolean;
+  fromDb?: (item: any) => any;
+  toDb?: (item: any) => any;
+}
+
+const TABLE_SYNC_CONFIGS: TableSyncConfig[] = [
+  { tableName: 'fisler',           storageKey: StorageKey.FISLER,        orderBy: 'tarih',      orderAsc: false },
+  { tableName: 'urunler',          storageKey: StorageKey.STOK_DATA,     orderBy: 'name',       orderAsc: true,  fromDb: productFromDb, toDb: productToDb },
+  { tableName: 'cari_hesaplar',    storageKey: StorageKey.CARI_DATA,     orderBy: 'companyName',orderAsc: true,  fromDb: cariFromDb,    toDb: cariToDb },
+  { tableName: 'kasa_islemleri',   storageKey: StorageKey.KASA_DATA,     orderBy: 'tarih',      orderAsc: false },
+  { tableName: 'personeller',      storageKey: StorageKey.PERSONEL_DATA, orderBy: 'name',       orderAsc: true  },
+  { tableName: 'bankalar',         storageKey: StorageKey.BANK_DATA,     orderBy: 'name',       orderAsc: true  },
+  { tableName: 'cekler',           storageKey: StorageKey.CEKLER_DATA,   orderBy: 'created_at', orderAsc: false },
+  { tableName: 'araclar',          storageKey: StorageKey.ARAC_DATA,     orderBy: 'plaka',      orderAsc: true  },
+  { tableName: 'arac_shifts',      storageKey: StorageKey.ARAC_SHIFTS,   orderBy: 'created_at', orderAsc: false },
+  { tableName: 'arac_km_logs',     storageKey: StorageKey.ARAC_KM_LOGS,  orderBy: 'created_at', orderAsc: false },
+  { tableName: 'uretim_profilleri',storageKey: StorageKey.URETIM_PROFILES,orderBy: 'name',      orderAsc: true  },
+  { tableName: 'uretim_kayitlari', storageKey: StorageKey.URETIM_DATA,   orderBy: 'created_at', orderAsc: false },
+  { tableName: 'faturalar',        storageKey: StorageKey.FATURALAR,     orderBy: 'tarih',      orderAsc: false },
+  { tableName: 'fatura_stok',      storageKey: StorageKey.FATURA_STOK,   orderBy: 'created_at', orderAsc: false },
+  { tableName: 'tahsilatlar',         storageKey: 'tahsilatlar_data',          orderBy: 'tarih',      orderAsc: false },
+  { tableName: 'guncelleme_notlari',  storageKey: StorageKey.GUNCELLEME_NOTLARI, orderBy: 'date',     orderAsc: false },
+  { tableName: 'stok_giris',          storageKey: StorageKey.STOK_GIRIS,         orderBy: 'date',     orderAsc: false },
+];
+
+// ─── Genel tablo senkronizasyon bileşeni ──────────────────────────────────────
+// Her config için ayrı bir React bileşeni instance'ı oluşturulur.
+// Hook kurallarına uygun: her instance useTableSync'i tam olarak bir kez çağırır.
+
+function TableSyncNode({ tableName, storageKey, orderBy, orderAsc, fromDb, toDb }: TableSyncConfig) {
+  const { registerTable, setTableData } = useGlobalSyncTables();
   const { data, syncState, lastSync } = useTableSync({
-    tableName: 'urunler',
-    storageKey: StorageKey.STOK_DATA,
-    orderBy: 'ad',
-    orderAsc: true,
-    fromDb: productFromDb,
-    toDb: productToDb,
+    tableName,
+    storageKey,
+    orderBy,
+    orderAsc,
+    fromDb,
+    toDb,
   });
-  useEffect(() => { registerTable({ name: 'urunler', syncState, lastSyncAt: lastSync, docCount: data.length }); }, [syncState, lastSync, data.length, registerTable]);
-  return null;
-}
 
-function CariSync() {
-  const { registerTable } = useGlobalSyncTables();
-  const { data, syncState, lastSync } = useTableSync({
-    tableName: 'cari_hesaplar',
-    storageKey: StorageKey.CARI_DATA,
-    orderBy: 'ad',
-    orderAsc: true,
-    fromDb: cariFromDb,
-    toDb: cariToDb,
-  });
-  useEffect(() => { registerTable({ name: 'cari_hesaplar', syncState, lastSyncAt: lastSync, docCount: data.length }); }, [syncState, lastSync, data.length, registerTable]);
-  return null;
-}
+  useEffect(() => {
+    registerTable({ name: tableName, syncState, lastSyncAt: lastSync, docCount: data.length });
+  }, [syncState, lastSync, data.length, registerTable, tableName]);
 
-function KasaSync() {
-  const { registerTable } = useGlobalSyncTables();
-  const { data, syncState, lastSync } = useTableSync({ tableName: 'kasa_islemleri', storageKey: StorageKey.KASA_DATA, orderBy: 'tarih', orderAsc: false });
-  useEffect(() => { registerTable({ name: 'kasa_islemleri', syncState, lastSyncAt: lastSync, docCount: data.length }); }, [syncState, lastSync, data.length, registerTable]);
-  return null;
-}
+  useEffect(() => {
+    setTableData(tableName, data);
+  }, [data, setTableData, tableName]);
 
-function PersonelSync() {
-  const { registerTable } = useGlobalSyncTables();
-  const { data, syncState, lastSync } = useTableSync({ tableName: 'personeller', storageKey: StorageKey.PERSONEL_DATA, orderBy: 'ad', orderAsc: true });
-  useEffect(() => { registerTable({ name: 'personeller', syncState, lastSyncAt: lastSync, docCount: data.length }); }, [syncState, lastSync, data.length, registerTable]);
-  return null;
-}
-
-function BankaSync() {
-  const { registerTable } = useGlobalSyncTables();
-  const { data, syncState, lastSync } = useTableSync({ tableName: 'bankalar', storageKey: StorageKey.BANK_DATA, orderBy: 'ad', orderAsc: true });
-  useEffect(() => { registerTable({ name: 'bankalar', syncState, lastSyncAt: lastSync, docCount: data.length }); }, [syncState, lastSync, data.length, registerTable]);
-  return null;
-}
-
-function CeklerSync() {
-  const { registerTable } = useGlobalSyncTables();
-  const { data, syncState, lastSync } = useTableSync({ tableName: 'cekler', storageKey: StorageKey.CEKLER_DATA, orderBy: 'created_at', orderAsc: false });
-  useEffect(() => { registerTable({ name: 'cekler', syncState, lastSyncAt: lastSync, docCount: data.length }); }, [syncState, lastSync, data.length, registerTable]);
-  return null;
-}
-
-function AraclarSync() {
-  const { registerTable } = useGlobalSyncTables();
-  const { data, syncState, lastSync } = useTableSync({ tableName: 'araclar', storageKey: StorageKey.ARAC_DATA, orderBy: 'plaka', orderAsc: true });
-  useEffect(() => { registerTable({ name: 'araclar', syncState, lastSyncAt: lastSync, docCount: data.length }); }, [syncState, lastSync, data.length, registerTable]);
-  return null;
-}
-
-function AracShiftsSync() {
-  const { registerTable } = useGlobalSyncTables();
-  const { data, syncState, lastSync } = useTableSync({ tableName: 'arac_shifts', storageKey: StorageKey.ARAC_SHIFTS, orderBy: 'created_at', orderAsc: false });
-  useEffect(() => { registerTable({ name: 'arac_shifts', syncState, lastSyncAt: lastSync, docCount: data.length }); }, [syncState, lastSync, data.length, registerTable]);
-  return null;
-}
-
-function AracKmLogsSync() {
-  const { registerTable } = useGlobalSyncTables();
-  const { data, syncState, lastSync } = useTableSync({ tableName: 'arac_km_logs', storageKey: StorageKey.ARAC_KM_LOGS, orderBy: 'created_at', orderAsc: false });
-  useEffect(() => { registerTable({ name: 'arac_km_logs', syncState, lastSyncAt: lastSync, docCount: data.length }); }, [syncState, lastSync, data.length, registerTable]);
-  return null;
-}
-
-function UretimProfillerSync() {
-  const { registerTable } = useGlobalSyncTables();
-  const { data, syncState, lastSync } = useTableSync({ tableName: 'uretim_profilleri', storageKey: StorageKey.URETIM_PROFILES, orderBy: 'ad', orderAsc: true });
-  useEffect(() => { registerTable({ name: 'uretim_profilleri', syncState, lastSyncAt: lastSync, docCount: data.length }); }, [syncState, lastSync, data.length, registerTable]);
-  return null;
-}
-
-function UretimKayitlariSync() {
-  const { registerTable } = useGlobalSyncTables();
-  const { data, syncState, lastSync } = useTableSync({ tableName: 'uretim_kayitlari', storageKey: StorageKey.URETIM_DATA, orderBy: 'created_at', orderAsc: false });
-  useEffect(() => { registerTable({ name: 'uretim_kayitlari', syncState, lastSyncAt: lastSync, docCount: data.length }); }, [syncState, lastSync, data.length, registerTable]);
-  return null;
-}
-
-function FaturalarSync() {
-  const { registerTable } = useGlobalSyncTables();
-  const { data, syncState, lastSync } = useTableSync({ tableName: 'faturalar', storageKey: StorageKey.FATURALAR, orderBy: 'tarih', orderAsc: false });
-  useEffect(() => { registerTable({ name: 'faturalar', syncState, lastSyncAt: lastSync, docCount: data.length }); }, [syncState, lastSync, data.length, registerTable]);
-  return null;
-}
-
-function FaturaStokSync() {
-  const { registerTable } = useGlobalSyncTables();
-  const { data, syncState, lastSync } = useTableSync({ tableName: 'fatura_stok', storageKey: StorageKey.FATURA_STOK, orderBy: 'created_at', orderAsc: false });
-  useEffect(() => { registerTable({ name: 'fatura_stok', syncState, lastSyncAt: lastSync, docCount: data.length }); }, [syncState, lastSync, data.length, registerTable]);
-  return null;
-}
-
-function TahsilatlarSync() {
-  const { registerTable } = useGlobalSyncTables();
-  const { data, syncState, lastSync } = useTableSync({ tableName: 'tahsilatlar', storageKey: 'tahsilatlar_data', orderBy: 'tarih', orderAsc: false });
-  useEffect(() => { registerTable({ name: 'tahsilatlar', syncState, lastSyncAt: lastSync, docCount: data.length }); }, [syncState, lastSync, data.length, registerTable]);
   return null;
 }
 
@@ -180,12 +146,66 @@ interface GlobalTableSyncProviderProps {
 /**
  * GlobalTableSyncProvider
  *
- * App.tsx'e sarılır. Tüm Supabase tablolarını localStorage ile senkronize
- * eder. Hangi sayfada olunursa olsun (Dashboard dahil) veriler doğrudan
- * Supabase tablolarından okunur ve storage_update eventi yayınlanır.
+ * App.tsx'e sarılır. TABLE_SYNC_CONFIGS'deki tüm tabloları PouchDB ↔ CouchDB
+ * ile sürekli senkronize eder. Hangi sayfada olunursa olsun veriler hazır olur.
+ *
+ * Yeni tablo eklemek: TABLE_SYNC_CONFIGS dizisine tek satır.
  */
 export function GlobalTableSyncProvider({ children }: GlobalTableSyncProviderProps) {
   const [tables, setTables] = useState<TableSyncStatus[]>([]);
+  const tableDataRef = useRef<Map<string, any[]>>(new Map());
+  const [tableVersions, setTableVersions] = useState<Record<string, number>>({});
+
+  // ─── CouchDB bağlantı durumu ──────────────────────────────────────────────
+  const [couchdbConnected, setCouchdbConnected] = useState<boolean | null>(null);
+  const [couchdbError, setCouchdbError] = useState<string | null>(null);
+
+  // Hata toast'u sadece bir kez göster (her hatalı sync olayında gösterme)
+  const shownErrorToastRef = useRef(false);
+  const shownConnectedToastRef = useRef(false);
+
+  useEffect(() => {
+    function handleSyncEvent(e: Event) {
+      const { type, errorMsg } = (e as CustomEvent).detail as {
+        type: 'error' | 'connected' | 'paused';
+        dbName: string;
+        errorMsg?: string;
+      };
+
+      if (type === 'error') {
+        setCouchdbConnected(false);
+        setCouchdbError(errorMsg || 'Bağlantı hatası');
+        shownConnectedToastRef.current = false; // Reconnect toast için sıfırla
+        if (!shownErrorToastRef.current) {
+          shownErrorToastRef.current = true;
+          toast.error(
+            '⚠️ CouchDB sunucusuna bağlanılamıyor — veriler yalnızca bu cihazda kaydedilir.',
+            {
+              duration: 6000,
+              description: errorMsg
+                ? `Hata: ${errorMsg.substring(0, 80)}`
+                : 'Sunucu sayfasından bağlantıyı kontrol edin.',
+            }
+          );
+        }
+      } else if (type === 'connected' || type === 'paused') {
+        // paused hatasız = catch-up tamamlandı, bağlantı sağlıklı
+        const wasDisconnected = couchdbConnected === false;
+        setCouchdbConnected(true);
+        setCouchdbError(null);
+        shownErrorToastRef.current = false; // Yeni hata için sıfırla
+        if (wasDisconnected && !shownConnectedToastRef.current) {
+          shownConnectedToastRef.current = true;
+          toast.success('✅ CouchDB bağlantısı yeniden kuruldu — senkronizasyon devam ediyor.', {
+            duration: 4000,
+          });
+        }
+      }
+    }
+
+    window.addEventListener('pouchdb:sync_status', handleSyncEvent);
+    return () => window.removeEventListener('pouchdb:sync_status', handleSyncEvent);
+  }, [couchdbConnected]);
 
   const registerTable = useCallback((status: TableSyncStatus) => {
     setTables(prev => {
@@ -197,6 +217,11 @@ export function GlobalTableSyncProvider({ children }: GlobalTableSyncProviderPro
     });
   }, []);
 
+  const setTableData = useCallback((name: string, data: any[]) => {
+    tableDataRef.current.set(name, data);
+    setTableVersions(prev => ({ ...prev, [name]: (prev[name] ?? 0) + 1 }));
+  }, []);
+
   // PouchDB ↔ CouchDB continuous sync başlat (kademeli — 200ms aralık)
   // Peer URL yapılandırılmışsa eş senkronizasyonu da başlat
   useEffect(() => {
@@ -206,27 +231,44 @@ export function GlobalTableSyncProvider({ children }: GlobalTableSyncProviderPro
     return () => {
       stopAllSync();
       stopPeerSync();
+  // Ağ kurtarma: pouchdb.ts'deki online/visibilitychange listener'ları otomatik restartAllSync() çağırır.
+  // Ardından: PouchDB boşsa localStorage'dan otomatik doldur → sync CouchDB'ye iter.
+  useEffect(() => {
+    startAllSync();
+
+    const seedTimer = setTimeout(() => {
+      // toDb dönüşümlerini geçir — localStorage'da camelCase duran veriyi
+      // PouchDB'ye snake_case olarak kaydet (productFromDb/cariFromDb ile uyumlu)
+      autoSeedIfEmpty(
+        (totalSeeded) => {
+          if (totalSeeded > 0) {
+            toast.success(
+              `${totalSeeded} kayıt PouchDB'ye aktarıldı — CouchDB'ye senkronize ediliyor…`,
+              { duration: 5000 }
+            );
+          }
+        },
+        {
+          urunler:       productToDb,
+          cari_hesaplar: cariToDb,
+        }
+      );
+    }, 1500);
+
+    return () => {
+      stopAllSync();
+      clearTimeout(seedTimer);
     };
   }, []);
 
   return (
-    <GlobalSyncTablesContext.Provider value={{ tables, registerTable }}>
-      {/* Her tablo için ayrı senkronizasyon bileşeni */}
-      <FislerSync />
-      <UrunlerSync />
-      <CariSync />
-      <KasaSync />
-      <PersonelSync />
-      <BankaSync />
-      <CeklerSync />
-      <AraclarSync />
-      <AracShiftsSync />
-      <AracKmLogsSync />
-      <UretimProfillerSync />
-      <UretimKayitlariSync />
-      <FaturalarSync />
-      <FaturaStokSync />
-      <TahsilatlarSync />
+    <GlobalSyncTablesContext.Provider value={{
+      tables, registerTable, setTableData, tableDataRef, tableVersions,
+      couchdbConnected, couchdbError,
+    }}>
+      {TABLE_SYNC_CONFIGS.map(config => (
+        <TableSyncNode key={config.tableName} {...config} />
+      ))}
       {children}
     </GlobalSyncTablesContext.Provider>
   );

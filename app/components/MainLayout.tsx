@@ -8,10 +8,8 @@ import { SupabaseStatusBadge } from './SupabaseStatus';
 import { NodeStatusBadge } from './NodeStatusPanel';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import * as Tooltip from '@radix-ui/react-tooltip';
-import { getFromStorage, StorageKey } from '../utils/storage';
-import { createPouchBackup, downloadBackup } from '../lib/pouchdb-backup';
-import { motion, AnimatePresence } from 'motion/react';
 import { createSystemBackup, getFromStorage, StorageKey } from '../utils/storage';
+import { createPouchBackup, downloadBackup } from '../lib/pouchdb-backup';
 import { motion, AnimatePresence, type Variants } from 'motion/react';
 import { 
   LayoutDashboard, 
@@ -46,7 +44,8 @@ import {
   Megaphone,
   Globe,
   FileEdit,
-  FileCheck
+  FileCheck,
+  Server
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { ProfileEditModal } from './ProfileEditModal';
@@ -89,6 +88,7 @@ const menuItems: MenuItem[] = [
   { path: '/faturalar', labelKey: 'nav.invoices', icon: FileCheck, color: 'indigo', permKey: 'kasa' },
   { path: '/dosyalar', labelKey: 'nav.files', icon: FolderOpen, color: 'teal', permKey: 'ayarlar' },
   { path: '/pazarlama', labelKey: 'nav.marketing', icon: Megaphone, color: 'pink', permKey: 'ayarlar' },
+  { path: '/sunucu', labelKey: 'nav.server', icon: Server, color: 'blue', permKey: 'ayarlar' },
   { path: '/yedekler', labelKey: 'nav.backups', icon: Database, color: 'slate', permKey: 'ayarlar' },
   { path: '/chat', labelKey: 'nav.aiAssistant', icon: MessageSquare, color: 'violet', permKey: 'dashboard' },
   { path: '/guvenlik', labelKey: 'nav.security', icon: ShieldAlert, color: 'red', permKey: 'ayarlar' },
@@ -118,6 +118,7 @@ const breadcrumbKeyMap: Record<string, string> = {
   '/chat': 'breadcrumb.aiAssistant',
   '/guvenlik': 'breadcrumb.security',
   '/settings': 'breadcrumb.settings',
+  '/sunucu': 'breadcrumb.server',
 };
 
 // Spring physics animation config
@@ -412,7 +413,7 @@ export function MainLayout() {
 
   return (
     <Tooltip.Provider delayDuration={200}>
-      <div className="min-h-screen bg-background flex relative overflow-hidden text-foreground">
+      <div className="min-h-screen bg-background flex relative overflow-x-hidden text-foreground">
         {/* Subtle Background Ambient Glow */}
         <div className="fixed inset-0 pointer-events-none z-0">
           <div className="absolute top-[-15%] left-[15%] w-[40%] h-[45%] bg-blue-600/[0.04] rounded-full blur-[160px]" />
@@ -1088,7 +1089,8 @@ export function MainLayout() {
           </header>
 
           {/* Page Content with Animated Transitions */}
-          <main className="flex-1 overflow-y-auto custom-scrollbar lg:pb-0">
+          {/* pb-[calc(3.5rem+env(safe-area-inset-bottom,0px))] = mobile bottom nav alanı için koruma */}
+          <main className="flex-1 overflow-y-auto overflow-x-hidden custom-scrollbar overscroll-contain pb-[calc(3.5rem+env(safe-area-inset-bottom,0px))] lg:pb-0">
             <AnimatePresence mode="wait">
               <motion.div
                 key={location.pathname}

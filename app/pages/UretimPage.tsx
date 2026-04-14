@@ -41,15 +41,6 @@ import { productToDb, Product } from './StokPage';
 
 // [AJAN-2 | claude/serene-gagarin | 2026-03-24] Son düzenleyen: Claude Sonnet 4.6
 
-/** No-op: sync handled by useTableSync */
-async function syncStokItemsToSupabase(_items: any[]) {
-  // no-op: sync handled by useTableSync
-}
-
-/** No-op: sync handled by useTableSync/PouchDB */
-async function syncStokItemsToKV(_items: any[]) {
-  // no-op: sync handled by PouchDB
-}
 
 // ─── Interfaces ───────────────────────────────────────────────────
 interface UretimProfile {
@@ -1547,6 +1538,7 @@ export function UretimPage() {
     kvSet('uretim_defaults', newDefaults).catch(() => {});
 
     // ─── POUCHDB SYNC: Değişen stok kalemlerini urunler tablosuna yaz ───
+    // ─── SYNC: Değişen stok kalemlerini yaz (useTableSync → PouchDB → CouchDB) ───
     const changedItems: any[] = [];
     // Hammadde (stoktan düşülen)
     const updatedHammadde = updatedStok.find((s: any) => s.id === form.hammaddeStokId);
@@ -1570,6 +1562,7 @@ export function UretimPage() {
         }
       }
     }
+    // sync handled by useTableSync → PouchDB → CouchDB
 
     toast.success(
       <div>
@@ -1800,11 +1793,7 @@ export function UretimPage() {
       if (updatedHammadde) changedItems.push(updatedHammadde);
       const updatedCikti = updatedStok.find((s: any) => s.id === newKayit.ciktiStokId);
       if (updatedCikti && updatedCikti.id !== updatedHammadde?.id) changedItems.push(updatedCikti);
-      if (changedItems.length > 0) {
-        try {
-          await Promise.all([syncStokItemsToKV(changedItems), syncStokItemsToSupabase(changedItems)]);
-        } catch (e) { console.error('[UretimPage] sync failed:', e); }
-      }
+      // sync handled by useTableSync → PouchDB → CouchDB
 
       toast.success(
         <div>
@@ -1965,11 +1954,7 @@ export function UretimPage() {
       addKayit(newKayit);
       emit('uretim:completed', { kayitId: newKayit.id, inputKg: newKayit.cigKg, outputKg: newKayit.ciktiKg, productName: newKayit.ciktiUrunAdi });
 
-      // KV Sync
-      const changedItems = updatedStok.filter((s: any) => changedIds.includes(s.id));
-      if (changedItems.length > 0) {
-        try { await syncStokItemsToKV(changedItems); } catch (e) { console.error('[UretimPage] KV sync failed:', e); }
-      }
+      // sync handled by useTableSync → PouchDB → CouchDB
 
       toast.success(
         <div>
@@ -2073,7 +2058,7 @@ export function UretimPage() {
   ];
 
   return (
-    <div className="p-3 md:p-8 space-y-4 md:space-y-6 max-w-[1400px] mx-auto pb-24 sm:pb-6">
+    <div className="p-3 sm:p-6 md:p-8 space-y-4 sm:space-y-6 max-w-[1400px] mx-auto pb-4 sm:pb-6">
       {/* Header */}
       <motion.div
         initial={{ opacity: 0, y: -20 }}

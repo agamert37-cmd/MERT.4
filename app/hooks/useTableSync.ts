@@ -21,6 +21,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { getDb } from '../lib/pouchdb';
 import { setInStorage } from '../utils/storage';
+import { toast } from 'sonner';
 
 // ─── Tipler ───────────────────────────────────────────────────────────────────
 
@@ -121,14 +122,16 @@ export function useTableSync<T extends { id: string }>(
   }, [sortData]);
 
   // ─── localStorage write-through (DashboardPage vb. için) ─────────────────
-  // Debounce: rapid changes collapse into a single write (500ms)
+  // Debounce: rapid changes collapse into a single write (100ms)
+  // NOT: data.length === 0 kontrolü KALDIRILDI — silme işleminden sonra boş
+  // array da yazılmalı, aksi hâlde silinen kayıtlar eski session'da görünür.
   const storageWriteTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
-    if (!storageKey || data.length === 0) return;
+    if (!storageKey || !initialLoadDone.current) return; // ilk fetch tamamlanmadan yazma
     if (storageWriteTimer.current) clearTimeout(storageWriteTimer.current);
     storageWriteTimer.current = setTimeout(() => {
       setInStorage(storageKey, data);
-    }, 500);
+    }, 100);
     return () => {
       if (storageWriteTimer.current) clearTimeout(storageWriteTimer.current);
     };
@@ -247,7 +250,11 @@ export function useTableSync<T extends { id: string }>(
         return item; // başarılı
       } catch (e: any) {
         if (e.status === 409 && attempt < MAX_RETRIES - 1) continue;
-        console.error(`[addItem] ${tableName}:`, e.message);
+        if (e.status === 409) {
+          toast.warning(`Kayıt çakışması (${tableName}) — son sürüm kullanıldı`, { duration: 3000 });
+        } else {
+          console.error(`[addItem] ${tableName}:`, e.message);
+        }
         // Rollback — DB'ye yazılamadı
         setDataState(prev => prev.filter(i => i.id !== item.id));
         return item;
@@ -372,7 +379,8 @@ export function useTableSync<T extends { id: string }>(
             );
           } else {
             // Sadece 409 conflict — normal çok-tab senaryosu
-            console.warn(`[batchUpdate] ${tableName}: ${errors.length} conflict (409) — yok sayıldı`);
+            const conflictCount = errors.filter((r: any) => r.status === 409).length;
+            toast.warning(`${conflictCount} kayıtta çakışma tespit edildi (${tableName}) — en yeni sürüm korundu`, { duration: 4000 });
           }
         }
       }

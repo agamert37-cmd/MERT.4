@@ -1,11 +1,13 @@
 // [AJAN-2 | claude/serene-gagarin | 2026-03-24] Son düzenleyen: Claude Sonnet 4.6
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { FileText, Edit2, Trash2, Search, Calendar, User, DollarSign, X, Download, FileDown, Camera, Eye, Image as ImageIcon, Plus, Package, ArrowUpDown, Save, ZoomIn, Sparkles, RotateCcw, Archive, CalendarDays, ChevronDown, ChevronRight, Layers } from 'lucide-react';
+import { useSearchParams } from 'react-router';
+import { FileText, Edit2, Trash2, Search, Calendar, User, DollarSign, X, Download, FileDown, Camera, Eye, Image as ImageIcon, Plus, Package, ArrowUpDown, Save, ZoomIn, Sparkles, RotateCcw, Archive, CalendarDays, ChevronDown, ChevronRight, Layers, Printer } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import * as Dialog from '@radix-ui/react-dialog';
 import { toast } from 'sonner';
 import { getFromStorage, setInStorage, StorageKey } from '../utils/storage';
 import { kvGet, kvSet } from '../lib/pouchdb-kv';
+import { getDb } from '../lib/pouchdb';
 import { useEmployee } from '../contexts/EmployeeContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useLanguage } from '../contexts/LanguageContext';
@@ -13,10 +15,12 @@ import { logActivity } from '../utils/activityLogger';
 import { useModuleBus } from '../hooks/useModuleBus';
 import { getPagePermissions } from '../utils/permissions';
 import { useTableSync } from '../hooks/useTableSync';
+import { useGlobalTableData } from '../contexts/GlobalTableSyncContext';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { getCompanyInfo } from './SettingsPage';
 import { addPDFHeader, addPDFFooter, addReportInfoBox, tableStyles } from '../utils/reportGenerator';
+import { thermalPrint } from '../utils/thermalPrint';
 
 // Turkce karakter sanitize
 const sanitizePDF = (str: any) => {
@@ -96,6 +100,7 @@ const ImageLightbox = ({ src, onClose }: { src: string; onClose: () => void }) =
 );
 
 export function FisHistoryPage() {
+  const [searchParams, setSearchParams] = useSearchParams();
   const { currentEmployee } = useEmployee();
   const { user } = useAuth();
   const { t } = useLanguage();
@@ -104,9 +109,8 @@ export function FisHistoryPage() {
   // Güvenlik kontrolleri (RBAC) - merkezi utility
   const { canEdit, canDelete } = getPagePermissions(user, currentEmployee, 'fisler');
 
-  // useTableSync ile Supabase tablo senkronizasyonu
-  // BUG FIX [AJAN-2]: deleteItem/updateItem/addItem artık Supabase tablosunu da güncelliyor
-  const { data: syncedFisler, deleteItem: deleteFisFromSupabase, updateItem: updateFisInSupabase, addItem: addFisToSupabase } = useTableSync<Fis>({
+  // useTableSync ile PouchDB/CouchDB senkronizasyonu
+  const { data: syncedFisler, deleteItem: deleteFis, updateItem: updateFis, addItem: addFis } = useTableSync<Fis>({
     tableName: 'fisler',
     storageKey: StorageKey.FISLER,
     initialData: [],
@@ -114,16 +118,7 @@ export function FisHistoryPage() {
     orderAsc: false,
   });
 
-  // Sync handled by useTableSync — no direct Supabase upsert needed
-  const upsertStokToSupabase = useCallback(async (_updatedStokList: any[]) => {
-    // no-op: sync handled by useTableSync
-  }, []);
-
-  const upsertCariToSupabase = useCallback(async (_updatedCariList: any[]) => {
-    // no-op: sync handled by useTableSync
-  }, []);
-
-  const [fisler, setFisler] = useState<Fis[]>([]);
+  const fisler = syncedFisler;
   const [searchTerm, setSearchTerm] = useState('');
   const [filterMode, setFilterMode] = useState<'all' | 'satis' | 'alis' | 'gider' | 'deleted'>('all');
   const [selectedFis, setSelectedFis] = useState<Fis | null>(null);
@@ -148,30 +143,17 @@ export function FisHistoryPage() {
   const [editPaymentAmount, setEditPaymentAmount] = useState(0);
 
   // Stok listesi (urun ekleme icin)
-  const [stokList, setStokList] = useState<any[]>([]);
+  const stokList = useGlobalTableData<any>('urunler');
   const [addProductSearch, setAddProductSearch] = useState('');
   const [showAddProduct, setShowAddProduct] = useState(false);
 
-  // useTableSync'ten gelen verileri senkronize et
+  // Silinen fişler için başlangıç yüklemesi (KV fallback dahil)
   useEffect(() => {
-    if (syncedFisler && syncedFisler.length > 0) {
-      setFisler(syncedFisler);
-    } else {
-      setFisler(getFromStorage<Fis[]>(StorageKey.FISLER) || []);
-    }
-  }, [syncedFisler]);
-
-  // LocalStorage'dan fisleri ve silinen fisleri yukle (storage events icin)
-  useEffect(() => {
-    const loadFisler = () => {
-      setFisler(getFromStorage<Fis[]>(StorageKey.FISLER) || []);
-      setDeletedFisler(getFromStorage<any[]>(StorageKey.DELETED_FISLER) || []);
-    };
-    const loadDeleted = () => setDeletedFisler(getFromStorage<any[]>(StorageKey.DELETED_FISLER) || []);
-    loadDeleted();
-    // [AJAN-2] KV fallback — localStorage boşsa silinen fiş geçmişini KV'den yükle
     const local = getFromStorage<any[]>(StorageKey.DELETED_FISLER);
-    if (!local || local.length === 0) {
+    if (local && local.length > 0) {
+      setDeletedFisler(local);
+    } else {
+      // [AJAN-2] KV fallback — localStorage boşsa silinen fiş geçmişini KV'den yükle
       kvGet<any[]>('deleted_fisler').then(kv => {
         if (kv && kv.length > 0) {
           setDeletedFisler(kv);
@@ -179,17 +161,20 @@ export function FisHistoryPage() {
         }
       }).catch(() => {});
     }
-    window.addEventListener('storage_update', loadFisler);
-    window.addEventListener('storage', loadFisler);
-    return () => {
-      window.removeEventListener('storage_update', loadFisler);
-      window.removeEventListener('storage', loadFisler);
-    };
   }, []);
 
+  // URL param ?fisId=... → fiş otomatik seç + düzenleme modalı aç
   useEffect(() => {
-    setStokList(getFromStorage<any[]>(StorageKey.STOK_DATA) || []);
-  }, [isEditModalOpen]);
+    const fisId = searchParams.get('fisId');
+    if (!fisId || fisler.length === 0) return;
+    const target = fisler.find(f => f.id === fisId);
+    if (target) {
+      setSelectedFis(target);
+      setIsDetailModalOpen(true);
+      // URL'yi temizle (geri gelince tekrar açmasın)
+      setSearchParams({}, { replace: true });
+    }
+  }, [fisler, searchParams]);
 
   // Filtreleme + siralama
   const filteredFisler = fisler
@@ -288,7 +273,37 @@ export function FisHistoryPage() {
             return { ...stock, currentStock: stock.currentStock + netReversal, movements: filteredMovements };
           });
           setInStorage(StorageKey.STOK_DATA, updatedStokList);
-          upsertStokToSupabase(updatedStokList);
+
+          // PouchDB senkronizasyonu — değişen stok kayıtlarını CouchDB'ye de yansıt
+          const changedProducts = updatedStokList.filter((p: any, i: number) => {
+            const orig = existingStokList[i];
+            return orig && p.currentStock !== orig.currentStock;
+          });
+          changedProducts.forEach(async (product: any) => {
+            try {
+              const db = getDb('urunler');
+              const existing = await db.get(product.id) as any;
+              await db.put({ ...existing, current_stock: product.currentStock });
+            } catch {}
+          });
+        }
+
+        // ─── Gider → Kasa kaydını sil ────────────────────────────
+        if (fisToDelete.mode === 'gider') {
+          const kasaList = getFromStorage<any[]>(StorageKey.KASA_DATA) || [];
+          const kasaToDelete = kasaList.filter(k => k.receiptNo === id || k.fisId === id);
+          if (kasaToDelete.length > 0) {
+            const updatedKasa = kasaList.filter(k => k.receiptNo !== id && k.fisId !== id);
+            setInStorage(StorageKey.KASA_DATA, updatedKasa);
+            // PouchDB kasa_islemleri tablosundan da kaldır
+            kasaToDelete.forEach(async (entry: any) => {
+              try {
+                const db = getDb('kasa_islemleri');
+                const doc = await db.get(entry.id) as any;
+                await db.remove(doc._id, doc._rev);
+              } catch {}
+            });
+          }
         }
 
         // ─── Cari bakiyesi geri al ───────────────────────────────
@@ -314,7 +329,17 @@ export function FisHistoryPage() {
             };
           });
           setInStorage(StorageKey.CARI_DATA, updatedCariList);
-          upsertCariToSupabase(updatedCariList);
+          // PouchDB cari_hesaplar güncelle (cross-device / mobile sync için)
+          const updatedCari = updatedCariList.find((c: any) => c.id === fisToDelete.cari.id);
+          if (updatedCari) {
+            (async () => {
+              try {
+                const db = getDb('cari_hesaplar');
+                const doc = await db.get(fisToDelete.cari.id) as any;
+                await db.put({ ...doc, balance: updatedCari.balance, transactionHistory: updatedCari.transactionHistory });
+              } catch {}
+            })();
+          }
         }
 
         // ─── Silinen fişi geçmişe ekle ─────────────────────────
@@ -329,10 +354,7 @@ export function FisHistoryPage() {
         kvSet('deleted_fisler', updatedDeleted).catch(() => {});
       }
 
-      const updated = fisler.filter(f => f.id !== id);
-      setFisler(updated);
-      // BUG FIX [AJAN-2]: setInStorage yerine deleteItem kullan — Supabase tablosundan da siliyor
-      deleteFisFromSupabase(id).catch(e => console.warn('[FisHistory] Supabase delete hatası:', e));
+      deleteFis(id).catch(e => console.warn('[FisHistory] PouchDB delete hatası:', e));
 
       emit('fis:deleted', { fisId: id, mode: fisToDelete?.mode });
       logActivity('custom', 'Fiş silindi (çöp kutusuna)', { employeeName: user?.name, page: 'FisHistory' });
@@ -347,8 +369,7 @@ export function FisHistoryPage() {
 
     // deletedAt ve deletedBy alanlarını kaldır
     const { deletedAt, deletedBy, ...cleanFis } = fisToRestore;
-    // BUG FIX [AJAN-2]: useTableSync üzerinden ekle — hem localStorage hem Supabase hem dual-write
-    addFisToSupabase(cleanFis as Fis).catch(e => console.warn('[FisHistory] Supabase restore hatası:', e));
+    addFis(cleanFis as Fis).catch(e => console.warn('[FisHistory] PouchDB restore hatası:', e));
 
     const updatedDeleted = deletedFisler.filter(f => f.id !== id);
     setDeletedFisler(updatedDeleted);
@@ -403,19 +424,31 @@ export function FisHistoryPage() {
     setIsDetailModalOpen(true);
   };
 
-  const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      if (file.size > 2 * 1024 * 1024) {
-        toast.error('Dosya boyutu cok buyuk (Max: 2MB)');
-        return;
-      }
+  const compressImage = (file: File, maxWidth = 1200, quality = 0.75): Promise<string> =>
+    new Promise((resolve, reject) => {
       const reader = new FileReader();
+      reader.onerror = reject;
       reader.onloadend = () => {
-        setPhotoPreview(reader.result as string);
+        const img = new Image();
+        img.onerror = reject;
+        img.onload = () => {
+          let { width, height } = img;
+          if (width > maxWidth) { height = Math.round((height * maxWidth) / width); width = maxWidth; }
+          const canvas = document.createElement('canvas');
+          canvas.width = width; canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          if (!ctx) { reject(new Error('Canvas yok')); return; }
+          ctx.drawImage(img, 0, 0, width, height);
+          resolve(canvas.toDataURL('image/jpeg', quality));
+        };
+        img.src = reader.result as string;
       };
       reader.readAsDataURL(file);
-    }
+    });
+
+  const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) compressImage(file).then(setPhotoPreview).catch(() => toast.error('Fotoğraf yüklenemedi'));
   };
 
   // ── Edit: urun guncelle ──
@@ -467,7 +500,7 @@ export function FisHistoryPage() {
   };
 
   // Fis guncelleme
-  const handleUpdate = () => {
+  const handleUpdate = async () => {
     if (!selectedFis) return;
 
     const isSatisAlis = selectedFis.mode === 'satis' || selectedFis.mode === 'sale' || selectedFis.mode === 'alis';
@@ -520,7 +553,17 @@ export function FisHistoryPage() {
         return { ...stock, currentStock: stock.currentStock + delta };
       });
       setInStorage(StorageKey.STOK_DATA, updatedStokList);
-      upsertStokToSupabase(updatedStokList);
+
+      // PouchDB urunler tablosunu da güncelle (CouchDB sync için)
+      updatedStokList.forEach(async (product: any, i: number) => {
+        const orig = existingStokList[i];
+        if (!orig || product.currentStock === orig.currentStock) return;
+        try {
+          const db = getDb('urunler');
+          const doc = await db.get(product.id) as any;
+          await db.put({ ...doc, current_stock: product.currentStock });
+        } catch {}
+      });
     }
 
     // ─── Cari bakiyesi delta güncelle ─────────────────────────
@@ -540,7 +583,13 @@ export function FisHistoryPage() {
           return { ...cari, balance: cari.balance + balanceDelta };
         });
         setInStorage(StorageKey.CARI_DATA, updatedCariList);
-        upsertCariToSupabase(updatedCariList);
+
+        // PouchDB cari_hesaplar tablosunu da güncelle (CouchDB sync için)
+        try {
+          const db = getDb('cari_hesaplar');
+          const doc = await db.get(selectedFis.cari.id) as any;
+          await db.put({ ...doc, balance: (doc.balance || 0) + balanceDelta });
+        } catch {}
       }
     }
 
@@ -563,7 +612,7 @@ export function FisHistoryPage() {
     };
 
     // BUG FIX [AJAN-2]: useTableSync üzerinden güncelle — setInStorage bypass kaldırıldı
-    updateFisInSupabase(updatedFis.id, updatedFis).catch(e => console.warn('[FisHistory] Supabase update hatası:', e));
+    updateFis(updatedFis.id, updatedFis).catch(e => console.warn('[FisHistory] PouchDB update hatası:', e));
     logActivity('custom', 'Fiş güncellendi', { employeeName: user?.name, page: 'FisHistory' });
     toast.success('Fis basariyla guncellendi');
     setIsEditModalOpen(false);
@@ -588,6 +637,11 @@ export function FisHistoryPage() {
     if (mode === 'satis' || mode === 'sale') return 'green';
     if (mode === 'alis') return 'blue';
     return 'red';
+  };
+
+  // ════════════ Termal Yazıcı Baskı ════════════
+  const handleThermalPrint = (fis: Fis) => {
+    thermalPrint(fis, getCompanyInfo());
   };
 
   // ════════════ PDF - Tek Fis (Detayli Adisyon) ════════════
@@ -1351,7 +1405,7 @@ export function FisHistoryPage() {
   );
 
   return (
-    <div className="p-3 sm:p-6 lg:p-8 space-y-4 sm:space-y-6 pb-28 sm:pb-6">
+    <div className="p-3 sm:p-6 lg:p-8 space-y-4 sm:space-y-6 pb-4 sm:pb-6">
       {/* Lightbox */}
       <AnimatePresence>
         {lightboxImage && <ImageLightbox src={lightboxImage} onClose={() => setLightboxImage(null)} />}
@@ -1362,7 +1416,7 @@ export function FisHistoryPage() {
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5 }}
-        className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4"
+        className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4"
       >
         <div className="flex items-center gap-3 sm:gap-4">
           <div className="w-10 h-10 sm:w-14 sm:h-14 rounded-xl sm:rounded-2xl bg-gradient-to-br from-blue-600 to-indigo-700 flex items-center justify-center shadow-lg shadow-blue-600/20">
@@ -1405,16 +1459,16 @@ export function FisHistoryPage() {
               initial={{ opacity: 0, y: 20, scale: 0.95 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
               transition={{ delay: index * 0.08, type: 'spring', stiffness: 200, damping: 20 }}
-              className={`relative overflow-hidden rounded-2xl border bg-gradient-to-br ${colorMap[stat.color]} p-5 group hover:scale-[1.02] transition-transform duration-300`}
+              className={`relative overflow-hidden rounded-2xl border bg-gradient-to-br ${colorMap[stat.color]} p-3 sm:p-5 group hover:scale-[1.02] transition-transform duration-300`}
             >
               <div className="absolute top-0 right-0 w-24 h-24 bg-gradient-to-bl from-white/[0.03] to-transparent rounded-bl-full" />
-              <div className="flex items-center gap-2.5 mb-3">
-                <div className={`w-9 h-9 rounded-xl bg-gradient-to-br from-white/10 to-white/5 flex items-center justify-center ${iconColorMap[stat.color]}`}>
-                  <Icon className="w-4.5 h-4.5" />
+              <div className="flex items-center gap-2 sm:gap-2.5 mb-2 sm:mb-3">
+                <div className={`w-7 h-7 sm:w-9 sm:h-9 rounded-xl bg-gradient-to-br from-white/10 to-white/5 flex items-center justify-center shrink-0 ${iconColorMap[stat.color]}`}>
+                  <Icon className="w-3.5 h-3.5 sm:w-4.5 sm:h-4.5" />
                 </div>
-                <span className="text-muted-foreground text-xs font-medium uppercase tracking-wider">{stat.label}</span>
+                <span className="text-muted-foreground text-[10px] sm:text-xs font-medium uppercase tracking-wider truncate">{stat.label}</span>
               </div>
-              <p className={`text-2xl md:text-3xl font-bold ${stat.isCurrency ? valueColorMap[stat.color] : 'text-white'}`}>
+              <p className={`text-lg sm:text-2xl md:text-3xl font-bold ${stat.isCurrency ? valueColorMap[stat.color] : 'text-white'}`}>
                 {stat.isCurrency ? <AnimatedCounter value={stat.value} prefix="₺" /> : <AnimatedCounter value={stat.value} />}
               </p>
             </motion.div>
@@ -1427,7 +1481,7 @@ export function FisHistoryPage() {
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.3 }}
-        className="card-premium rounded-2xl p-5"
+        className="card-premium rounded-2xl p-3 sm:p-5"
       >
         <div className="flex flex-col gap-3 sm:gap-4">
           <div className="flex-1 relative group">
@@ -1662,9 +1716,9 @@ export function FisHistoryPage() {
                   {/* Gün Başlığı */}
                   <div
                     onClick={() => toggleDayCollapse(dayGroup.dateKey)}
-                    className="flex items-center gap-4 px-5 py-4 cursor-pointer hover:bg-secondary/20 transition-colors border-b border-border/20"
+                    className="flex items-center gap-2 sm:gap-4 px-3 sm:px-5 py-3 sm:py-4 cursor-pointer hover:bg-secondary/20 transition-colors border-b border-border/20"
                   >
-                    <div className={`w-12 h-12 rounded-xl flex flex-col items-center justify-center flex-shrink-0 ${
+                    <div className={`w-10 h-10 sm:w-12 sm:h-12 rounded-xl flex flex-col items-center justify-center flex-shrink-0 ${
                       isToday ? 'bg-gradient-to-br from-blue-600 to-indigo-600 shadow-lg shadow-blue-600/20' :
                       isYesterday ? 'bg-gradient-to-br from-accent to-accent' :
                       'bg-gradient-to-br from-accent/60 to-secondary/60'
@@ -1747,10 +1801,10 @@ export function FisHistoryPage() {
                                 transition={{ delay: Math.min(index * 0.03, 0.3) }}
                                 className={`border-l-[3px] ${borderColorMap[modeColor]} hover:bg-secondary/20 transition-all duration-200`}
                               >
-                                <div className="flex items-center gap-3 px-5 py-3">
+                                <div className="flex items-center gap-2 sm:gap-3 px-3 sm:px-5 py-2.5 sm:py-3">
                                   {/* Saat */}
-                                  <div className="flex-shrink-0 w-12 text-center">
-                                    <span className="text-white font-mono text-sm font-bold">
+                                  <div className="flex-shrink-0 w-10 sm:w-12 text-center">
+                                    <span className="text-white font-mono text-xs sm:text-sm font-bold">
                                       {fis.date ? new Date(fis.date).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' }) : '--:--'}
                                     </span>
                                   </div>
@@ -1821,6 +1875,14 @@ export function FisHistoryPage() {
                                       title="Detay"
                                     >
                                       <Eye className="w-4 h-4 sm:w-3.5 sm:h-3.5" />
+                                    </motion.button>
+                                    <motion.button
+                                      whileTap={{ scale: 0.85 }}
+                                      onClick={() => handleThermalPrint(fis)}
+                                      className="hidden sm:block p-1.5 rounded-lg bg-emerald-600/15 hover:bg-emerald-600/30 text-emerald-400 hover:text-emerald-300 transition-all"
+                                      title="Termal Yazıcı"
+                                    >
+                                      <Printer className="w-3.5 h-3.5" />
                                     </motion.button>
                                     <motion.button
                                       whileTap={{ scale: 0.85 }}
@@ -1979,6 +2041,15 @@ export function FisHistoryPage() {
                           title="Detay"
                         >
                           <Eye className="w-4 h-4" />
+                        </motion.button>
+                        <motion.button
+                          whileHover={{ scale: 1.1 }}
+                          whileTap={{ scale: 0.9 }}
+                          onClick={() => handleThermalPrint(fis)}
+                          className="p-2 rounded-lg bg-emerald-600/15 hover:bg-emerald-600/30 text-emerald-400 hover:text-emerald-300 transition-all"
+                          title="Termal Yazıcı"
+                        >
+                          <Printer className="w-4 h-4" />
                         </motion.button>
                         <motion.button
                           whileHover={{ scale: 1.1 }}
@@ -2370,9 +2441,31 @@ export function FisHistoryPage() {
                     </Dialog.Description>
                   </div>
                 </div>
-                <Dialog.Close className="p-2 hover:bg-secondary/50 active:bg-secondary/70 rounded-xl transition-colors">
-                  <X className="w-5 h-5 text-muted-foreground" />
-                </Dialog.Close>
+                <div className="flex items-center gap-1.5">
+                  {selectedFis && (
+                    <>
+                      <button
+                        onClick={() => handleThermalPrint(selectedFis)}
+                        className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-emerald-600/15 hover:bg-emerald-600/30 text-emerald-400 text-xs font-semibold transition-all"
+                        title="Termal Yazıcı ile Yazdır"
+                      >
+                        <Printer className="w-3.5 h-3.5" />
+                        <span className="hidden sm:inline">Termal</span>
+                      </button>
+                      <button
+                        onClick={() => handleDownloadSingleFisPDF(selectedFis)}
+                        className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-purple-600/15 hover:bg-purple-600/30 text-purple-400 text-xs font-semibold transition-all"
+                        title="A4 PDF İndir"
+                      >
+                        <Download className="w-3.5 h-3.5" />
+                        <span className="hidden sm:inline">A4 PDF</span>
+                      </button>
+                    </>
+                  )}
+                  <Dialog.Close className="p-2 hover:bg-secondary/50 active:bg-secondary/70 rounded-xl transition-colors">
+                    <X className="w-5 h-5 text-muted-foreground" />
+                  </Dialog.Close>
+                </div>
               </div>
 
               {selectedFis && (

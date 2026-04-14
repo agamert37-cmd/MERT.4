@@ -1,5 +1,6 @@
 // [AJAN-2 | claude/serene-gagarin | 2026-03-25] Son düzenleyen: Claude Sonnet 4.6
 import React, { useState, useEffect, useMemo } from 'react';
+import { useGlobalTableData } from '../contexts/GlobalTableSyncContext';
 import { 
   ArrowUpCircle, 
   ArrowDownCircle, 
@@ -100,15 +101,9 @@ export function KasaPage() {
     orderAsc: false,
   });
 
-  const { data: personnelList } = useTableSync<any>({
-    tableName: 'personeller',
-    storageKey: 'personel_data',
-  });
-
-  const { data: vehicles } = useTableSync<any>({
-    tableName: 'araclar',
-    storageKey: 'arac_data',
-  });
+  const personnelList = useGlobalTableData<any>('personeller');
+  const vehicles = useGlobalTableData<any>('araclar');
+  const globalFisler = useGlobalTableData<any>('fisler');
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalType, setModalType] = useState<'Gelir' | 'Gider'>('Gelir');
@@ -154,7 +149,7 @@ export function KasaPage() {
 
   const kasaGunSonuValidation = useMemo(() => {
     const todayISO = new Date().toISOString().split('T')[0];
-    const rawFisler = getFromStorage<any[]>(StorageKey.FISLER) || [];
+    const rawFisler = globalFisler.length > 0 ? globalFisler : (getFromStorage<any[]>(StorageKey.FISLER) || []);
 
     const kasaTodayIncome = todayIncome;
     const kasaTodayExpense = todayExpense;
@@ -174,7 +169,7 @@ export function KasaPage() {
     }, 0);
 
     return { kasaTodayIncome, kasaTodayExpense, kasaNet, gunSonuSalesTotal, isDayClosed, totalAssets };
-  }, [todayIncome, todayExpense, isDayClosed, totalAssets]);
+  }, [todayIncome, todayExpense, isDayClosed, totalAssets, globalFisler]);
 
   const handleOpenModal = (type: 'Gelir' | 'Gider') => {
     setModalType(type);
@@ -285,7 +280,7 @@ export function KasaPage() {
   }, [transactions, searchTerm, filterType]);
 
   return (
-    <div className="p-3 sm:p-6 lg:p-10 space-y-4 sm:space-y-6 lg:space-y-8 bg-background min-h-screen text-white font-sans pb-28 sm:pb-6">
+    <div className="p-3 sm:p-6 lg:p-10 space-y-4 sm:space-y-6 lg:space-y-8 bg-background min-h-screen text-white font-sans pb-4 sm:pb-6">
       <SyncStatusBar tableName="kasa_islemleri" />
 
       {/* ─── Gün Sonu Kapalı Uyarısı ─── */}
@@ -417,10 +412,10 @@ export function KasaPage() {
       {/* ─── Validation & Consistency Check ─── */}
       <motion.div
         initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4 }}
-        className="grid grid-cols-1 md:grid-cols-2 gap-6"
+        className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6"
       >
-        <div className={`rounded-3xl p-6 border transition-colors ${kasaGunSonuValidation.isDayClosed ? 'bg-red-900/10 border-red-500/20' : 'bg-green-900/10 border-green-500/20'}`}>
-          <div className="flex items-start gap-4 mb-6">
+        <div className={`rounded-2xl sm:rounded-3xl p-4 sm:p-6 border transition-colors ${kasaGunSonuValidation.isDayClosed ? 'bg-red-900/10 border-red-500/20' : 'bg-green-900/10 border-green-500/20'}`}>
+          <div className="flex items-start gap-3 sm:gap-4 mb-4 sm:mb-6">
             {kasaGunSonuValidation.isDayClosed ? (
               <div className="p-3 bg-red-500/20 rounded-xl"><ShieldAlert className="w-6 h-6 text-red-400" /></div>
             ) : (
@@ -447,8 +442,8 @@ export function KasaPage() {
           </div>
         </div>
 
-        <div className="rounded-3xl p-6 border border-white/10 bg-white/5 flex flex-col justify-center">
-          <div className="flex items-center gap-4 mb-4">
+        <div className="rounded-2xl sm:rounded-3xl p-4 sm:p-6 border border-white/10 bg-white/5 flex flex-col justify-center">
+          <div className="flex items-center gap-3 sm:gap-4 mb-4">
             <div className="p-3 bg-purple-500/20 rounded-xl text-purple-400"><CreditCard className="w-6 h-6" /></div>
             <div>
               <h3 className="text-lg font-bold text-white">POS Yönetimi</h3>
@@ -485,11 +480,11 @@ export function KasaPage() {
           </button>
         </div>
 
-        <div className="p-6">
+        <div className="p-3 sm:p-6">
           {activeTab === 'transactions' && (
-            <div className="space-y-6">
+            <div className="space-y-4 sm:space-y-6">
               {/* Search & Filter */}
-              <div className="flex flex-col md:flex-row gap-4">
+              <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
                 <div className="relative flex-1">
                   <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500" />
                   <input
@@ -505,7 +500,7 @@ export function KasaPage() {
                     <button
                       key={type}
                       onClick={() => setFilterType(type as any)}
-                      className={`px-6 py-2 rounded-lg text-sm font-bold transition-all ${
+                      className={`flex-1 px-3 sm:px-6 py-2 rounded-lg text-xs sm:text-sm font-bold transition-all whitespace-nowrap ${
                         filterType === type ? 'bg-white/10 text-white' : 'text-gray-500 hover:text-gray-300'
                       }`}
                     >
@@ -536,9 +531,9 @@ export function KasaPage() {
                       variants={rowItem}
                       whileHover={{ x: 3, borderColor: 'rgba(255,255,255,0.12)', transition: { duration: 0.15 } }}
                       whileTap={tap.card}
-                      className="group flex flex-col md:flex-row items-start md:items-center justify-between p-4 bg-white/5 border border-white/5 rounded-2xl transition-colors"
+                      className="group flex flex-col sm:flex-row items-start sm:items-center justify-between p-4 bg-white/5 border border-white/5 rounded-2xl transition-colors"
                     >
-                      <div className="flex items-center gap-4 w-full md:w-auto mb-4 md:mb-0">
+                      <div className="flex items-center gap-4 w-full sm:w-auto mb-3 sm:mb-0">
                         <div className={`p-3 rounded-xl flex-shrink-0 ${transaction.type === 'Gelir' ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}>
                           {transaction.type === 'Gelir' ? <TrendingUp className="w-6 h-6" /> : <TrendingDown className="w-6 h-6" />}
                         </div>
@@ -559,7 +554,7 @@ export function KasaPage() {
                         </p>
                         <button
                           onClick={() => handleDeleteTransaction(transaction.id)}
-                          className="p-2.5 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-xl transition-colors md:opacity-0 group-hover:opacity-100"
+                          className="p-2.5 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-xl transition-colors opacity-60 md:opacity-0 group-hover:opacity-100"
                         >
                           <Trash2 className="w-5 h-5" />
                         </button>

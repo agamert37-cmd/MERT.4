@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import { 
   FileText, TrendingUp, DollarSign, Package, Users,
   Calendar, BarChart3, PieChart, Receipt,
@@ -35,7 +35,8 @@ import {
   generateStockPDF, generateCariPDF, generatePersonelPerformansPDF,
   type PersonelPerformansPDFData
 } from '../utils/reportGenerator';
-import { getFromStorage, setInStorage, StorageKey } from '../utils/storage';
+import { getFromStorage } from '../utils/storage';
+import { useGlobalTableData } from '../contexts/GlobalTableSyncContext';
 
 const safeNum = (v: any, fallback = 0): number => {
   if (v === null || v === undefined || v === '') return fallback;
@@ -100,7 +101,7 @@ const StatCard = ({ title, value, numValue, icon: Icon, color, trend, delay = 0,
       </div>
       <div className="relative z-10">
         <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest mb-1">{title}</p>
-        <p className="text-3xl font-black text-white">
+        <p className="text-2xl sm:text-3xl font-black text-white">
           <AnimatedCounter value={numValue} prefix={prefix} duration={1200} />
         </p>
       </div>
@@ -118,18 +119,10 @@ export function RaporlarPage() {
   const { emit } = useModuleBus();
   
   const [selectedTab, setSelectedTab] = useState('sales');
-  const [refreshCounter, setRefreshCounter] = useState(0);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
-  useEffect(() => {
-    const handler = () => setRefreshCounter(c => c + 1);
-    window.addEventListener('storage_update', handler);
-    window.addEventListener('storage', handler);
-    return () => { window.removeEventListener('storage_update', handler); window.removeEventListener('storage', handler); };
-  }, []);
-
   const handleRefresh = useCallback(() => {
-    setIsRefreshing(true); setRefreshCounter(c => c + 1);
+    setIsRefreshing(true);
     const tid = setTimeout(() => setIsRefreshing(false), 800);
     toast.success('Gerçek zamanlı veriler güncellendi.');
     return () => clearTimeout(tid);
@@ -139,12 +132,13 @@ export function RaporlarPage() {
   const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
   const [dateRange, setDateRange] = useState({ start: firstDayOfMonth.toISOString().split('T')[0], end: today.toISOString().split('T')[0] });
   
-  const rawFisler = useMemo(() => getFromStorage<any[]>(StorageKey.FISLER) || [], [refreshCounter]);
-  const rawKasa = useMemo(() => getFromStorage<any[]>(StorageKey.KASA_DATA) || [], [refreshCounter]);
-  const rawStok = useMemo(() => getFromStorage<any[]>(StorageKey.STOK_DATA) || [], [refreshCounter]);
-  const rawCari = useMemo(() => getFromStorage<any[]>(StorageKey.CARI_DATA) || [], [refreshCounter]);
-  const rawPersonel = useMemo(() => getFromStorage<any[]>(StorageKey.PERSONEL_DATA) || [], [refreshCounter]);
-  const [banks, setBanks] = useState(() => getFromStorage<any[]>(StorageKey.BANK_DATA) || []);
+  // GlobalTableSyncContext'ten doğrudan oku — storage_update event'e gerek yok
+  const rawFisler = useGlobalTableData<any>('fisler');
+  const rawKasa = useGlobalTableData<any>('kasa_islemleri');
+  const rawStok = useGlobalTableData<any>('urunler');
+  const rawCari = useGlobalTableData<any>('cari_hesaplar');
+  const rawPersonel = useGlobalTableData<any>('personeller');
+  const banks = useGlobalTableData<any>('bankalar');
   const [isBankModalOpen, setIsBankModalOpen] = useState(false);
   const [newBankForm, setNewBankForm] = useState({ name: '', code: '', branch: '' });
   const checkData: any[] = [];
@@ -367,13 +361,13 @@ export function RaporlarPage() {
       page: l.page || '-',
       level: l.action?.includes('delete') || l.action?.includes('error') ? 'danger' : l.action?.includes('login') || l.action?.includes('auth') ? 'warning' : 'info',
     }));
-  }, [refreshCounter, dateRange]);
+  }, [dateRange]);
 
   return (
-    <div className="p-3 sm:p-6 lg:p-10 space-y-4 sm:space-y-6 lg:space-y-8 bg-background min-h-screen text-white font-sans pb-28 sm:pb-6">
+    <div className="p-3 sm:p-6 lg:p-10 space-y-4 sm:space-y-6 lg:space-y-8 bg-background min-h-screen text-white font-sans pb-4 sm:pb-6">
       
       {/* Header */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 sm:gap-6">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 sm:gap-6">
         <div>
           <div className="flex items-center gap-3 mb-1">
             <h1 className="text-2xl sm:text-3xl lg:text-4xl font-extrabold tracking-tight">Kapsamlı Raporlar</h1>

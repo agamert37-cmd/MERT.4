@@ -1,16 +1,18 @@
 // [AJAN-2 | claude/serene-gagarin | 2026-03-25] Son düzenleyen: Claude Sonnet 4.6
 import React, { useState, useRef, useEffect } from 'react';
 import OpenAI from 'openai';
-import { Settings, Database, Sparkles, Save, Trash2, Eye, EyeOff, CheckCircle, XCircle, Shield, ExternalLink, Building2, Phone, MapPin, FileText, Hash, Monitor, Upload, Loader2, RefreshCw, X, Plus, History, ShieldCheck, Zap, Wrench, Star, MessageCircle, ToggleLeft, ToggleRight } from 'lucide-react';
+import { Settings, Database, Sparkles, Save, Trash2, Eye, EyeOff, CheckCircle, XCircle, Shield, ExternalLink, Building2, Phone, MapPin, FileText, Hash, Monitor, Upload, Loader2, RefreshCw, X, Plus, History, ShieldCheck, Zap, Wrench, Star, Lock, Key, BarChart3, Cloud } from 'lucide-react';
 import { getOpenAIKey, saveOpenAIKey, clearOpenAIKey, isOpenAIConfigured } from '../lib/api-config';
 import { reinitializeOpenAI } from '../lib/chatgpt-assistant';
-import { testCouchDbConnection } from '../lib/pouchdb';
+import { testCouchDbConnection, getCouchDbTableStatus, type CouchDbTableStatus } from '../lib/pouchdb';
+import { kvGet, kvSet } from '../lib/pouchdb-kv';
 import { getFromStorage, setInStorage, StorageKey } from '../utils/storage';
+import { hashString } from '../utils/security';
+import { getCouchDbConfig, setCouchDbConfig } from '../lib/db-config';
 import { toast } from 'sonner';
 import { motion, AnimatePresence } from 'motion/react';
 import { staggerContainer, gridCard, hover } from '../utils/animations';
 import { SERVER_BASE_URL as serverBase, publicAnonKey } from '../lib/supabase-config';
-import { type SMSConfig, DEFAULT_SMS_CONFIG } from '../utils/smsService';
 import { runIntegrityCheck, getStorageStats, type IntegrityReport } from '../utils/data-integrity';
 import { useAuth } from '../contexts/AuthContext';
 import { useEmployee } from '../contexts/EmployeeContext';
@@ -19,9 +21,7 @@ import { logActivity } from '../utils/activityLogger';
 import { useModuleBus } from '../hooks/useModuleBus';
 import { getPagePermissions } from '../utils/permissions';
 import { LocalRepoPanel } from '../components/LocalRepoPanel';
-import { kvSet } from '../lib/pouchdb-kv';
-import { NodeStatusPanel } from '../components/NodeStatusPanel';
-import { getLocalNodeId, getLocalNodeConfig, saveLocalNodeConfig, type NodeInfo } from '../lib/node-registry';
+import { useGlobalSyncTables } from '../contexts/GlobalTableSyncContext';
 import { CHANGELOG, type ChangeType } from '../data/changelog';
 
 export interface CompanyInfo {
@@ -55,6 +55,7 @@ export function SettingsPage() {
   const { currentEmployee } = useEmployee();
   const { t } = useLanguage();
   const { emit } = useModuleBus();
+  const { tables: globalSyncTables } = useGlobalSyncTables();
 
   // Güvenlik kontrolleri (RBAC) - merkezi utility
   const { canEdit } = getPagePermissions(user, currentEmployee, 'ayarlar');
@@ -62,21 +63,8 @@ export function SettingsPage() {
   const [openaiKey, setOpenaiKey] = useState(getOpenAIKey());
   const [showKey, setShowKey] = useState(false);
   const [testing, setTesting] = useState(false);
-  const [testResults, setTestResults] = useState({ supabase: null as boolean | null, openai: null as boolean | null });
+  const [testResults, setTestResults] = useState({ couchdb: null as boolean | null, openai: null as boolean | null });
 
-  // SMS yapılandırması
-  const [smsConfig, setSmsConfig] = useState<SMSConfig>(() => {
-    const s = getFromStorage<any>(StorageKey.SYSTEM_SETTINGS);
-    return s?.smsConfig ? { ...DEFAULT_SMS_CONFIG, ...s.smsConfig } : DEFAULT_SMS_CONFIG;
-  });
-  const [showSmsPass, setShowSmsPass] = useState(false);
-
-  const saveSmsConfig = () => {
-    const existing = getFromStorage<any>(StorageKey.SYSTEM_SETTINGS) || {};
-    setInStorage(StorageKey.SYSTEM_SETTINGS, { ...existing, smsConfig });
-    logActivity('settings_change', 'SMS yapılandırması kaydedildi', { employeeName: user?.name, page: 'Ayarlar' });
-    toast.success('SMS ayarları kaydedildi');
-  };
   const [integrityReport, setIntegrityReport] = useState<IntegrityReport | null>(null);
   const [integrityRunning, setIntegrityRunning] = useState(false);
   const [companyInfo, setCompanyInfo] = useState<CompanyInfo>(() => getCompanyInfo());
@@ -92,14 +80,6 @@ export function SettingsPage() {
   const [uploadPreview, setUploadPreview] = useState<string | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-
-  // Node (sunucu) yapılandırması
-  const [nodeConfig, setNodeConfigState] = useState<Partial<NodeInfo>>(() => getLocalNodeConfig());
-  const handleSaveNodeConfig = () => {
-    saveLocalNodeConfig(nodeConfig);
-    toast.success('Sunucu yapılandırması kaydedildi');
-    logActivity('settings_change', 'Sunucu yapılandırması güncellendi', { employeeName: user?.name, page: 'Ayarlar' });
-  };
 
   const supabaseConfig = { supabaseUrl: '(CouchDB)', supabaseAnonKey: '(not applicable)' };
 
@@ -117,13 +97,13 @@ export function SettingsPage() {
   };
 
   const handleTestAll = async () => {
-    setTesting(true); setTestResults({ supabase: null, openai: null });
+    setTesting(true); setTestResults({ couchdb: null, openai: null });
     try {
       const result = await testCouchDbConnection();
-      setTestResults(p => ({ ...p, supabase: result.ok }));
+      setTestResults(p => ({ ...p, couchdb: result.ok }));
       if (result.ok) toast.success('CouchDB bağlantısı başarılı!');
       else toast.error(`CouchDB: ${result.error || 'Bağlantı hatası'}`);
-    } catch { setTestResults(p => ({ ...p, supabase: false })); toast.error('CouchDB bağlantı hatası!'); }
+    } catch { setTestResults(p => ({ ...p, couchdb: false })); toast.error('CouchDB bağlantı hatası!'); }
 
     if (openaiKey.trim()) {
       try {
@@ -239,22 +219,105 @@ export function SettingsPage() {
     if (brandingImages.some(img => img.fileName)) checkAndRefreshUrls();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // ── Sistem Admin Paneli state ─────────────────────────────────
+  const isSystemAdmin = user?.id === 'admin-super';
+  const [adminCurrentPw, setAdminCurrentPw] = useState('');
+  const [adminNewPw, setAdminNewPw] = useState('');
+  const [adminConfirmPw, setAdminConfirmPw] = useState('');
+  const [showAdminPw, setShowAdminPw] = useState(false);
+  const [adminPwSaving, setAdminPwSaving] = useState(false);
+
+  const [dbUrl, setDbUrl] = useState('');
+  const [dbUser, setDbUser] = useState('');
+  const [dbPass, setDbPass] = useState('');
+  const [showDbPass, setShowDbPass] = useState(false);
+  const [dbTesting, setDbTesting] = useState(false);
+  const [dbTestResult, setDbTestResult] = useState<boolean | null>(null);
+  const [tableStats, setTableStats] = useState<CouchDbTableStatus[]>([]);
+  const [tableStatsLoading, setTableStatsLoading] = useState(false);
+
+  useEffect(() => {
+    if (isSystemAdmin) {
+      const cfg = getCouchDbConfig();
+      setDbUrl(cfg.url || '');
+      setDbUser(cfg.user || '');
+      setDbPass(cfg.password || '');
+    }
+  }, [isSystemAdmin]);
+
+  const handleAdminPwChange = async () => {
+    if (!adminNewPw || !adminConfirmPw) { toast.error('Yeni şifre alanlarını doldurun'); return; }
+    if (adminNewPw !== adminConfirmPw) { toast.error('Şifreler uyuşmuyor'); return; }
+    if (adminNewPw.length < 4) { toast.error('Şifre en az 4 karakter olmalı'); return; }
+
+    setAdminPwSaving(true);
+    try {
+      // Mevcut şifreyi doğrula — KV store önce, localStorage fallback
+      const storedHash = (await kvGet<string>('system_admin_pw_hash')) ?? localStorage.getItem('system_admin_pw_hash');
+      if (storedHash) {
+        const currentHash = await hashString(adminCurrentPw);
+        if (currentHash !== storedHash) { toast.error('Mevcut şifre yanlış'); setAdminPwSaving(false); return; }
+      } else {
+        if (adminCurrentPw !== '1234') { toast.error('Mevcut şifre yanlış'); setAdminPwSaving(false); return; }
+      }
+
+      const newHash = await hashString(adminNewPw);
+      // KV store'a yaz (CouchDB'ye senkronize) + localStorage fallback
+      await kvSet('system_admin_pw_hash', newHash);
+      localStorage.setItem('system_admin_pw_hash', newHash);
+      logActivity('settings_change', 'Admin şifresi değiştirildi', { employeeName: user?.name, page: 'Ayarlar' });
+      toast.success('Admin şifresi başarıyla değiştirildi');
+      setAdminCurrentPw(''); setAdminNewPw(''); setAdminConfirmPw('');
+    } catch (err) {
+      toast.error('Şifre değiştirme hatası');
+    } finally {
+      setAdminPwSaving(false);
+    }
+  };
+
+  const handleSaveCouchDb = () => {
+    setCouchDbConfig({ url: dbUrl, user: dbUser, password: dbPass });
+    logActivity('settings_change', 'CouchDB yapılandırması güncellendi', { employeeName: user?.name, page: 'Ayarlar' });
+    toast.success('Veritabanı ayarları kaydedildi. Sayfa yenilenecek...');
+    setTimeout(() => location.reload(), 1500);
+  };
+
+  const handleTestCouchDb = async () => {
+    setDbTesting(true); setDbTestResult(null);
+    try {
+      setCouchDbConfig({ url: dbUrl, user: dbUser, password: dbPass });
+      const result = await testCouchDbConnection();
+      setDbTestResult(result.ok);
+      toast[result.ok ? 'success' : 'error'](result.ok ? `Bağlantı başarılı! (v${result.version})` : `Bağlantı başarısız: ${result.error}`);
+    } catch { setDbTestResult(false); toast.error('Bağlantı test hatası'); }
+    finally { setDbTesting(false); }
+  };
+
+  const handleLoadTableStats = async () => {
+    setTableStatsLoading(true);
+    try {
+      const stats = await getCouchDbTableStatus();
+      setTableStats(stats);
+    } catch { toast.error('Tablo istatistikleri yüklenemedi'); }
+    finally { setTableStatsLoading(false); }
+  };
+
   const inputClass = "w-full bg-black/40 text-white px-4 py-3 rounded-xl border border-white/10 focus:outline-none focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/50 text-sm transition-all placeholder-white/20";
   const labelCls = "text-gray-400 text-xs font-bold uppercase tracking-widest mb-1.5 block ml-1";
 
   return (
-    <div className="p-3 sm:p-6 lg:p-10 space-y-4 sm:space-y-6 lg:space-y-8 bg-background min-h-screen text-white font-sans pb-28 sm:pb-6">
+    <div className="p-3 sm:p-6 lg:p-10 space-y-4 sm:space-y-6 lg:space-y-8 bg-background min-h-screen text-white font-sans pb-4 sm:pb-6">
       
       {/* Header */}
       <motion.div
-        className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6"
+        className="flex flex-col sm:flex-row justify-between items-start md:items-center gap-6"
         initial={{ opacity: 0, y: -16 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
       >
         <div>
           <div className="flex items-center gap-3 mb-1">
-            <h1 className="text-3xl lg:text-4xl font-extrabold tracking-tight">Sistem Ayarları</h1>
+            <h1 className="text-xl sm:text-3xl lg:text-4xl font-extrabold tracking-tight">Sistem Ayarları</h1>
           </div>
           <p className="text-gray-400">Kurumsal profil, API bağlantıları ve güvenlik</p>
         </div>
@@ -264,13 +327,13 @@ export function SettingsPage() {
       </motion.div>
 
       <motion.div
-        className="grid grid-cols-1 lg:grid-cols-2 gap-8"
+        className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-8"
         variants={staggerContainer(0.1, 0.06)}
         initial="initial"
         animate="animate"
       >
         {/* Şirket Bilgileri */}
-        <motion.div variants={gridCard} className="p-8 rounded-3xl bg-[#111] border border-white/5">
+        <motion.div variants={gridCard} className="p-4 sm:p-8 rounded-2xl sm:rounded-3xl bg-[#111] border border-white/5">
           <div className="flex items-center gap-4 mb-6">
             <div className="w-12 h-12 rounded-2xl bg-blue-500/10 flex items-center justify-center border border-blue-500/20"><Building2 className="w-6 h-6 text-blue-400"/></div>
             <div><h2 className="text-xl font-bold">Şirket Profili</h2><p className="text-xs text-gray-500">PDF ve Fişlerde görünecek bilgiler</p></div>
@@ -287,9 +350,9 @@ export function SettingsPage() {
           <button onClick={handleSaveCompanyInfo} className="mt-6 w-full py-4 bg-blue-600 hover:bg-blue-500 text-white rounded-xl font-bold transition-all shadow-lg shadow-blue-600/20 flex items-center justify-center gap-2"><Save className="w-5 h-5"/> Kaydet</button>
         </motion.div>
 
-        <motion.div variants={gridCard} className="space-y-8">
+        <motion.div variants={gridCard} className="space-y-4 sm:space-y-8">
           {/* OpenAI Settings */}
-          <div className="p-8 rounded-3xl bg-[#111] border border-white/5">
+          <div className="p-4 sm:p-8 rounded-2xl sm:rounded-3xl bg-[#111] border border-white/5">
             <div className="flex items-center gap-4 mb-6">
               <div className="w-12 h-12 rounded-2xl bg-purple-500/10 flex items-center justify-center border border-purple-500/20"><Sparkles className="w-6 h-6 text-purple-400"/></div>
               <div className="flex-1"><h2 className="text-xl font-bold">OpenAI Yapılandırması</h2><p className="text-xs text-gray-500">AI Asistan entegrasyonu</p></div>
@@ -315,20 +378,20 @@ export function SettingsPage() {
             </div>
           </div>
 
-          {/* Database Info */}
-          <div className="p-8 rounded-3xl bg-[#111] border border-white/5">
+          {/* CouchDB Bağlantı Durumu */}
+          <div className="p-4 sm:p-8 rounded-2xl sm:rounded-3xl bg-[#111] border border-white/5">
             <div className="flex items-center gap-4 mb-6">
               <div className="w-12 h-12 rounded-2xl bg-emerald-500/10 flex items-center justify-center border border-emerald-500/20"><Database className="w-6 h-6 text-emerald-400"/></div>
-              <div className="flex-1"><h2 className="text-xl font-bold">Veritabanı (Supabase)</h2><p className="text-xs text-gray-500">Sisteme Gömülü</p></div>
+              <div className="flex-1"><h2 className="text-xl font-bold">Veritabanı (CouchDB)</h2><p className="text-xs text-gray-500">PouchDB + CouchDB Sync</p></div>
               <span className="px-3 py-1 bg-emerald-500/10 text-emerald-400 text-xs font-bold rounded-lg border border-emerald-500/20 flex items-center gap-1"><Shield className="w-3 h-3"/> Güvenli</span>
             </div>
             <div className="space-y-4 opacity-70 pointer-events-none">
-              <div><label className={labelCls}>Project URL</label><div className={`${inputClass} font-mono text-xs overflow-hidden text-ellipsis whitespace-nowrap`}>{supabaseConfig.supabaseUrl}</div></div>
-              <div><label className={labelCls}>Anon Key</label><div className={`${inputClass} font-mono text-xs overflow-hidden text-ellipsis whitespace-nowrap`}>{supabaseConfig.supabaseAnonKey.substring(0,30)}...</div></div>
+              <div><label className={labelCls}>CouchDB URL</label><div className={`${inputClass} font-mono text-xs overflow-hidden text-ellipsis whitespace-nowrap`}>{getCouchDbConfig().url}</div></div>
+              <div><label className={labelCls}>Kullanıcı</label><div className={`${inputClass} font-mono text-xs`}>{getCouchDbConfig().user || 'admin'}</div></div>
             </div>
-            {testResults.supabase !== null && (
-              <div className={`mt-4 text-sm font-bold flex items-center gap-2 ${testResults.supabase ? 'text-emerald-400' : 'text-red-400'}`}>
-                {testResults.supabase ? <CheckCircle className="w-4 h-4"/> : <XCircle className="w-4 h-4"/>} {testResults.supabase ? 'Bağlantı Başarılı' : 'Bağlantı Hatası'}
+            {testResults.couchdb !== null && (
+              <div className={`mt-4 text-sm font-bold flex items-center gap-2 ${testResults.couchdb ? 'text-emerald-400' : 'text-red-400'}`}>
+                {testResults.couchdb ? <CheckCircle className="w-4 h-4"/> : <XCircle className="w-4 h-4"/>} {testResults.couchdb ? 'Bağlantı Başarılı' : 'Bağlantı Hatası'}
               </div>
             )}
           </div>
@@ -336,8 +399,8 @@ export function SettingsPage() {
       </motion.div>
 
       {/* Data Integrity */}
-      <div className="p-8 rounded-3xl bg-[#111] border border-white/5">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-6">
+      <div className="p-4 sm:p-8 rounded-2xl sm:rounded-3xl bg-[#111] border border-white/5">
+        <div className="flex flex-col sm:flex-row md:items-center justify-between gap-6 mb-6">
           <div className="flex items-center gap-4">
             <div className="w-12 h-12 rounded-2xl bg-orange-500/10 flex items-center justify-center border border-orange-500/20"><Shield className="w-6 h-6 text-orange-400"/></div>
             <div><h2 className="text-xl font-bold">Veri Bütünlüğü Kontrolü</h2><p className="text-xs text-gray-500">Hatalı kayıtları tespit et ve onar</p></div>
@@ -408,12 +471,12 @@ export function SettingsPage() {
 
       {/* Login Branding Settings */}
       <motion.div
-        className="p-8 rounded-3xl bg-[#111] border border-white/5"
+        className="p-4 sm:p-8 rounded-2xl sm:rounded-3xl bg-[#111] border border-white/5"
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.45, delay: 0.25, ease: [0.16, 1, 0.3, 1] }}
       >
-        <div className="flex flex-col md:flex-row justify-between md:items-center mb-6 gap-4">
+        <div className="flex flex-col sm:flex-row justify-between md:items-center mb-6 gap-4">
           <div className="flex items-center gap-4">
             <div className="w-12 h-12 rounded-2xl bg-pink-500/10 flex items-center justify-center border border-pink-500/20"><Monitor className="w-6 h-6 text-pink-400"/></div>
             <div><h2 className="text-xl font-bold">Giriş Ekranı (Login) Görselleri</h2><p className="text-xs text-gray-500">Uygulama girişindeki slider içerikleri</p></div>
@@ -473,179 +536,6 @@ export function SettingsPage() {
         </div>
       </motion.div>
 
-      {/* ─── SMS Bildirimleri ────────────────────────────────── */}
-      <motion.div
-        initial={{ opacity: 0, y: 16 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.45, delay: 0.35, ease: [0.16, 1, 0.3, 1] }}
-        className="bg-[#111] rounded-2xl sm:rounded-3xl p-5 sm:p-8 border border-white/5 space-y-5"
-      >
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-green-500/20 to-emerald-500/20 border border-green-500/20 flex items-center justify-center">
-              <MessageCircle className="w-5 h-5 text-green-400" />
-            </div>
-            <div>
-              <h2 className="text-lg font-bold text-white">SMS Bildirimleri</h2>
-              <p className="text-xs text-gray-500">Netgsm entegrasyonu — satış, tahsilat ve stok uyarıları</p>
-            </div>
-          </div>
-          <button onClick={() => setSmsConfig(c => ({ ...c, enabled: !c.enabled }))}
-            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-all border ${smsConfig.enabled ? 'bg-green-500/15 text-green-400 border-green-500/25' : 'bg-white/5 text-gray-500 border-white/10'}`}>
-            {smsConfig.enabled ? <><ToggleRight className="w-5 h-5" /> Aktif</> : <><ToggleLeft className="w-5 h-5" /> Pasif</>}
-          </button>
-        </div>
-
-        {/* API Bilgileri */}
-        <div className="p-4 rounded-xl bg-white/3 border border-white/5 space-y-3">
-          <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">Netgsm API Bilgileri</p>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-bold text-gray-500 mb-1.5">Kullanıcı Kodu</label>
-              <input value={smsConfig.usercode} onChange={e => setSmsConfig(c => ({ ...c, usercode: e.target.value }))}
-                className="w-full bg-black/40 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-green-500/40 transition-all"
-                placeholder="Netgsm kullanıcı kodu" />
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-gray-500 mb-1.5">Şifre</label>
-              <div className="relative">
-                <input type={showSmsPass ? 'text' : 'password'} value={smsConfig.password} onChange={e => setSmsConfig(c => ({ ...c, password: e.target.value }))}
-                  className="w-full bg-black/40 border border-white/10 rounded-xl px-3 py-2.5 pr-10 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-green-500/40 transition-all"
-                  placeholder="Netgsm şifresi" />
-                <button type="button" onClick={() => setShowSmsPass(v => !v)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300">
-                  {showSmsPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                </button>
-              </div>
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-gray-500 mb-1.5">Gönderici Başlığı (max 11 karakter)</label>
-              <input value={smsConfig.msgheader} onChange={e => setSmsConfig(c => ({ ...c, msgheader: e.target.value.slice(0, 11) }))}
-                className="w-full bg-black/40 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-green-500/40 transition-all"
-                placeholder="İŞLEYENET" maxLength={11} />
-              <p className="text-[10px] text-gray-600 mt-1">GİB/BTK onaylı başlık olmalı. {smsConfig.msgheader.length}/11</p>
-            </div>
-          </div>
-          <div className="pt-1 pb-0.5">
-            <p className="text-[10px] text-gray-600">
-              Netgsm hesabı için: <a href="https://www.netgsm.com.tr" target="_blank" rel="noopener noreferrer" className="text-green-400 hover:underline">netgsm.com.tr</a> —
-              API dokümantasyonu: <a href="https://www.netgsm.com.tr/dokuman/" target="_blank" rel="noopener noreferrer" className="text-green-400 hover:underline">netgsm.com.tr/dokuman</a>
-            </p>
-          </div>
-        </div>
-
-        {/* Tetikleyiciler */}
-        <div className="p-4 rounded-xl bg-white/3 border border-white/5 space-y-3">
-          <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">Otomatik Bildirimler</p>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-            {([
-              { key: 'onSale', label: 'Satış Fişi Oluşturulunca', desc: 'Müşteriye otomatik satış teyidi gönder' },
-              { key: 'onCollection', label: 'Tahsilat Yapılınca', desc: 'Müşteriye ödeme alındı bildirimi gönder' },
-              { key: 'onInvoice', label: 'Fatura Düzenlenince', desc: 'Müşteriye fatura oluşturuldu bildirimi' },
-              { key: 'onLowStock', label: 'Kritik Stok Uyarısı', desc: 'Personele minimum stok uyarısı gönder' },
-            ] as { key: keyof SMSConfig['triggers']; label: string; desc: string }[]).map(t => (
-              <label key={t.key} className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-all ${smsConfig.triggers[t.key] ? 'bg-green-500/8 border-green-500/20' : 'bg-black/20 border-white/5 hover:border-white/10'}`}>
-                <input type="checkbox" checked={smsConfig.triggers[t.key]} onChange={e => setSmsConfig(c => ({ ...c, triggers: { ...c.triggers, [t.key]: e.target.checked } }))} className="mt-0.5 accent-green-500" />
-                <div>
-                  <p className="text-sm font-semibold text-white">{t.label}</p>
-                  <p className="text-[10px] text-gray-500 mt-0.5">{t.desc}</p>
-                </div>
-              </label>
-            ))}
-          </div>
-        </div>
-
-        <button onClick={saveSmsConfig}
-          className="flex items-center gap-2 px-5 py-2.5 bg-green-600 hover:bg-green-500 rounded-xl text-sm font-bold text-white transition-all shadow-lg shadow-green-600/20">
-          <Save className="w-4 h-4" /> SMS Ayarlarını Kaydet
-        </button>
-      </motion.div>
-
-      {/* ── Çok Sunuculu HA Sistemi ─────────────────────────────────────── */}
-      <div className="space-y-4">
-        <div className="flex items-center gap-3">
-          <div className="p-2 bg-purple-500/20 rounded-xl border border-purple-500/30">
-            <Shield className="w-5 h-5 text-purple-400" />
-          </div>
-          <div>
-            <h2 className="text-lg font-bold">Yüksek Erişilebilirlik (HA)</h2>
-            <p className="text-xs text-muted-foreground">Bu cihazı yerel sunucu olarak kayıt edin. Cloud down olursa otomatik geçiş yapılır.</p>
-          </div>
-        </div>
-
-        {/* Bu cihazın yapılandırması */}
-        <div className="p-4 rounded-2xl bg-card border border-border space-y-3">
-          <div className="text-sm font-medium text-muted-foreground">Bu Cihazın Yapılandırması</div>
-          <div className="text-xs text-muted-foreground/60 font-mono">ID: {getLocalNodeId()}</div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label className="text-xs text-muted-foreground mb-1 block">Cihaz Adı</label>
-              <input
-                value={nodeConfig.name || ''}
-                onChange={e => setNodeConfigState(p => ({ ...p, name: e.target.value }))}
-                placeholder="Masaüstü PC, Laptop vb."
-                className="w-full px-3 py-2 bg-background border border-border rounded-xl text-sm text-white focus:outline-none focus:ring-2 focus:ring-purple-500/40"
-              />
-            </div>
-            <div>
-              <label className="text-xs text-muted-foreground mb-1 block">Cihaz Tipi</label>
-              <select
-                value={nodeConfig.platform || 'desktop'}
-                onChange={e => setNodeConfigState(p => ({ ...p, platform: e.target.value as any }))}
-                className="w-full px-3 py-2 bg-background border border-border rounded-xl text-sm text-white focus:outline-none focus:ring-2 focus:ring-purple-500/40"
-              >
-                <option value="desktop">Masaüstü PC</option>
-                <option value="laptop">Laptop</option>
-                <option value="server">Sunucu</option>
-                <option value="other">Diğer</option>
-              </select>
-            </div>
-          </div>
-
-          <div>
-            <label className="text-xs text-muted-foreground mb-1 block">
-              Yerel Docker Supabase URL
-              <span className="ml-1 text-muted-foreground/50">(örn: http://192.168.1.5:54321 veya Cloudflare Tunnel URL)</span>
-            </label>
-            <input
-              value={nodeConfig.localUrl || ''}
-              onChange={e => setNodeConfigState(p => ({ ...p, localUrl: e.target.value }))}
-              placeholder="http://192.168.1.5:54321"
-              className="w-full px-3 py-2 bg-background border border-border rounded-xl text-sm text-white font-mono focus:outline-none focus:ring-2 focus:ring-purple-500/40"
-            />
-          </div>
-
-          <div>
-            <label className="text-xs text-muted-foreground mb-1 block">Yerel Supabase Anon Key</label>
-            <input
-              value={nodeConfig.anonKey || ''}
-              onChange={e => setNodeConfigState(p => ({ ...p, anonKey: e.target.value }))}
-              placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
-              type="password"
-              className="w-full px-3 py-2 bg-background border border-border rounded-xl text-sm text-white font-mono focus:outline-none focus:ring-2 focus:ring-purple-500/40"
-            />
-          </div>
-
-          <div className="flex items-center gap-2 p-3 rounded-xl bg-blue-500/5 border border-blue-500/20 text-xs text-blue-400/80">
-            <Zap className="w-3.5 h-3.5 flex-shrink-0" />
-            <span>
-              URL doldurulursa bu cihaz cloud KV'ye her 30 saniyede heartbeat yazar. Diğer cihazlar sizi "Çevrimiçi" olarak görür.
-              Cloud down olursa uygulama otomatik olarak sizin Docker'ınıza geçer.
-            </span>
-          </div>
-
-          <button
-            onClick={handleSaveNodeConfig}
-            className="w-full px-4 py-2.5 rounded-xl bg-purple-500/20 hover:bg-purple-500/30 border border-purple-500/30 text-purple-300 text-sm font-medium transition-all"
-          >
-            Yapılandırmayı Kaydet & Heartbeat Başlat
-          </button>
-        </div>
-
-        {/* Canlı durum paneli */}
-        <NodeStatusPanel />
-      </div>
-
       {/* Local Repo Panel */}
       <LocalRepoPanel />
 
@@ -704,6 +594,260 @@ export function SettingsPage() {
           ))}
         </div>
       </div>
+
+      {/* ═══════ SİSTEM ADMİN PANELİ ═══════ */}
+      {isSystemAdmin && (
+        <motion.div
+          variants={gridCard}
+          className="rounded-2xl border border-red-500/20 bg-gradient-to-br from-red-950/30 to-black/40 p-6 space-y-6"
+        >
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-red-500/15 flex items-center justify-center">
+              <Shield className="w-5 h-5 text-red-400" />
+            </div>
+            <div>
+              <h2 className="text-lg font-extrabold text-red-400">Sistem Admin Paneli</h2>
+              <p className="text-xs text-gray-500">Sadece sistem yöneticisine görünür</p>
+            </div>
+          </div>
+
+          {/* ── Admin Şifre Değiştir ─────────────────────────── */}
+          <div className="space-y-3 p-4 rounded-xl bg-black/30 border border-white/5">
+            <div className="flex items-center gap-2 mb-2">
+              <Key className="w-4 h-4 text-red-400" />
+              <h3 className="text-sm font-bold text-white">Admin Giriş Şifresi</h3>
+            </div>
+            <p className="text-xs text-gray-500 mb-3">Yönetici sekmesinden giriş yaparken kullanılan şifreyi değiştirin. Varsayılan: 1234</p>
+
+            <div className="space-y-2">
+              <div className="relative">
+                <input
+                  type={showAdminPw ? 'text' : 'password'}
+                  value={adminCurrentPw}
+                  onChange={e => setAdminCurrentPw(e.target.value)}
+                  placeholder="Mevcut şifre"
+                  className={inputClass}
+                />
+              </div>
+              <div className="relative">
+                <input
+                  type={showAdminPw ? 'text' : 'password'}
+                  value={adminNewPw}
+                  onChange={e => setAdminNewPw(e.target.value)}
+                  placeholder="Yeni şifre"
+                  className={inputClass}
+                />
+              </div>
+              <div className="relative">
+                <input
+                  type={showAdminPw ? 'text' : 'password'}
+                  value={adminConfirmPw}
+                  onChange={e => setAdminConfirmPw(e.target.value)}
+                  placeholder="Yeni şifre (tekrar)"
+                  className={inputClass}
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3 mt-3">
+              <button
+                onClick={handleAdminPwChange}
+                disabled={adminPwSaving}
+                className="flex items-center gap-2 px-5 py-2.5 bg-red-600 hover:bg-red-700 text-white text-sm font-bold rounded-xl transition-colors disabled:opacity-50"
+              >
+                {adminPwSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Lock className="w-4 h-4" />}
+                Şifreyi Değiştir
+              </button>
+              <button
+                onClick={() => setShowAdminPw(!showAdminPw)}
+                className="p-2.5 bg-white/5 hover:bg-white/10 rounded-xl text-gray-400 hover:text-white transition-colors"
+              >
+                {showAdminPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
+            </div>
+          </div>
+
+          {/* ── CouchDB Yapılandırma ─────────────────────────── */}
+          <div className="space-y-3 p-4 rounded-xl bg-black/30 border border-white/5">
+            <div className="flex items-center gap-2 mb-2">
+              <Database className="w-4 h-4 text-blue-400" />
+              <h3 className="text-sm font-bold text-white">Veritabanı Bağlantısı (CouchDB)</h3>
+            </div>
+            <p className="text-xs text-gray-500 mb-3">CouchDB sunucu adresini ve kimlik bilgilerini güncelleyin.</p>
+
+            <div className="space-y-2">
+              <input
+                type="text"
+                value={dbUrl}
+                onChange={e => setDbUrl(e.target.value)}
+                placeholder="CouchDB URL (örn: http://localhost:5984)"
+                className={inputClass}
+              />
+              <input
+                type="text"
+                value={dbUser}
+                onChange={e => setDbUser(e.target.value)}
+                placeholder="Kullanıcı adı"
+                className={inputClass}
+              />
+              <div className="relative">
+                <input
+                  type={showDbPass ? 'text' : 'password'}
+                  value={dbPass}
+                  onChange={e => setDbPass(e.target.value)}
+                  placeholder="Şifre"
+                  className={inputClass}
+                />
+                <button
+                  onClick={() => setShowDbPass(!showDbPass)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-white transition-colors"
+                >
+                  {showDbPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-3 mt-3">
+              <button
+                onClick={handleTestCouchDb}
+                disabled={dbTesting}
+                className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold rounded-xl transition-colors disabled:opacity-50"
+              >
+                {dbTesting ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
+                Bağlantıyı Test Et
+              </button>
+              <button
+                onClick={handleSaveCouchDb}
+                className="flex items-center gap-2 px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold rounded-xl transition-colors"
+              >
+                <Save className="w-4 h-4" /> Kaydet & Yenile
+              </button>
+              {dbTestResult !== null && (
+                <span className={`text-xs font-bold ${dbTestResult ? 'text-emerald-400' : 'text-red-400'}`}>
+                  {dbTestResult ? '✓ Bağlantı başarılı' : '✗ Bağlantı başarısız'}
+                </span>
+              )}
+            </div>
+          </div>
+
+          {/* ── Tablo Veri İstatistikleri ─────────────────────── */}
+          <div className="space-y-3 p-4 rounded-xl bg-black/30 border border-white/5">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                <BarChart3 className="w-4 h-4 text-purple-400" />
+                <h3 className="text-sm font-bold text-white">Tablo Veri İstatistikleri</h3>
+              </div>
+              <button
+                onClick={handleLoadTableStats}
+                disabled={tableStatsLoading}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600/30 hover:bg-purple-600/50 text-purple-300 text-xs font-bold rounded-lg transition-colors disabled:opacity-50"
+              >
+                {tableStatsLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
+                Yükle
+              </button>
+            </div>
+            <p className="text-xs text-gray-500">Her tablodaki kayıt sayısı: Yerel Depo / PouchDB / CouchDB</p>
+
+            {tableStats.length === 0 && !tableStatsLoading && (
+              <p className="text-xs text-gray-600 text-center py-4">"Yükle" butonuna basarak istatistikleri görün</p>
+            )}
+
+            {tableStatsLoading && (
+              <div className="flex items-center justify-center py-6 gap-2 text-gray-500 text-xs">
+                <Loader2 className="w-4 h-4 animate-spin" /> Yükleniyor...
+              </div>
+            )}
+
+            {/* Canlı sync durumu — her zaman görünür */}
+            {globalSyncTables.length > 0 && tableStats.length === 0 && (
+              <div className="space-y-1.5 mt-2">
+                <div className="grid grid-cols-3 gap-2 px-2 pb-1 border-b border-white/5">
+                  <span className="text-[10px] text-gray-500 font-bold uppercase tracking-wider col-span-1">Tablo</span>
+                  <span className="text-[10px] text-gray-500 font-bold uppercase tracking-wider text-center">Kayıt</span>
+                  <span className="text-[10px] text-gray-500 font-bold uppercase tracking-wider text-center">Durum</span>
+                </div>
+                {globalSyncTables.map(gt => {
+                  const stateColor = gt.syncState === 'synced' ? 'bg-emerald-400' : gt.syncState === 'error' ? 'bg-red-400' : gt.syncState === 'loading' ? 'bg-blue-400' : 'bg-yellow-400';
+                  const stateLabel = gt.syncState === 'synced' ? 'Senkron' : gt.syncState === 'error' ? 'Hata' : gt.syncState === 'loading' ? 'Yükleniyor' : gt.syncState === 'offline' ? 'Çevrimdışı' : 'Bekliyor';
+                  return (
+                    <div key={gt.name} className="grid grid-cols-3 gap-2 px-2 py-1.5 rounded-lg bg-white/5">
+                      <div className="col-span-1 flex items-center gap-1.5 min-w-0">
+                        <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${stateColor}`} />
+                        <span className="text-xs text-white truncate">{gt.name}</span>
+                      </div>
+                      <span className="text-xs text-center font-mono text-purple-300">{gt.docCount}</span>
+                      <span className={`text-[10px] text-center font-medium ${gt.syncState === 'synced' ? 'text-emerald-400' : gt.syncState === 'error' ? 'text-red-400' : 'text-yellow-400'}`}>{stateLabel}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {tableStats.length > 0 && (
+              <div className="space-y-1.5 mt-2 overflow-x-auto">
+              <div className="min-w-[360px]">
+                {/* Başlık */}
+                <div className="grid grid-cols-5 gap-2 px-2 pb-1 border-b border-white/5">
+                  <span className="text-[10px] text-gray-500 font-bold uppercase tracking-wider col-span-1">Tablo</span>
+                  <span className="text-[10px] text-gray-500 font-bold uppercase tracking-wider text-center">Yerel</span>
+                  <span className="text-[10px] text-gray-500 font-bold uppercase tracking-wider text-center">PouchDB</span>
+                  <span className="text-[10px] text-gray-500 font-bold uppercase tracking-wider text-center">CouchDB</span>
+                  <span className="text-[10px] text-gray-500 font-bold uppercase tracking-wider text-center">Sync</span>
+                </div>
+                {tableStats.map(ts => {
+                  const inSync = ts.couchDocCount > 0 && ts.couchDocCount >= ts.localStorageCount;
+                  const hasData = ts.localStorageCount > 0 || ts.localDocCount > 0 || ts.couchDocCount > 0;
+                  const globalState = globalSyncTables.find(g => g.name === ts.name);
+                  const syncLabel = globalState?.syncState === 'synced' ? '✓' : globalState?.syncState === 'error' ? '✗' : globalState?.syncState === 'loading' ? '…' : '—';
+                  const syncColor = globalState?.syncState === 'synced' ? 'text-emerald-400' : globalState?.syncState === 'error' ? 'text-red-400' : 'text-yellow-400';
+                  return (
+                    <div key={ts.name} className={`grid grid-cols-5 gap-2 px-2 py-1.5 rounded-lg ${hasData ? 'bg-white/5' : 'bg-transparent opacity-50'}`}>
+                      <div className="col-span-1 flex items-center gap-1.5 min-w-0">
+                        <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${inSync ? 'bg-emerald-400' : ts.localStorageCount > 0 ? 'bg-yellow-400' : 'bg-gray-600'}`} />
+                        <span className="text-xs text-white truncate">{ts.displayName}</span>
+                      </div>
+                      <span className={`text-xs text-center font-mono ${ts.localStorageCount > 0 ? 'text-blue-300' : 'text-gray-600'}`}>
+                        {ts.localStorageCount}
+                      </span>
+                      <span className={`text-xs text-center font-mono ${ts.localDocCount > 0 ? 'text-purple-300' : 'text-gray-600'}`}>
+                        {ts.localDocCount}
+                      </span>
+                      <div className="flex items-center justify-center gap-1">
+                        {ts.error ? (
+                          <span className="text-[10px] text-red-400">hata</span>
+                        ) : (
+                          <span className={`text-xs font-mono ${ts.couchDocCount > 0 ? 'text-emerald-300' : 'text-gray-600'}`}>
+                            {ts.exists ? ts.couchDocCount : '—'}
+                          </span>
+                        )}
+                        {inSync && <Cloud className="w-3 h-3 text-emerald-400 flex-shrink-0" />}
+                      </div>
+                      <span className={`text-xs text-center font-bold ${syncColor}`}>{syncLabel}</span>
+                    </div>
+                  );
+                })}
+                {/* Toplam */}
+                <div className="grid grid-cols-5 gap-2 px-2 pt-2 border-t border-white/10 mt-1">
+                  <span className="text-xs text-gray-400 font-bold col-span-1">Toplam</span>
+                  <span className="text-xs text-blue-300 font-bold text-center font-mono">
+                    {tableStats.reduce((s, ts) => s + ts.localStorageCount, 0)}
+                  </span>
+                  <span className="text-xs text-purple-300 font-bold text-center font-mono">
+                    {tableStats.reduce((s, ts) => s + ts.localDocCount, 0)}
+                  </span>
+                  <span className="text-xs text-emerald-300 font-bold text-center font-mono">
+                    {tableStats.reduce((s, ts) => s + ts.couchDocCount, 0)}
+                  </span>
+                  <span className="text-xs text-emerald-400 font-bold text-center">
+                    {globalSyncTables.filter(g => g.syncState === 'synced').length}/{globalSyncTables.length}
+                  </span>
+                </div>
+              </div>
+              </div>
+            )}
+          </div>
+        </motion.div>
+      )}
 
     </div>
   );

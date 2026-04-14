@@ -1,4 +1,5 @@
 import React, { useState, useRef, useMemo, useCallback } from 'react';
+import { useGlobalTableData } from '../contexts/GlobalTableSyncContext';
 import { useEmployee } from '../contexts/EmployeeContext';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
@@ -91,9 +92,9 @@ export function TahsilatPage() {
     storageKey: StorageKey.KASA_DATA,
   });
 
+  const rawBankalar = useGlobalTableData<any>('bankalar');
   const demoBanks = useMemo(() => {
-    const bankList = getFromStorage<any[]>(StorageKey.BANK_DATA);
-    if (!bankList || bankList.length === 0) {
+    if (rawBankalar.length === 0) {
       return [
         { id: '1', name: 'Ziraat Bankasi' },
         { id: '2', name: 'Is Bankasi' },
@@ -104,25 +105,22 @@ export function TahsilatPage() {
         { id: '7', name: 'Vakifbank' },
       ];
     }
-    return bankList.map(b => ({ id: b.id, name: b.name }));
-  }, []);
+    return rawBankalar.map(b => ({ id: b.id, name: b.name }));
+  }, [rawBankalar]);
 
-  const [refreshCounter, setRefreshCounter] = useState(0);
-
+  const rawCari = useGlobalTableData<any>('cari_hesaplar');
   const demoCustomers = useMemo(() => {
-    const cariList = getFromStorage<any[]>(StorageKey.CARI_DATA);
-    if (!cariList) return [];
-    return cariList
+    return rawCari
       .filter(c => (c.type === 'Müşteri' || c.type === 'Toptancı'))
       .map(c => ({
         id: c.id,
-        name: c.companyName,
-        phone: c.phone,
-        balance: c.balance,
-        type: c.type,
+        name: c.companyName || c.name || 'Bilinmeyen Cari',
+        phone: c.phone || '',
+        balance: c.balance || 0,
+        type: c.type || 'Müşteri',
         transactionHistory: c.transactionHistory || [],
       }));
-  }, [refreshCounter]);
+  }, [rawCari]);
 
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [paymentType, setPaymentType] = useState<PaymentType>('nakit');
@@ -150,11 +148,11 @@ export function TahsilatPage() {
   );
 
   // Bugünkü tahsilat geçmişi
+  const rawKasa = useGlobalTableData<any>('kasa_islemleri');
   const todayPayments = useMemo(() => {
-    const kasaData = getFromStorage<any[]>(StorageKey.KASA_DATA) || [];
     const today = new Date().toLocaleDateString('tr-TR');
-    return kasaData.filter(k => k.category === 'Tahsilat' && k.date === today).reverse();
-  }, [refreshCounter]);
+    return rawKasa.filter(k => k.category === 'Tahsilat' && k.date === today).reverse();
+  }, [rawKasa]);
 
   const todayTotal = todayPayments.reduce((s, p) => s + (p.amount || 0), 0);
 
@@ -180,13 +178,31 @@ export function TahsilatPage() {
     setInstallmentPlan(plan);
   }, [amount, installmentCount]);
 
+  const compressImage = (file: File, maxWidth = 1200, quality = 0.75): Promise<string> =>
+    new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onerror = reject;
+      reader.onloadend = () => {
+        const img = new Image();
+        img.onerror = reject;
+        img.onload = () => {
+          let { width, height } = img;
+          if (width > maxWidth) { height = Math.round((height * maxWidth) / width); width = maxWidth; }
+          const canvas = document.createElement('canvas');
+          canvas.width = width; canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          if (!ctx) { reject(new Error('Canvas yok')); return; }
+          ctx.drawImage(img, 0, 0, width, height);
+          resolve(canvas.toDataURL('image/jpeg', quality));
+        };
+        img.src = reader.result as string;
+      };
+      reader.readAsDataURL(file);
+    });
+
   const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>, setter: (val: string | null) => void, label: string) => {
     const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => { setter(reader.result as string); toast.success(`${label} ✓`); };
-      reader.readAsDataURL(file);
-    }
+    if (file) compressImage(file).then(data => { setter(data); toast.success(`${label} ✓`); }).catch(() => toast.error('Fotoğraf yüklenemedi'));
   };
 
   const paymentTypeLabels: Record<PaymentType, string> = {
@@ -258,7 +274,7 @@ export function TahsilatPage() {
 
     // 2. Kasa'ya gelir olarak ekle
     const bankObj = demoBanks.find(b => b.id === selectedBank);
-    const descParts = [paymentTypeLabels[paymentType], '-', selectedCustomer.name];
+    const descParts = [paymentTypeLabels[paymentType], '-', selectedCustomer.name || 'Bilinmeyen Cari'];
     if (paymentType === 'eft') descParts.push(`(Ref: ${eftReferenceNo})`);
     if (paymentType === 'duzeltme') descParts.push(`(${correctionNote})`);
     if (paymentType === 'taksit') descParts.push(`(${installmentPlan.length} taksit)`);
@@ -285,8 +301,8 @@ export function TahsilatPage() {
         checkNumber: checkNumber || undefined,
         dueDate: checkDate,
         issueDate: new Date().toISOString().split('T')[0],
-        sourceType: (selectedCustomer.type === 'Toptancı' ? 'toptanci' : 'musteri') as 'musteri' | 'toptanci',
-        sourceName: selectedCustomer.name,
+        sourceType: ((selectedCustomer.type || '') === 'Toptancı' ? 'toptanci' : 'musteri') as 'musteri' | 'toptanci',
+        sourceName: selectedCustomer.name || 'Bilinmeyen Cari',
         sourceId: selectedCustomer.id,
         relatedFisDescription: `${t('collection.title')} - ₺${paymentAmount.toLocaleString()}`,
         photoFront: checkPhotoFront,
@@ -316,8 +332,8 @@ export function TahsilatPage() {
           checkNumber: `T${idx + 1}/${installmentPlan.length}`,
           dueDate: inst.date,
           issueDate: new Date().toISOString().split('T')[0],
-          sourceType: (selectedCustomer.type === 'Toptancı' ? 'toptanci' : 'musteri') as 'musteri' | 'toptanci',
-          sourceName: selectedCustomer.name,
+          sourceType: ((selectedCustomer.type || '') === 'Toptancı' ? 'toptanci' : 'musteri') as 'musteri' | 'toptanci',
+          sourceName: selectedCustomer.name || 'Bilinmeyen Cari',
           sourceId: selectedCustomer.id,
           relatedFisDescription: `Taksit ${idx + 1}/${installmentPlan.length} - ₺${inst.amount.toLocaleString()}`,
           photoFront: null,
@@ -338,9 +354,8 @@ export function TahsilatPage() {
     }
 
     window.dispatchEvent(new Event('storage_update'));
-    setRefreshCounter(prev => prev + 1);
     emit('tahsilat:created', { cariId: selectedCustomer.id, amount: paymentAmount, type: paymentType });
-    sec.auditLog('tahsilat_add', selectedCustomer.id, `${selectedCustomer.name} - ₺${paymentAmount}`);
+    sec.auditLog('tahsilat_add', selectedCustomer.id, `${selectedCustomer.name || 'Bilinmeyen Cari'} - ₺${paymentAmount}`);
 
     toast.success(
       `${paymentTypeLabels[paymentType]} ${t('collection.title')}! ₺${paymentAmount.toLocaleString()} - ${currentEmployee?.name}`
@@ -391,7 +406,7 @@ export function TahsilatPage() {
                 {typeof selectedCustomer?.name === 'string' ? selectedCustomer.name.charAt(0).toUpperCase() : 'U'}
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-white truncate">{selectedCustomer.name}</p>
+                <p className="text-sm font-medium text-white truncate">{selectedCustomer.name || 'Bilinmeyen Cari'}</p>
                 <p className={`text-xs font-bold ${selectedCustomer.balance > 0 ? 'text-red-400' : 'text-green-400'}`}>
                   {selectedCustomer.balance > 0 ? 'Borç' : 'Alacak'}: ₺{Math.abs(selectedCustomer.balance).toLocaleString()}
                 </p>
@@ -529,8 +544,8 @@ export function TahsilatPage() {
                 {typeof selectedCustomer?.name === 'string' ? selectedCustomer.name.charAt(0).toUpperCase() : 'U'}
               </div>
               <div className="flex-1">
-                <p className="text-sm font-medium text-white">{selectedCustomer.name}</p>
-                <p className="text-xs text-muted-foreground">{selectedCustomer.phone}</p>
+                <p className="text-sm font-medium text-white">{selectedCustomer.name || 'Bilinmeyen Cari'}</p>
+                <p className="text-xs text-muted-foreground">{selectedCustomer.phone || ''}</p>
               </div>
             </div>
             <div className={`p-3 rounded-lg ${selectedCustomer.balance > 0 ? 'bg-red-900/20 border border-red-800' : 'bg-green-900/20 border border-green-800'}`}>
@@ -871,7 +886,7 @@ export function TahsilatPage() {
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
             className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4" onClick={() => setShowConfirmDialog(false)}>
             <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }}
-              className="modal-glass rounded-2xl p-6 w-full max-w-md border border-border" onClick={e => e.stopPropagation()}>
+              className="modal-glass rounded-2xl p-4 sm:p-6 w-[95vw] max-w-md max-h-[90vh] overflow-y-auto border border-border" onClick={e => e.stopPropagation()}>
               <h3 className="text-lg font-bold text-foreground mb-4 flex items-center gap-2">
                 <CheckCircle2 className="w-5 h-5 text-green-400" />
                 {t('collection.confirmPayment')}
@@ -879,7 +894,7 @@ export function TahsilatPage() {
 
               <div className="space-y-3 mb-6">
                 <div className="p-4 rounded-lg bg-secondary/50 border border-border space-y-2">
-                  <Row label={t('collection.selectCustomer')} value={selectedCustomer.name} />
+                  <Row label={t('collection.selectCustomer')} value={selectedCustomer.name || 'Bilinmeyen Cari'} />
                   <Row label={t('collection.subtitle')} value={paymentTypeLabels[paymentType]} highlight />
                   <Row label={t('collection.collectionAmount')}
                     value={`₺${paymentType === 'taksit' ? installmentPlan.reduce((s, i) => s + i.amount, 0).toLocaleString() : parseFloat(amount || '0').toLocaleString()}`}

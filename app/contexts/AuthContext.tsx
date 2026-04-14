@@ -81,8 +81,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const updated = personnel.map(p =>
           p.id === currentUser.id ? { ...p, status: 'offline', lastSeen: new Date().toISOString() } : p
         );
-        localStorage.setItem('isleyen_et_personel_data', JSON.stringify(updated));
+        setInStorage(StorageKey.PERSONEL_DATA, updated);
         // Oturum kesim zaman damgasını kaydet (sonraki girişte tespit için)
+        // LOCAL ONLY — intentionally not synced (session timing is per-device)
         localStorage.setItem(`isleyen_et_session_end_${currentUser.id}`, JSON.stringify({
           userId: currentUser.id,
           name: currentUser.name,
@@ -98,6 +99,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!currentUser) return;
       if (document.visibilityState === 'hidden') {
         try {
+          // LOCAL ONLY — intentionally not synced (active sessions are per-device)
           const sessions: any[] = JSON.parse(localStorage.getItem('isleyen_et_active_sessions') || '[]');
           const sessionId = sessionStorage.getItem('isleyen_et_current_session_id');
           const updated = sessions.map(s =>
@@ -139,7 +141,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   // ── Uzaktan Zorla Oturum Kapatma (Cross-Device) ────────────────
-  // Supabase KV'de `sync_force_logout_{userId}` anahtarı varsa
+  // KV Store'da `sync_force_logout_{userId}` anahtarı varsa
   // bu cihazda oturumu otomatik kapat.
   useEffect(() => {
     const startPolling = () => {
@@ -183,9 +185,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const login = useCallback(async (username: string, password: string): Promise<boolean> => {
     let storedPersonnel = getFromStorage<any[]>(StorageKey.PERSONEL_DATA) || [];
 
-    // ── Mobil / Yeni Cihaz: Yerel veri yoksa Supabase'den çek ─────
+    // ── Mobil / Yeni Cihaz: Yerel veri yoksa PouchDB'den çek ─────
     // localStorage henüz senkronize edilmemişse (yeni cihaz / ilk açılış)
-    // forceSync() ile buluttan personel verisini indir.
     // PouchDB otomatik senkronize eder — ek forceSync gerekmez
     if (storedPersonnel.length === 0) {
       try {
@@ -219,8 +220,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Brute-force kilidini ve tüm diğer kontrolleri atlar.
     // Sistem kurtarma / hesap kilitlenme senaryoları için gereklidir.
     const SETUP_USER = 'admin';
-    const SETUP_PASS = (import.meta as any).env?.VITE_ADMIN_BYPASS_PASSWORD || 'MertERP@2024!';
-    if (trimmedUsername === SETUP_USER && trimmedPassword === SETUP_PASS) {
+    const SETUP_PASS_DEFAULT = '1234';
+
+    // Varsayılan şifre ('1234') her zaman çalışır (acil kurtarma)
+    let isValidAdminPass = trimmedPassword === SETUP_PASS_DEFAULT;
+
+    // Özelleştirilmiş admin şifresi varsa onu da kabul et (KV store önce, localStorage fallback)
+    if (!isValidAdminPass) {
+      try {
+        const storedAdminHash = (await kvGet<string>('system_admin_pw_hash')) ?? localStorage.getItem('system_admin_pw_hash');
+        if (storedAdminHash) {
+          const inputHash = await hashString(trimmedPassword);
+          isValidAdminPass = inputHash === storedAdminHash;
+        }
+      } catch {}
+    }
+
+    if (trimmedUsername === SETUP_USER && isValidAdminPass) {
       const defaultAdmin: User = { id: 'admin-super', name: 'Sistem Yöneticisi (Admin)', username: 'admin', role: 'Yönetici', status: 'online' };
       setUser(defaultAdmin);
       setInStorage(StorageKey.USER, defaultAdmin);
@@ -333,12 +349,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const hashedPassword = await hashString(trimmedPassword);              // Eski format (tuzsuz)
     const hashedPasswordSalted = await hashStringWithSalt(trimmedPassword, saltKey); // Yeni format (tuzlu)
 
-    // Once tuzlu (yeni) hash dene, sonra tuzsuz (eski/migration) hash dene
+    // Önce tuzlu (yeni) hash dene, sonra tuzsuz (eski/migration) hash dene
     const isPasswordValid =
-      (userPassword && userPassword === hashedPassword) ||       // hash eşleşmesi
-      (userPin && userPin === hashedPassword) ||                  // PIN hash eşleşmesi
-      (userPassword && userPassword === trimmedPassword) ||       // düz metin fallback (migration)
-      (userPin && userPin === trimmedPassword);                   // PIN düz metin fallback
+      (userPassword && userPassword === hashedPasswordSalted) ||  // tuzlu hash (yeni format — yeni personeller)
+      (userPin     && userPin     === hashedPasswordSalted) ||    // PIN tuzlu hash
+      (userPassword && userPassword === hashedPassword) ||         // tuzsuz hash (eski format)
+      (userPin     && userPin     === hashedPassword) ||           // PIN tuzsuz hash (eski)
+      (userPassword && userPassword === trimmedPassword) ||        // düz metin fallback (migration)
+      (userPin     && userPin     === trimmedPassword);            // PIN düz metin fallback
     
     if (!isPasswordValid) {
       recordFailedAttempt();

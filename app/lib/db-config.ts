@@ -1,6 +1,7 @@
 // [AJAN-2 | claude/serene-gagarin | 2026-03-25]
 // CouchDB yapılandırması — PouchDB ↔ CouchDB sync için
 
+// LOCAL ONLY — intentionally not synced (CouchDB server URL may differ per device/location)
 const CONFIG_KEY = 'mert4_couchdb_config';
 
 export interface CouchDbConfig {
@@ -13,18 +14,19 @@ export interface CouchDbConfig {
 /**
  * Varsayılan CouchDB bağlantı noktasını belirle.
  *
- * Tarayıcıda:  site ile aynı origin üzerinden nginx proxy kullanılır.
- *   http://localhost:8080/couchdb  →  nginx  →  http://couchdb:5984
- *   • CORS sorunu olmaz (aynı origin)
- *   • Yerel kurulu CouchDB ile çakışmaz
- *   • Docker CouchDB'sine ulaşır
- *
- * .env.local değeri varsa (updater.py yapılandırması) önceliklidir.
+ * Öncelik sırası:
+ *   1. VITE_COUCHDB_URL env değişkeni (build-time veya .env.local)
+ *   2. Tarayıcı origin + '/couchdb' — nginx reverse proxy yolu (Docker)
+ *      http://<sunucu>/couchdb  →  nginx  →  http://couchdb:5984
+ *      • CORS sorunu olmaz (aynı origin)
+ *      • Herhangi bir cihazdan bağlanılabilir (hardcoded localhost değil)
+ *      • Docker servis adı (couchdb) ile doğrudan iletişim kurulur
+ *   3. Fallback: http://localhost:5984 (doğrudan geliştirme ortamı)
  */
 function _defaultCouchUrl(): string {
   const envUrl = (import.meta as any).env?.VITE_COUCHDB_URL;
   if (envUrl) return envUrl;
-  // Tarayıcıda: sitenin kendi origin'i + nginx proxy yolu
+  // Tarayıcıda çalışıyorsa nginx proxy yolunu kullan (Docker deployment için)
   if (typeof window !== 'undefined') {
     return window.location.origin + '/couchdb';
   }
@@ -33,8 +35,8 @@ function _defaultCouchUrl(): string {
 
 const DEFAULT_CONFIG: CouchDbConfig = {
   url: _defaultCouchUrl(),
-  user: (import.meta as any).env?.VITE_COUCHDB_USER || 'admin',
-  password: (import.meta as any).env?.VITE_COUCHDB_PASSWORD || '',
+  user: (import.meta as any).env?.VITE_COUCHDB_USER || 'adm1n',
+  password: (import.meta as any).env?.VITE_COUCHDB_PASSWORD || '135790',
   peerUrl: (import.meta as any).env?.VITE_COUCHDB_PEER_URL || '',
 };
 
@@ -55,10 +57,14 @@ export function setCouchDbConfig(config: Partial<CouchDbConfig>): void {
 export function getCouchDbAuthUrl(): string {
   const { url, user, password } = getCouchDbConfig();
   if (!user) return url;
-  const u = new URL(url);
-  u.username = user;
-  u.password = password;
-  return u.toString().replace(/\/$/, '');
+  try {
+    const u = new URL(url);
+    u.username = user;
+    u.password = password;
+    return u.toString().replace(/\/$/, '');
+  } catch {
+    return url;
+  }
 }
 
 export function getPeerCouchDbUrl(): string {
@@ -95,6 +101,8 @@ export const TABLE_NAMES = [
   'faturalar',
   'fatura_stok',
   'tahsilatlar',
+  'guncelleme_notlari',
+  'stok_giris',
 ] as const;
 
 export type TableName = typeof TABLE_NAMES[number];

@@ -410,12 +410,6 @@ function ChartCard({ response }: { response: AIResponse }) {
             <PieChart key="ai-gpt-pie-chart">
               <Pie key="pie-gpt" data={response.data} dataKey={response.chartConfig?.valueKey || 'value'} nameKey={response.chartConfig?.nameKey || 'name'} cx="50%" cy="50%" outerRadius={100} label>
                 {response.data.map((_entry, index) => (
-              <Line type="monotone" dataKey={response.chartConfig?.yKey || 'value'} stroke={response.chartConfig?.color || '#3b82f6'} strokeWidth={2} />
-            </LineChart>
-          ) : (
-            <PieChart key="ai-gpt-pie-chart">
-              <Pie data={response.data} dataKey={response.chartConfig?.valueKey || 'value'} nameKey={response.chartConfig?.nameKey || 'name'} cx="50%" cy="50%" outerRadius={100} label>
-                {response.data.map((entry, index) => (
                   <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                 ))}
               </Pie>

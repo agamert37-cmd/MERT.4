@@ -20,6 +20,7 @@ import {
   PieChart as RePieChart, Pie, Cell, RadialBarChart, RadialBar
 } from 'recharts';
 import { getFromStorage, StorageKey } from '../utils/storage';
+import { useGlobalTableData } from '../contexts/GlobalTableSyncContext';
 import { generateDashboardPDF } from '../utils/reportGenerator';
 import { isOpenAIConfigured } from '../lib/api-config';
 import { logActivity } from '../utils/activityLogger';
@@ -114,6 +115,7 @@ export function DashboardPage() {
   // Merkezi yetki kontrolü
   const perms = getPagePermissions(user, currentEmployee, 'dashboard');
 
+  // refreshCounter: sadece deletedActivities (KV) ve manuel yenileme için
   const [refreshCounter, setRefreshCounter] = useState(0);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [chartView, setChartView] = useState<'area' | 'bar' | 'composed'>('composed');
@@ -133,27 +135,11 @@ export function DashboardPage() {
     }
   }, [user?.name]);
 
-  useEffect(() => {
-    const handler = () => setRefreshCounter(c => c + 1);
-    window.addEventListener('storage_update', handler);
-    window.addEventListener('storage', handler);
-    return () => {
-      window.removeEventListener('storage_update', handler);
-      window.removeEventListener('storage', handler);
-    };
-  }, []);
-
-  // ModuleBus: Herhangi bir moduldeki degisiklik dashboard'u gunceller
+  // storage_update event'leri artık gerekli değil — useGlobalTableData reaktif
+  // ModuleBus: deletedActivities (KV) yenilenmesi için tutuldu
   useEffect(() => {
     const refreshHandler = () => setRefreshCounter(c => c + 1);
-    onPrefix('stok:', refreshHandler);
-    onPrefix('cari:', refreshHandler);
-    onPrefix('fis:', refreshHandler);
-    onPrefix('kasa:', refreshHandler);
-    onPrefix('uretim:', refreshHandler);
-    onPrefix('personel:', refreshHandler);
-    onPrefix('gunsonu:', refreshHandler);
-    onPrefix('tahsilat:', refreshHandler);
+    onPrefix('fis:', refreshHandler); // deleted_fisler için
   }, [onPrefix]);
 
   const handleRefresh = useCallback(() => {
@@ -171,11 +157,12 @@ export function DashboardPage() {
   const currentHour = now.getHours();
   const greetingText = currentHour < 6 ? 'İyi Geceler' : currentHour < 12 ? 'Günaydın' : currentHour < 18 ? 'İyi Günler' : 'İyi Akşamlar';
 
-  const rawFisler = useMemo(() => getFromStorage<any[]>(StorageKey.FISLER) || [], [refreshCounter]);
-  const rawKasa = useMemo(() => getFromStorage<any[]>(StorageKey.KASA_DATA) || [], [refreshCounter]);
-  const rawStok = useMemo(() => getFromStorage<any[]>(StorageKey.STOK_DATA) || [], [refreshCounter]);
-  const rawPersonel = useMemo(() => getFromStorage<any[]>(StorageKey.PERSONEL_DATA) || [], [refreshCounter]);
-  const rawCari = useMemo(() => getFromStorage<any[]>(StorageKey.CARI_DATA) || [], [refreshCounter]);
+  // GlobalTableSyncContext'ten doğrudan oku — storage_update event'e gerek yok
+  const rawFisler = useGlobalTableData<any>('fisler');
+  const rawKasa = useGlobalTableData<any>('kasa_islemleri');
+  const rawStok = useGlobalTableData<any>('urunler');
+  const rawPersonel = useGlobalTableData<any>('personeller');
+  const rawCari = useGlobalTableData<any>('cari_hesaplar');
 
   const todayISO = new Date().toISOString().split('T')[0];
 
@@ -518,12 +505,12 @@ export function DashboardPage() {
   }, [realtimeRevenue, todayPurchaseTotal, kasaStats]);
 
   // ─── Üretim verimi ───
+  const rawUretim = useGlobalTableData<any>('uretim_kayitlari');
+  const uretimProfiles = useGlobalTableData<any>('uretim_profilleri');
   const productionStats = useMemo(() => {
-    const rawUretim = getFromStorage<any[]>(StorageKey.URETIM_DATA) || [];
-    const todayUretim = rawUretim.filter(u => u.date?.startsWith(todayISO) || u.createdAt?.startsWith(todayISO));
-    const totalProduced = todayUretim.reduce((s, u) => s + safeNum(u.quantity || u.miktar), 0);
-    const totalFire = todayUretim.reduce((s, u) => s + safeNum(u.fire || u.waste), 0);
-    const uretimProfiles = getFromStorage<any[]>(StorageKey.URETIM_PROFILES) || [];
+    const todayUretim = rawUretim.filter((u: any) => u.date?.startsWith(todayISO) || u.createdAt?.startsWith(todayISO));
+    const totalProduced = todayUretim.reduce((s: number, u: any) => s + safeNum(u.quantity || u.miktar), 0);
+    const totalFire = todayUretim.reduce((s: number, u: any) => s + safeNum(u.fire || u.waste), 0);
     return {
       todayCount: todayUretim.length,
       totalProduced,
@@ -531,7 +518,7 @@ export function DashboardPage() {
       efficiency: totalProduced > 0 ? Math.round(((totalProduced - totalFire) / totalProduced) * 100) : 100,
       profileCount: uretimProfiles.length,
     };
-  }, [refreshCounter, todayISO]);
+  }, [rawUretim, uretimProfiles, todayISO]);
 
   // ─── KPI Ticker verileri ───
   const kpiTickerItems = useMemo(() => [
@@ -725,7 +712,7 @@ export function DashboardPage() {
 
   // ─── RENDER ────────────────────────────────────────────────────────────────
   return (
-    <div className="p-3 sm:p-6 lg:p-10 space-y-4 sm:space-y-6 lg:space-y-8 bg-background min-h-screen text-white font-sans pb-28 sm:pb-6 lg:pb-10">
+    <div className="p-3 sm:p-6 lg:p-10 space-y-4 sm:space-y-6 lg:space-y-8 bg-background min-h-screen text-white font-sans pb-4 sm:pb-6 lg:pb-8">
       
       {/* AI Banner — API key eksikse paneli açmaya davet et */}
       {!isOpenAIConfigured() && !showAIChat && (
@@ -814,7 +801,7 @@ export function DashboardPage() {
             exit={{ opacity: 0, height: 0 }}
             transition={{ type: 'spring', stiffness: 200, damping: 30 }}
             className="rounded-2xl bg-[#0d111b] border border-white/[0.08] overflow-hidden"
-            style={{ minHeight: '580px' }}
+            style={{ minHeight: isMobile ? '360px' : '580px' }}
           >
             <DashboardAIChat onClose={() => setShowAIChat(false)} />
           </motion.div>
@@ -857,7 +844,7 @@ export function DashboardPage() {
               <AnimatedCounter value={realtimeRevenue} prefix="₺" />
             </motion.p>
             <div className="mt-2 sm:mt-3 flex items-center gap-2">
-              <Sparkline data={dailySparkData} color="#3b82f6" width={80} height={28} />
+              <div className="hidden sm:block"><Sparkline data={dailySparkData} color="#3b82f6" width={80} height={28} /></div>
               <div className="flex flex-col">
                 <span className="text-[9px] sm:text-[10px] text-gray-500">7 gün</span>
                 {dailySparkData.length >= 2 && (
@@ -963,7 +950,7 @@ export function DashboardPage() {
               <AnimatedCounter value={todayNetProfit} prefix="₺" />
             </motion.p>
             <div className="mt-2 flex items-center gap-2">
-              <Sparkline data={profitTrend.map(d => d.kar)} color={todayNetProfit >= 0 ? '#a855f7' : '#f97316'} width={60} height={22} />
+              <div className="hidden sm:block"><Sparkline data={profitTrend.map(d => d.kar)} color={todayNetProfit >= 0 ? '#a855f7' : '#f97316'} width={60} height={22} /></div>
               <span className="text-[9px] sm:text-[10px] text-gray-500">7 gün kâr</span>
             </div>
           </div>
@@ -1471,7 +1458,7 @@ export function DashboardPage() {
             </div>
           </div>
           
-          <div className="grid grid-cols-3 gap-2 sm:gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-3">
             {[
               { path: '/sales', icon: ShoppingCart, label: 'Yeni Satış', color: '#3b82f6', bg: 'blue' },
               { path: '/stok', icon: Package, label: 'Stok Girişi', color: '#6366f1', bg: 'indigo' },
@@ -1556,13 +1543,23 @@ export function DashboardPage() {
 
       {/* ─── Mobil: Gelişmiş Analitik Toggle ─── */}
       {isMobile && (
-        <button
+        <motion.button
+          whileTap={{ scale: 0.97 }}
           onClick={() => setShowAdvancedMobile(v => !v)}
-          className="w-full py-3 px-4 rounded-2xl border border-white/10 bg-white/[0.03] hover:bg-white/[0.06] transition-all flex items-center justify-center gap-2 text-sm font-bold text-gray-400"
+          className="w-full py-3.5 px-4 rounded-2xl border transition-all flex items-center justify-center gap-2.5 text-sm font-bold"
+          style={showAdvancedMobile
+            ? { borderColor: 'rgba(59,130,246,0.3)', background: 'rgba(59,130,246,0.06)', color: '#93c5fd' }
+            : { borderColor: 'rgba(255,255,255,0.08)', background: 'rgba(255,255,255,0.02)', color: '#6b7280' }
+          }
         >
-          <BarChart3 className="w-4 h-4 text-blue-400" />
-          {showAdvancedMobile ? 'Gelişmiş Analizleri Gizle ▲' : 'Gelişmiş Analizleri Göster ▼'}
-        </button>
+          <BarChart3 className="w-4 h-4" style={{ color: showAdvancedMobile ? '#60a5fa' : '#6b7280' }} />
+          <span>{showAdvancedMobile ? 'Gelişmiş Analizleri Gizle' : 'Gelişmiş Analizleri Göster'}</span>
+          <motion.span
+            animate={{ rotate: showAdvancedMobile ? 180 : 0 }}
+            transition={{ duration: 0.25 }}
+            className="text-xs"
+          >▼</motion.span>
+        </motion.button>
       )}
 
       {/* ─── Advanced Analytics Row ─── */}

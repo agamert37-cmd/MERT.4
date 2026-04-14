@@ -398,21 +398,33 @@ function FileUploadButton({ onUpload, label = 'Dosyadan Yukle' }: { onUpload: (d
       return;
     }
     
-    if (file.size > 5 * 1024 * 1024) {
-      toast.error('Dosya boyutu 5MB\'dan kucuk olmalidir');
-      return;
-    }
-    
-    const reader = new FileReader();
-    reader.onload = () => {
-      if (typeof reader.result === 'string') {
-        onUpload(reader.result);
-        toast.success(`Gorsel yuklendi: ${file.name}`);
-      }
-    };
-    reader.onerror = () => toast.error('Dosya okunamadi');
-    reader.readAsDataURL(file);
-    
+    const compressImage = (f: File, maxWidth = 1200, quality = 0.75): Promise<string> =>
+      new Promise((resolve, reject) => {
+        const r = new FileReader();
+        r.onerror = reject;
+        r.onloadend = () => {
+          const img = new Image();
+          img.onerror = reject;
+          img.onload = () => {
+            let { width, height } = img;
+            if (width > maxWidth) { height = Math.round((height * maxWidth) / width); width = maxWidth; }
+            const canvas = document.createElement('canvas');
+            canvas.width = width; canvas.height = height;
+            const ctx = canvas.getContext('2d');
+            if (!ctx) { reject(new Error('Canvas yok')); return; }
+            ctx.drawImage(img, 0, 0, width, height);
+            resolve(canvas.toDataURL('image/jpeg', quality));
+          };
+          img.src = r.result as string;
+        };
+        r.readAsDataURL(f);
+      });
+
+    compressImage(file).then(dataUrl => {
+      onUpload(dataUrl);
+      toast.success(`Gorsel yuklendi: ${file.name}`);
+    }).catch(() => toast.error('Dosya okunamadi'));
+
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
   
@@ -439,11 +451,28 @@ function ImageInputField({ value, onChange, placeholder = 'Gorsel URL (Unsplash 
     const file = e.target.files?.[0];
     if (!file) return;
     if (!file.type.startsWith('image/')) { toast.error('Lutfen bir gorsel dosyasi secin (JPG, PNG, WebP)'); return; }
-    if (file.size > 5 * 1024 * 1024) { toast.error('Dosya boyutu 5MB\'dan kucuk olmalidir'); return; }
-    const reader = new FileReader();
-    reader.onload = () => { if (typeof reader.result === 'string') { onChange(reader.result); toast.success(`Gorsel yuklendi: ${file.name}`); } };
-    reader.onerror = () => toast.error('Dosya okunamadi');
-    reader.readAsDataURL(file);
+    const compressImage = (f: File, maxWidth = 1200, quality = 0.75): Promise<string> =>
+      new Promise((resolve, reject) => {
+        const r = new FileReader();
+        r.onerror = reject;
+        r.onloadend = () => {
+          const img = new Image();
+          img.onerror = reject;
+          img.onload = () => {
+            let { width, height } = img;
+            if (width > maxWidth) { height = Math.round((height * maxWidth) / width); width = maxWidth; }
+            const canvas = document.createElement('canvas');
+            canvas.width = width; canvas.height = height;
+            const ctx = canvas.getContext('2d');
+            if (!ctx) { reject(new Error('Canvas yok')); return; }
+            ctx.drawImage(img, 0, 0, width, height);
+            resolve(canvas.toDataURL('image/jpeg', quality));
+          };
+          img.src = r.result as string;
+        };
+        r.readAsDataURL(f);
+      });
+    compressImage(file).then(dataUrl => { onChange(dataUrl); toast.success(`Gorsel yuklendi: ${file.name}`); }).catch(() => toast.error('Dosya okunamadi'));
     if (fileRef.current) fileRef.current.value = '';
   };
 
@@ -972,10 +1001,10 @@ export function PazarlamaPage() {
   ];
 
   return (
-    <div className="p-3 sm:p-6 lg:p-10 space-y-4 sm:space-y-6 lg:space-y-8 bg-background min-h-screen text-white font-sans pb-28 sm:pb-6 max-w-[1600px] mx-auto">
+    <div className="p-3 sm:p-6 lg:p-10 space-y-4 sm:space-y-6 lg:space-y-8 bg-background min-h-screen text-white font-sans pb-4 sm:pb-6 max-w-[1600px] mx-auto">
       {/* ═══════════ HEADER ═══════════ */}
       <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }}
-        className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 mb-6">
+        className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
         <div className="flex items-center gap-4">
           <div className="w-14 h-14 rounded-2xl bg-pink-500/10 flex items-center justify-center border border-pink-500/20">
             <Megaphone className="w-7 h-7 text-pink-400" />

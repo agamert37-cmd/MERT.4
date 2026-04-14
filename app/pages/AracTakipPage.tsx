@@ -116,6 +116,8 @@ export function AracTakipPage() {
 
   // useTableSync — PouchDB arac_shifts tablosu
   const { data: syncedShifts, addItem: addShiftToPouchDB, updateItem: updateShiftInPouchDB } = useTableSync<VehicleShift>({
+  // useTableSync ile PouchDB/CouchDB senkronizasyonu
+  const { data: syncedShifts, addItem: addShift } = useTableSync<VehicleShift>({
     tableName: 'arac_shifts',
     storageKey: StorageKey.ARAC_SHIFTS,
     initialData: [],
@@ -125,6 +127,8 @@ export function AracTakipPage() {
 
   // PouchDB arac_km_logs tablosu
   const { addItem: addKmLogToPouchDB } = useTableSync<KmLog>({
+  // KM logları için PouchDB sync
+  const { addItem: addKmLog } = useTableSync<KmLog>({
     tableName: 'arac_km_logs',
     storageKey: StorageKey.ARAC_KM_LOGS,
     initialData: [],
@@ -299,6 +303,8 @@ export function AracTakipPage() {
     // Başlayan vardiyayı ve KM logunu PouchDB'ye yaz
     addShiftToPouchDB(newShift).catch(e => console.error('[AracTakip] shift PouchDB:', e));
     addKmLogToPouchDB(newLog).catch(e => console.error('[AracTakip] km log PouchDB:', e));
+    // KM logunu PouchDB'ye yaz (→ CouchDB sync)
+    addKmLog(newLog).catch(e => console.error('[AracTakip] km log PouchDB sync:', e));
 
     logActivity('vehicle_shift_start', `Vardiya baslatildi: ${vehicle.plate}`, {
       employeeId: currentEmployee?.id,
@@ -358,6 +364,9 @@ export function AracTakipPage() {
       addShiftToPouchDB(completedShift).catch(e => console.error('[AracTakip] shift PouchDB:', e))
     );
     addKmLogToPouchDB(newLog).catch(e => console.error('[AracTakip] km log PouchDB:', e));
+    // Vardiya ve KM logunu PouchDB'ye yaz (→ CouchDB sync)
+    addShift(completedShift).catch(e => console.error('[AracTakip] shift PouchDB sync:', e));
+    addKmLog(newLog).catch(e => console.error('[AracTakip] km log PouchDB sync:', e));
 
     logActivity('vehicle_shift_end', `Vardiya bitirildi: ${activeShift.vehiclePlate}`, {
       employeeId: currentEmployee?.id,
@@ -445,6 +454,10 @@ export function AracTakipPage() {
     addShiftToPouchDB(newShift).catch(e => console.error('[AracTakip] new shift PouchDB:', e));
     addKmLogToPouchDB(endLog).catch(e => console.error('[AracTakip] km log PouchDB:', e));
     addKmLogToPouchDB(startLog).catch(e => console.error('[AracTakip] km log PouchDB:', e));
+    // Vardiya ve KM loglarını PouchDB'ye yaz (→ CouchDB sync)
+    addShift(completedShift).catch(e => console.error('[AracTakip] shift PouchDB sync:', e));
+    addKmLog(endLog).catch(e => console.error('[AracTakip] km log PouchDB sync:', e));
+    addKmLog(startLog).catch(e => console.error('[AracTakip] km log PouchDB sync:', e));
 
     logActivity('vehicle_change', `Arac degistirildi: ${activeShift.vehiclePlate} -> ${vehicle.plate}`, {
       employeeId: currentEmployee?.id,
@@ -510,11 +523,11 @@ export function AracTakipPage() {
   };
 
   return (
-    <div className="p-3 sm:p-6 lg:p-8 space-y-4 sm:space-y-6 pb-28 sm:pb-6">
+    <div className="p-3 sm:p-6 lg:p-8 space-y-4 sm:space-y-6 pb-4 sm:pb-6">
       {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl md:text-3xl font-bold text-white mb-1">Arac Takip Sistemi</h1>
+          <h1 className="text-xl sm:text-2xl md:text-3xl font-bold text-white mb-1">Arac Takip Sistemi</h1>
           <p className="text-muted-foreground">
             Calisan: <span className="text-blue-400 font-medium">{currentEmployee?.name || 'Secilmedi'}</span>
             {activeShift && (
@@ -604,7 +617,7 @@ export function AracTakipPage() {
             {/* Decorative gradient */}
             <div className="absolute top-0 right-0 w-48 h-48 bg-green-500/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 pointer-events-none" />
 
-            <div className="relative flex flex-col md:flex-row md:items-center justify-between mb-5 gap-4">
+            <div className="relative flex flex-col sm:flex-row sm:items-center justify-between mb-5 gap-4">
               <div className="flex items-center gap-4">
                 <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-green-500 to-green-700 flex items-center justify-center shadow-lg shadow-green-600/25">
                   <Truck className="w-7 h-7 text-white" />
@@ -714,7 +727,7 @@ export function AracTakipPage() {
                       transition={{ delay: i * 0.03 }}
                       className="p-4 hover:bg-secondary/30 transition-colors"
                     >
-                      <div className="flex flex-col md:flex-row md:items-center gap-3">
+                      <div className="flex flex-col sm:flex-row sm:items-center gap-3">
                         <div className="flex items-center gap-3 flex-1">
                           <div className="w-10 h-10 rounded-xl bg-secondary flex items-center justify-center flex-shrink-0">
                             <Truck className="w-5 h-5 text-blue-400" />
@@ -762,7 +775,7 @@ export function AracTakipPage() {
 
       {/* KM Hareketleri Logu */}
       <div className="bg-card border border-border rounded-2xl overflow-hidden">
-        <div className="p-5 border-b border-border/60 flex flex-col md:flex-row md:items-center justify-between gap-3">
+        <div className="p-4 sm:p-5 border-b border-border/60 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
             <h2 className="text-lg font-bold text-white flex items-center gap-2">
               <BarChart3 className="w-5 h-5 text-green-400" />
@@ -859,7 +872,7 @@ export function AracTakipPage() {
         <Dialog.Portal>
           <Dialog.Overlay className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50" />
           <Dialog.Content
-            className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-card border border-border rounded-2xl p-6 w-full max-w-md z-50 shadow-2xl"
+            className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-card border border-border rounded-2xl p-4 sm:p-6 w-[95vw] max-w-md z-50 shadow-2xl max-h-[90vh] overflow-y-auto"
             aria-describedby={undefined}
           >
             <Dialog.Title className="text-xl font-bold text-white mb-5 flex items-center gap-3">
@@ -954,7 +967,7 @@ export function AracTakipPage() {
         <Dialog.Portal>
           <Dialog.Overlay className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50" />
           <Dialog.Content
-            className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-card border border-border rounded-2xl p-6 w-full max-w-md z-50 shadow-2xl"
+            className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-card border border-border rounded-2xl p-4 sm:p-6 w-[95vw] max-w-md z-50 shadow-2xl max-h-[90vh] overflow-y-auto"
             aria-describedby={undefined}
           >
             <Dialog.Title className="text-xl font-bold text-white mb-5 flex items-center gap-3">
@@ -1036,7 +1049,7 @@ export function AracTakipPage() {
         <Dialog.Portal>
           <Dialog.Overlay className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50" />
           <Dialog.Content
-            className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-card border border-border rounded-2xl p-6 w-full max-w-md z-50 shadow-2xl max-h-[90vh] overflow-y-auto"
+            className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-card border border-border rounded-2xl p-4 sm:p-6 w-[95vw] max-w-md z-50 shadow-2xl max-h-[90vh] overflow-y-auto"
             aria-describedby={undefined}
           >
             <Dialog.Title className="text-xl font-bold text-white mb-5 flex items-center gap-3">

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { useGlobalTableData } from '../contexts/GlobalTableSyncContext';
 import { useEmployee } from '../contexts/EmployeeContext';
 import { getFromStorage, setInStorage, StorageKey } from '../utils/storage';
 import { logActivity } from '../utils/activityLogger';
@@ -161,6 +162,8 @@ export function SalesPage() {
   
   // Modal Step
   const [currentStep, setCurrentStep] = useState<'mode' | 'employee' | 'cari' | 'products' | 'payment' | 'gider-details'>('mode');
+  // Ürünler adımı — mobil tab
+  const [productMobileTab, setProductMobileTab] = useState<'list' | 'cart'>('list');
   
   // Gider Fişi State'leri
   const [giderCategory, setGiderCategory] = useState('');
@@ -203,29 +206,11 @@ export function SalesPage() {
   // ────────────────────────────────��────────────────────────────────────────────
 
   // Storage'dan verileri yükle — reaktif state ile
-  const [banks, setBanks] = useState<any[]>(() => getFromStorage<any[]>(StorageKey.BANK_DATA) || []);
-  const [personelList, setPersonelList] = useState<any[]>(() => getFromStorage<any[]>(StorageKey.PERSONEL_DATA) || []);
-  const [vehicleList, setVehicleList] = useState<any[]>(() => getFromStorage<any[]>(StorageKey.ARAC_DATA) || []);
-  const [cariList, setCariList] = useState<Cari[]>(() => getFromStorage<Cari[]>(StorageKey.CARI_DATA) || []);
-  const [fisler, setFisler] = useState<any[]>(() => getFromStorage<any[]>(StorageKey.FISLER) || []);
-
-  // Modal açıldığında cari & fiş listesini taze yükle
-  useEffect(() => {
-    if (isNewFisModalOpen) {
-      setCariList(getFromStorage<Cari[]>(StorageKey.CARI_DATA) || []);
-      setPersonelList(getFromStorage<any[]>(StorageKey.PERSONEL_DATA) || []);
-      setBanks(getFromStorage<any[]>(StorageKey.BANK_DATA) || []);
-      setVehicleList(getFromStorage<any[]>(StorageKey.ARAC_DATA) || []);
-    }
-  }, [isNewFisModalOpen]);
-
-  // Fiş listesini her zaman taze tut
-  useEffect(() => {
-    const loadFisler = () => setFisler(getFromStorage<any[]>(StorageKey.FISLER) || []);
-    loadFisler();
-    window.addEventListener('storage_update', loadFisler);
-    return () => window.removeEventListener('storage_update', loadFisler);
-  }, []);
+  const banks = useGlobalTableData<any>('bankalar');
+  const personelList = useGlobalTableData<any>('personeller');
+  const vehicleList = useGlobalTableData<any>('araclar');
+  const cariList = syncCariList;
+  const fisler = syncFisler;
 
   // Cari arama
   const [cariSearchTerm, setCariSearchTerm] = useState('');
@@ -504,10 +489,6 @@ export function SalesPage() {
 
     // KV STORE SENKRONİZASYONU İLE EKLE
     addCariSync(newCari);
-    
-    // Geriye dönük uyumluluk için lokal listeyi de anlık güncelle
-    const updatedCariList = [...cariList, newCari];
-    setCariList(updatedCariList);
     setSelectedCari(newCari);
     setIsAddingNewCari(false);
     setNewCariForm({
@@ -520,6 +501,7 @@ export function SalesPage() {
       address: '',
     });
     toast.success(t('salesPage.newCustomerAdded'));
+    setProductMobileTab('list');
     setCurrentStep('products');
   };
 
@@ -553,20 +535,36 @@ export function SalesPage() {
     setAlisInvoiceNo('');
   };
 
-  // Fotoğraf yükleme helper
-  const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>, callback: (photo: string) => void) => {
-    const file = e.target.files?.[0];
-    if (file) {
+  // Fotoğraf yükleme helper — canvas sıkıştırmalı (localStorage taşması önlenir)
+  const compressImage = (file: File, maxWidth = 1200, quality = 0.75): Promise<string> =>
+    new Promise((resolve, reject) => {
       const reader = new FileReader();
+      reader.onerror = reject;
       reader.onloadend = () => {
-        callback(reader.result as string);
+        const img = new Image();
+        img.onerror = reject;
+        img.onload = () => {
+          let { width, height } = img;
+          if (width > maxWidth) { height = Math.round((height * maxWidth) / width); width = maxWidth; }
+          const canvas = document.createElement('canvas');
+          canvas.width = width; canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          if (!ctx) { reject(new Error('Canvas yok')); return; }
+          ctx.drawImage(img, 0, 0, width, height);
+          resolve(canvas.toDataURL('image/jpeg', quality));
+        };
+        img.src = reader.result as string;
       };
       reader.readAsDataURL(file);
-    }
+    });
+
+  const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>, callback: (photo: string) => void) => {
+    const file = e.target.files?.[0];
+    if (file) compressImage(file).then(callback).catch(() => toast.error('Fotoğraf yüklenemedi'));
   };
 
   return (
-    <div className="p-3 sm:p-6 lg:p-8 space-y-4 sm:space-y-6 pb-28 sm:pb-6">
+    <div className="p-3 sm:p-6 lg:p-8 space-y-4 sm:space-y-6 pb-4 sm:pb-6">
       {/* Gün Sonu Kapalı Uyarısı */}
       {isDayClosed && (
         <motion.div
@@ -916,6 +914,7 @@ export function SalesPage() {
                           className="p-3 sm:p-4 bg-secondary/30 border border-border/30 hover:border-blue-500/40 hover:bg-secondary/50 rounded-xl cursor-pointer transition-all duration-200 active:bg-secondary/60"
                           onClick={() => {
                             setSelectedCari(cari);
+                            setProductMobileTab('list');
                             setCurrentStep('products');
                           }}
                         >
@@ -1086,7 +1085,8 @@ export function SalesPage() {
             {/* Product Selection & Cart */}
             {currentStep === 'products' && (['satis', 'alis'].includes(selectedMode || '')) && (
               <>
-                <div className="flex items-center gap-3 mb-4 sm:mb-6">
+                {/* ── Başlık ───────────────────────────────────────────────── */}
+                <div className="flex items-center gap-3 mb-3 sm:mb-4 shrink-0">
                   <button
                     onClick={() => setCurrentStep('cari')}
                     className="p-2 hover:bg-accent rounded-lg transition-colors shrink-0"
@@ -1097,287 +1097,292 @@ export function SalesPage() {
                     <Dialog.Title className="text-lg sm:text-2xl font-bold text-white">
                       {t('salesPage.addProduct')}
                     </Dialog.Title>
-                    <Dialog.Description className="text-muted-foreground text-xs sm:text-base truncate">
+                    <Dialog.Description className="text-muted-foreground text-xs sm:text-sm truncate">
                       {selectedMode?.startsWith('alis') ? t('salesPage.supplier') : t('salesPage.customer')}: {selectedCari?.companyName}
                     </Dialog.Description>
                   </div>
-                  {/* Mobil sepet özeti badge */}
-                  {productItems.length > 0 && (
-                    <div className="lg:hidden flex items-center gap-2 px-3 py-1.5 bg-blue-600/15 border border-blue-500/30 rounded-xl">
-                      <ShoppingCart className="w-3.5 h-3.5 text-blue-400" />
-                      <span className="text-blue-400 text-xs font-bold">{productItems.length}</span>
-                      <span className="text-blue-300 text-xs font-bold">₺{calculateTotal().toLocaleString('tr-TR')}</span>
-                    </div>
-                  )}
                 </div>
 
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 sm:gap-6 mb-4 sm:mb-6 pb-20 sm:pb-0">
-                  {/* Ürün Listesi */}
-                  <div className="lg:col-span-2 card-premium rounded-xl sm:rounded-2xl p-3 sm:p-6">
-                    <div className="mb-3 sm:mb-4">
+                {/* ── Mobil Tab Bar ─────────────────────────────────────────── */}
+                <div className="lg:hidden flex gap-1 mb-3 p-1 bg-secondary/50 rounded-xl shrink-0">
+                  <button
+                    onClick={() => setProductMobileTab('list')}
+                    className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-sm font-semibold transition-all ${
+                      productMobileTab === 'list'
+                        ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/30'
+                        : 'text-muted-foreground hover:text-white'
+                    }`}
+                  >
+                    <Package className="w-3.5 h-3.5" />
+                    Ürün Ekle
+                  </button>
+                  <button
+                    onClick={() => setProductMobileTab('cart')}
+                    className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-sm font-semibold transition-all ${
+                      productMobileTab === 'cart'
+                        ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/30'
+                        : 'text-muted-foreground hover:text-white'
+                    }`}
+                  >
+                    <ShoppingCart className="w-3.5 h-3.5" />
+                    Sepet
+                    {productItems.length > 0 && (
+                      <span className={`text-[11px] font-bold px-1.5 py-0.5 rounded-full ${
+                        productMobileTab === 'cart' ? 'bg-white/20' : 'bg-blue-600 text-white'
+                      }`}>
+                        {productItems.length}
+                      </span>
+                    )}
+                  </button>
+                </div>
+
+                {/* ── Ana İçerik Grid ───────────────────────────────────────── */}
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 sm:gap-6 mb-4 sm:mb-6 min-h-0 flex-1">
+
+                  {/* ── Ürün Listesi (mobil: sadece list tabında görünür) ──── */}
+                  <div className={`lg:col-span-2 card-premium rounded-xl sm:rounded-2xl p-3 sm:p-6 flex flex-col min-h-0 ${
+                    productMobileTab === 'cart' ? 'hidden lg:flex' : 'flex'
+                  }`}>
+                    {/* Arama */}
+                    <div className="mb-3 shrink-0">
                       <div className="relative">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 sm:w-5 sm:h-5 text-muted-foreground" />
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
                         <input
                           type="text"
                           value={productSearchTerm}
                           onChange={(e) => setProductSearchTerm(e.target.value)}
                           placeholder={t('salesPage.searchProduct')}
-                          className="w-full pl-9 sm:pl-10 pr-4 py-2.5 sm:py-3 bg-secondary/50 border border-border rounded-xl sm:rounded-lg text-white text-sm focus:outline-none focus:border-blue-500"
+                          className="w-full pl-9 pr-4 py-2.5 bg-secondary/50 border border-border rounded-xl text-white text-sm focus:outline-none focus:border-blue-500 transition-colors"
                         />
                       </div>
                     </div>
 
-                    <div className="space-y-1.5 sm:space-y-2 max-h-[30vh] sm:max-h-96 overflow-y-auto overscroll-contain">
-                      {filteredProductList.map((product, index) => (
-                        <motion.div
-                          key={`${product.id}-${index}`}
-                          initial={{ opacity: 0 }}
-                          animate={{ opacity: 1 }}
-                          onClick={() => {
-                            setSelectedProduct(product);
-                            setProductUnitPrice(product.price);
-                          }}
-                          className={`p-3 sm:p-4 rounded-lg cursor-pointer transition-all active:opacity-80 ${
-                            selectedProduct?.id === product.id
-                              ? 'bg-blue-600/20 border-2 border-blue-500'
-                              : 'bg-secondary/50 border border-border hover:border-border'
-                          }`}
-                        >
-                          <div className="flex items-center justify-between gap-2">
-                            <div className="min-w-0 flex-1">
-                              <div className="flex items-center gap-2 flex-wrap">
-                                <p className="text-white font-bold text-sm sm:text-base truncate">{product.name}</p>
-                                {product.isFrequent && (
-                                  <span className="px-2 py-0.5 bg-green-500/20 text-green-400 text-[10px] uppercase font-bold rounded">
-                                    {t('salesPage.frequent')}
-                                  </span>
-                                )}
-                              </div>
-                              <p className="text-muted-foreground text-xs sm:text-sm truncate">
-                                {product.isFrequent ? `${t('salesPage.lastPrice')}: ` : `${t('salesPage.price')}: `}₺{product.price} / {product.unit}
-                              </p>
-                            </div>
-                            {selectedProduct?.id === product.id && (
-                              <div className="w-2 h-2 bg-blue-500 rounded-full" />
-                            )}
-                          </div>
-                        </motion.div>
-                      ))}
-                    </div>
-
-                    {/* Ürün Ekleme Paneli - Modern & Kompakt */}
-                    <AnimatePresence>
-                      {selectedProduct && (
-                        <motion.div
-                          initial={{ opacity: 0, y: -10, scale: 0.95 }}
-                          animate={{ opacity: 1, y: 0, scale: 1 }}
-                          exit={{ opacity: 0, y: -10, scale: 0.95 }}
-                          transition={{ type: 'spring', stiffness: 400, damping: 25 }}
-                          className="mt-4 p-5 bg-gradient-to-br from-secondary to-card rounded-xl border border-border shadow-xl"
-                        >
-                          <div className="flex items-center justify-between mb-4">
-                            <div className="flex items-center gap-2">
-                              <div className="w-10 h-10 rounded-lg bg-blue-600/20 flex items-center justify-center">
-                                <Package className="w-5 h-5 text-blue-400" />
-                              </div>
-                              <div>
-                                <p className="text-white font-bold text-sm">{selectedProduct.name}</p>
-                                <p className="text-muted-foreground text-xs">{t('salesPage.listPrice')}: ₺{selectedProduct.price}</p>
-                              </div>
-                            </div>
-                            <motion.button
-                              whileHover={{ scale: 1.1 }}
-                              whileTap={{ scale: 0.9 }}
-                              onClick={() => setSelectedProduct(null)}
-                              className="p-1.5 hover:bg-accent rounded-lg transition-colors"
-                            >
-                              <X className="w-4 h-4 text-muted-foreground" />
-                            </motion.button>
-                          </div>
-
-                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
-                            <NumberInput
-                              label={`${t('salesPage.quantity')} (${selectedProduct.unit})`}
-                              value={productQuantity}
-                              onChange={setProductQuantity}
-                              min={selectedProduct.unit === 'KG' ? 0.01 : 1}
-                              step={selectedProduct.unit === 'KG' ? 0.01 : 1}
-                              unit={selectedProduct.unit}
-                              showButtons={true}
-                              precision={selectedProduct.unit === 'KG' ? 2 : 0}
-                              icon={Hash}
-                            />
-                            
-                            <NumberInput
-                              label={t('salesPage.unitPrice')}
-                              value={productUnitPrice}
-                              onChange={setProductUnitPrice}
-                              min={0}
-                              step={0.01}
-                              unit="₺"
-                              showButtons={false}
-                              precision={2}
-                              highlight={true}
-                            />
-                            
-                            <div>
-                              <label className="text-foreground/80 text-xs font-medium mb-1.5 block">
-                                {t('salesPage.totalAmount')}
-                              </label>
-                              <motion.div
-                                animate={{ scale: [1, 1.05, 1] }}
-                                transition={{ duration: 0.3 }}
-                                key={productQuantity * productUnitPrice}
-                                className="w-full px-3 py-2 bg-blue-600/20 border border-blue-500/50 rounded-lg"
-                              >
-                                <p className="text-blue-400 font-bold text-lg text-center">
-                                  ₺{((productQuantity || 0) * (productUnitPrice || 0)).toLocaleString('tr-TR', { minimumFractionDigits: 2 })}
-                                </p>
-                              </motion.div>
-                            </div>
-                          </div>
-
-                          <div className="flex gap-2">
-                            <motion.button
-                              whileHover={{ scale: 1.02 }}
-                              whileTap={{ scale: 0.95 }}
-                              onClick={handleAddProductAsSale}
-                              className="flex-1 flex items-center justify-center gap-2 px-4 py-3 sm:py-2.5 bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 active:from-green-800 active:to-green-900 text-white font-bold rounded-xl sm:rounded-lg transition-all shadow-lg text-sm"
-                            >
-                              <Plus className="w-4 h-4" />
-                              {selectedMode?.startsWith('alis') ? t('salesPage.purchase') : t('salesPage.sale')}
-                            </motion.button>
-                            <motion.button
-                              whileHover={{ scale: 1.02 }}
-                              whileTap={{ scale: 0.95 }}
-                              onClick={handleAddProductAsReturn}
-                              className="flex-1 flex items-center justify-center gap-2 px-4 py-3 sm:py-2.5 bg-gradient-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 active:from-red-800 active:to-red-900 text-white font-bold rounded-xl sm:rounded-lg transition-all shadow-lg text-sm"
-                            >
-                              <ArrowLeft className="w-4 h-4" />
-                              {t('salesPage.return')}
-                            </motion.button>
-                          </div>
-                        </motion.div>
+                    {/* Ürün Listesi — inline seçim paneli ile */}
+                    <div className="flex-1 overflow-y-auto overscroll-contain space-y-1.5 pr-0.5">
+                      {filteredProductList.length === 0 && (
+                        <div className="text-center py-10 text-muted-foreground/50 text-sm">
+                          <Package className="w-8 h-8 mx-auto mb-2 opacity-40" />
+                          Ürün bulunamadı
+                        </div>
                       )}
-                    </AnimatePresence>
+                      {filteredProductList.map((product) => {
+                        const isSelected = selectedProduct?.id === product.id;
+                        return (
+                          <div
+                            key={product.id}
+                            className={`rounded-xl border transition-all ${
+                              isSelected
+                                ? 'bg-blue-600/15 border-blue-500/60'
+                                : 'bg-secondary/40 border-border hover:border-white/20 cursor-pointer active:opacity-70'
+                            }`}
+                          >
+                            {/* Satır */}
+                            <div
+                              className="flex items-center justify-between gap-2 p-3"
+                              onClick={() => {
+                                if (isSelected) {
+                                  setSelectedProduct(null);
+                                } else {
+                                  setSelectedProduct(product);
+                                  setProductUnitPrice(product.price);
+                                  setProductQuantity(1);
+                                }
+                              }}
+                            >
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <p className="text-white font-bold text-sm truncate">{product.name}</p>
+                                  {product.isFrequent && (
+                                    <span className="px-1.5 py-0.5 bg-green-500/20 text-green-400 text-[10px] uppercase font-bold rounded">
+                                      {t('salesPage.frequent')}
+                                    </span>
+                                  )}
+                                </div>
+                                <p className="text-muted-foreground text-xs truncate">
+                                  ₺{product.price} / {product.unit}
+                                  {product.currentStock != null && (
+                                    <span className="ml-2 text-gray-500">Stok: {product.currentStock} {product.unit}</span>
+                                  )}
+                                </p>
+                              </div>
+                              <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 transition-all ${
+                                isSelected ? 'bg-blue-500 border-blue-500' : 'border-white/20'
+                              }`}>
+                                {isSelected && <div className="w-2 h-2 rounded-full bg-white" />}
+                              </div>
+                            </div>
+
+                            {/* İnline Seçim Paneli — satır içinde açılır */}
+                            <AnimatePresence>
+                              {isSelected && (
+                                <motion.div
+                                  initial={{ opacity: 0, height: 0 }}
+                                  animate={{ opacity: 1, height: 'auto' }}
+                                  exit={{ opacity: 0, height: 0 }}
+                                  transition={{ duration: 0.18, ease: 'easeOut' }}
+                                  className="overflow-hidden"
+                                >
+                                  <div className="px-3 pb-3 pt-1 border-t border-blue-500/20">
+                                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mb-3">
+                                      <NumberInput
+                                        label={`${t('salesPage.quantity')} (${product.unit})`}
+                                        value={productQuantity}
+                                        onChange={setProductQuantity}
+                                        min={product.unit === 'KG' ? 0.01 : 1}
+                                        step={product.unit === 'KG' ? 0.01 : 1}
+                                        unit={product.unit}
+                                        showButtons={true}
+                                        precision={product.unit === 'KG' ? 2 : 0}
+                                        icon={Hash}
+                                      />
+                                      <NumberInput
+                                        label={t('salesPage.unitPrice')}
+                                        value={productUnitPrice}
+                                        onChange={setProductUnitPrice}
+                                        min={0}
+                                        step={0.01}
+                                        unit="₺"
+                                        showButtons={false}
+                                        precision={2}
+                                        highlight={true}
+                                      />
+                                      <div className="col-span-2 sm:col-span-1">
+                                        <label className="text-foreground/70 text-xs font-medium mb-1.5 block">
+                                          {t('salesPage.totalAmount')}
+                                        </label>
+                                        <div className="w-full px-3 py-2.5 bg-blue-600/20 border border-blue-500/40 rounded-lg text-center">
+                                          <p className="text-blue-400 font-black text-base">
+                                            ₺{((productQuantity || 0) * (productUnitPrice || 0)).toLocaleString('tr-TR', { minimumFractionDigits: 2 })}
+                                          </p>
+                                        </div>
+                                      </div>
+                                    </div>
+                                    <div className="flex gap-2">
+                                      <button
+                                        onClick={handleAddProductAsSale}
+                                        className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2.5 bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 active:scale-95 text-white font-bold rounded-lg transition-all text-sm"
+                                      >
+                                        <Plus className="w-4 h-4" />
+                                        {selectedMode?.startsWith('alis') ? t('salesPage.purchase') : t('salesPage.sale')}
+                                      </button>
+                                      <button
+                                        onClick={handleAddProductAsReturn}
+                                        className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2.5 bg-gradient-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 active:scale-95 text-white font-bold rounded-lg transition-all text-sm"
+                                      >
+                                        <ArrowLeft className="w-4 h-4" />
+                                        {t('salesPage.return')}
+                                      </button>
+                                    </div>
+                                  </div>
+                                </motion.div>
+                              )}
+                            </AnimatePresence>
+                          </div>
+                        );
+                      })}
+                    </div>
                   </div>
 
-                  {/* Sepet - Modern & Animasyonlu */}
-                  <div className="card-premium rounded-xl sm:rounded-2xl p-3 sm:p-6">
-                    <div className="flex items-center justify-between mb-3 sm:mb-4">
-                      <h3 className="text-base sm:text-xl font-bold text-white">{t('salesPage.cart')}</h3>
-                      <div className="flex items-center gap-2">
-                        {productItems.length > 0 && (
-                          <motion.div
-                            initial={{ scale: 0 }}
-                            animate={{ scale: 1 }}
-                            className="w-6 h-6 rounded-full bg-blue-600 flex items-center justify-center"
-                          >
-                            <span className="text-white text-xs font-bold">{productItems.length}</span>
-                          </motion.div>
-                        )}
-                      </div>
+                  {/* ── Sepet (mobil: sadece cart tabında görünür) ─────────── */}
+                  <div className={`card-premium rounded-xl sm:rounded-2xl p-3 sm:p-6 flex flex-col min-h-0 ${
+                    productMobileTab === 'list' ? 'hidden lg:flex' : 'flex'
+                  }`}>
+                    <div className="flex items-center justify-between mb-3 shrink-0">
+                      <h3 className="text-base sm:text-lg font-bold text-white">{t('salesPage.cart')}</h3>
+                      {productItems.length > 0 && (
+                        <span className="px-2 py-0.5 bg-blue-600 text-white text-xs font-bold rounded-full">
+                          {productItems.length}
+                        </span>
+                      )}
                     </div>
-                    
+
                     {productItems.length === 0 ? (
-                      <motion.div
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        className="text-center py-8 sm:py-12"
-                      >
-                        <ShoppingCart className="w-10 h-10 sm:w-12 sm:h-12 text-muted-foreground/50 mx-auto mb-2 sm:mb-3" />
-                        <p className="text-muted-foreground/70 text-sm">{t('salesPage.noProducts')}</p>
-                        <p className="text-muted-foreground/50 text-xs mt-1">{t('salesPage.selectFromList')}</p>
-                      </motion.div>
+                      <div className="flex-1 flex flex-col items-center justify-center text-center py-8">
+                        <ShoppingCart className="w-10 h-10 text-muted-foreground/30 mx-auto mb-2" />
+                        <p className="text-muted-foreground/60 text-sm">{t('salesPage.noProducts')}</p>
+                        <p className="text-muted-foreground/40 text-xs mt-1">{t('salesPage.selectFromList')}</p>
+                      </div>
                     ) : (
                       <>
-                        <div className="space-y-1.5 sm:space-y-2 mb-3 sm:mb-4 max-h-48 sm:max-h-64 overflow-y-auto">
+                        <div className="flex-1 overflow-y-auto overscroll-contain space-y-1.5 mb-3 pr-0.5">
                           <AnimatePresence mode="popLayout">
-                            {productItems.map((item, index) => (
+                            {productItems.map((item) => (
                               <motion.div
                                 key={item.id}
-                                initial={{ opacity: 0, x: 20, scale: 0.95 }}
-                                animate={{ opacity: 1, x: 0, scale: 1 }}
-                                exit={{ opacity: 0, x: -20, scale: 0.95 }}
-                                transition={{ 
-                                  type: 'spring', 
-                                  stiffness: 400, 
-                                  damping: 25,
-                                  delay: index * 0.05 
-                                }}
+                                initial={{ opacity: 0, x: 20 }}
+                                animate={{ opacity: 1, x: 0 }}
+                                exit={{ opacity: 0, x: -20 }}
                                 layout
-                                className={`p-3 rounded-lg ${
-                                  item.type === 'iade' 
-                                    ? 'bg-red-600/10 border border-red-600/30' 
+                                className={`p-3 rounded-xl ${
+                                  item.type === 'iade'
+                                    ? 'bg-red-600/10 border border-red-600/30'
                                     : 'bg-secondary/50 border border-border'
                                 }`}
                               >
-                                <div className="flex items-start justify-between gap-1 mb-1.5 sm:mb-2">
+                                <div className="flex items-start justify-between gap-2 mb-1.5">
                                   <div className="flex-1 min-w-0">
-                                    <p className="text-white font-medium text-xs sm:text-sm truncate">{item.productName}</p>
+                                    <p className="text-white font-semibold text-xs sm:text-sm truncate">{item.productName}</p>
                                     <p className="text-muted-foreground text-[10px] sm:text-xs">
                                       {Math.abs(item.quantity)} {item.unit} × ₺{(item.unitPrice || 0).toLocaleString('tr-TR')}
                                     </p>
                                   </div>
-                                  <motion.button
-                                    whileHover={{ scale: 1.2, rotate: 90 }}
-                                    whileTap={{ scale: 0.9 }}
+                                  <button
                                     onClick={() => handleRemoveProduct(item.id)}
-                                    className="p-1 hover:bg-accent rounded transition-colors"
+                                    className="p-1 hover:bg-accent rounded transition-colors shrink-0"
                                   >
                                     <X className="w-4 h-4 text-muted-foreground" />
-                                  </motion.button>
+                                  </button>
                                 </div>
                                 <div className="flex items-center justify-between">
-                                  <span className={`text-xs font-medium px-2 py-1 rounded ${
-                                    item.type === 'iade' 
-                                      ? 'bg-red-600/20 text-red-400' 
+                                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                                    item.type === 'iade'
+                                      ? 'bg-red-600/20 text-red-400'
                                       : item.type === 'alis'
                                         ? 'bg-blue-600/20 text-blue-400'
                                         : 'bg-green-600/20 text-green-400'
                                   }`}>
                                     {item.type === 'iade' ? t('salesPage.return') : item.type === 'alis' ? t('salesPage.purchase') : t('salesPage.sale')}
                                   </span>
-                                  <motion.p
-                                    key={item.totalPrice}
-                                    initial={{ scale: 1.2 }}
-                                    animate={{ scale: 1 }}
-                                    className={`font-bold ${
-                                      item.type === 'iade' ? 'text-red-400' : 'text-green-400'
-                                    }`}
-                                  >
+                                  <p className={`text-sm font-bold ${item.type === 'iade' ? 'text-red-400' : 'text-green-400'}`}>
                                     ₺{(Math.abs(item.totalPrice) || 0).toLocaleString('tr-TR')}
-                                  </motion.p>
+                                  </p>
                                 </div>
                               </motion.div>
                             ))}
                           </AnimatePresence>
                         </div>
 
-                        <motion.div
-                          layout
-                          className="border-t border-border pt-4"
-                        >
-                          <div className="flex items-center justify-between mb-2">
-                            <span className="text-muted-foreground text-xs sm:text-sm">{t('salesPage.totalAmount')}</span>
-                            <motion.span
-                              key={calculateTotal()}
-                              initial={{ scale: 1.1, color: '#3b82f6' }}
-                              animate={{ scale: 1, color: '#ffffff' }}
-                              transition={{ duration: 0.3 }}
-                              className="text-lg sm:text-2xl font-bold"
-                            >
+                        {/* Toplam */}
+                        <div className="border-t border-border pt-3 shrink-0">
+                          <div className="flex items-center justify-between mb-3">
+                            <span className="text-muted-foreground text-sm">{t('salesPage.totalAmount')}</span>
+                            <span className="text-white text-xl font-black">
                               ₺{calculateTotal().toLocaleString('tr-TR', { minimumFractionDigits: 2 })}
-                            </motion.span>
+                            </span>
                           </div>
-                        </motion.div>
+                          {/* Mobil: Ödeme butonu sepet tabında */}
+                          <button
+                            onClick={() => {
+                              if (productItems.length === 0) {
+                                toast.error(t('salesPage.addAtLeastOneProduct'));
+                                return;
+                              }
+                              setCurrentStep('payment');
+                            }}
+                            disabled={productItems.length === 0}
+                            className="lg:hidden w-full flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 active:scale-[0.98] text-white font-bold rounded-xl transition-all shadow-lg shadow-blue-600/30 disabled:opacity-40 disabled:shadow-none text-sm"
+                          >
+                            {t('salesPage.paymentInfo')}
+                            <ArrowRight className="w-4 h-4" />
+                          </button>
+                        </div>
                       </>
                     )}
                   </div>
                 </div>
 
-                {/* Desktop: Normal buton */}
-                <div className="hidden sm:flex justify-end gap-3">
+                {/* Desktop: Ödeme butonu */}
+                <div className="hidden sm:flex justify-end gap-3 shrink-0">
                   <button
                     onClick={() => {
                       if (productItems.length === 0) {
@@ -1386,42 +1391,12 @@ export function SalesPage() {
                       }
                       setCurrentStep('payment');
                     }}
-                    className="flex items-center justify-center gap-2 px-6 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-bold rounded-xl transition-all shadow-lg shadow-blue-600/20 disabled:opacity-50 disabled:shadow-none text-base"
                     disabled={productItems.length === 0}
+                    className="flex items-center justify-center gap-2 px-6 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-bold rounded-xl transition-all shadow-lg shadow-blue-600/20 disabled:opacity-50 disabled:shadow-none text-base"
                   >
                     {t('salesPage.paymentInfo')}
                     <ArrowRight className="w-5 h-5" />
                   </button>
-                </div>
-
-                {/* Mobile: Sticky bottom bar */}
-                <div className="sm:hidden fixed bottom-0 left-0 right-0 z-[60] bg-[#111]/95 backdrop-blur-xl border-t border-white/10 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
-                  <div className="flex items-center gap-3">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <ShoppingCart className="w-4 h-4 text-blue-400 shrink-0" />
-                        <span className="text-white text-xs font-bold">{productItems.length} ürün</span>
-                      </div>
-                      <p className="text-blue-400 text-sm font-black mt-0.5">
-                        ₺{calculateTotal().toLocaleString('tr-TR', { minimumFractionDigits: 2 })}
-                      </p>
-                    </div>
-                    <motion.button
-                      whileTap={{ scale: 0.95 }}
-                      onClick={() => {
-                        if (productItems.length === 0) {
-                          toast.error(t('salesPage.addAtLeastOneProduct'));
-                          return;
-                        }
-                        setCurrentStep('payment');
-                      }}
-                      disabled={productItems.length === 0}
-                      className="flex items-center gap-2 px-5 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-bold rounded-xl shadow-lg shadow-blue-600/30 disabled:opacity-40 disabled:shadow-none text-sm shrink-0"
-                    >
-                      Ödeme
-                      <ArrowRight className="w-4 h-4" />
-                    </motion.button>
-                  </div>
                 </div>
               </>
             )}
@@ -1776,7 +1751,6 @@ export function SalesPage() {
                       addFisSync(fisData);
                       sec.auditLog('add', fisData.id, `fis:${selectedMode}:${calculateTotal()}`);
                       emit('fis:created', { fisId: fisData.id, mode: selectedMode || '', total: calculateTotal(), cariId: selectedCari?.id });
-                      setFisler(prev => [fisData, ...prev]);
 
                       // Stok güncelleme (Satış fişi)
                       const existingStokList = getFromStorage<any[]>(StorageKey.STOK_DATA) || [];
@@ -1932,8 +1906,6 @@ export function SalesPage() {
                           
                           // KV STORE SENKRONİZASYONU
                           updateCariSync(updatedCari.id, updatedCari);
-                          
-                          setCariList(prev => prev.map(c => c.id === updatedCari.id ? updatedCari : c));
                         }
                       }
 
@@ -1954,9 +1926,6 @@ export function SalesPage() {
                           description: `${methodNames[paymentInfo.method] || paymentInfo.method} - ${selectedCari?.companyName || t('salesPage.cash')}`,
                           amount: paymentInfo.amount,
                           date: new Date().toISOString().split('T')[0],
-                          description: `${methodNames[paymentInfo!.method] || paymentInfo!.method} - ${selectedCari?.companyName || t('salesPage.cash')}`,
-                          amount: paymentInfo!.amount,
-                          date: new Date().toLocaleDateString('tr-TR'),
                           time: new Date().toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' }),
                         };
                         addKasaSync(newKasaEntry);
@@ -2494,7 +2463,6 @@ export function SalesPage() {
                       addFisSync(giderFisData);
                       sec.auditLog('add', giderFisData.id, `gider:${giderAmount}`);
                       emit('fis:created', { fisId: giderFisData.id, mode: 'gider', total: giderAmount });
-                      setFisler(prev => [giderFisData, ...prev]);
 
                       // Kasa'ya gider olarak ekle
                       const newKasaEntry = {

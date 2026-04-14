@@ -14,6 +14,8 @@ import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useEmployee } from '../contexts/EmployeeContext';
 import { restartAllSync, testCouchDbConnection } from '../lib/pouchdb';
+import { startAllSync, restartAllSync } from '../lib/pouchdb';
+import { useCouchDbStatus } from '../contexts/GlobalTableSyncContext';
 import { toast } from 'sonner';
 
 interface NavItem {
@@ -99,6 +101,7 @@ export function MobileBottomNav() {
   const [isSyncing, setIsSyncing] = useState(false);
   const [search, setSearch] = useState('');
   const [isOnline, setIsOnline] = useState(navigator.onLine);
+  const { couchdbConnected } = useCouchDbStatus();
   const sheetRef = useRef<HTMLDivElement>(null);
   const startY = useRef(0);
   const searchRef = useRef<HTMLInputElement>(null);
@@ -316,6 +319,28 @@ export function MobileBottomNav() {
               <div className="flex items-center justify-center gap-2 px-4 py-1.5 bg-red-600/20 border-t border-red-500/30">
                 <WifiOff className="w-3 h-3 text-red-400 flex-shrink-0" />
                 <span className="text-[11px] text-red-300 font-medium">Çevrimdışı — değişiklikler bağlantı gelince senkronize edilecek</span>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+        {/* CouchDB bağlantı hatası şeridi */}
+        <AnimatePresence>
+          {couchdbConnected === false && isOnline && (
+            <motion.div
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: 'auto', opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              className="overflow-hidden"
+            >
+              <div className="flex items-center justify-center gap-2 px-4 py-1.5 bg-amber-600/20 border-t border-amber-500/30">
+                <WifiOff className="w-3 h-3 text-amber-400 flex-shrink-0" />
+                <span className="text-[11px] text-amber-300 font-medium flex-1 text-center">Sunucu bağlantısı yok</span>
+                <button
+                  onClick={() => { haptic('medium'); restartAllSync(); toast.info('Yeniden bağlanılıyor…', { duration: 2000 }); }}
+                  className="text-[10px] font-bold text-amber-300 bg-amber-500/20 px-2 py-0.5 rounded-full flex-shrink-0"
+                >
+                  Dene
+                </button>
               </div>
             </motion.div>
           )}

@@ -51,6 +51,22 @@ export function getAllSyncStatuses(): TableSyncState[] {
 /** Aktif sync sayısını getir */
 export function getActiveSyncCount(): number {
   return Array.from(syncStatuses.values()).filter(s => s.status === 'active').length;
+// [AJAN-2 | claude/debug-system-pages-M8P0c | 2026-04-10] Son düzenleyen: Claude Sonnet 4.6
+// PouchDB instance yöneticisi — tablo başına DB + CouchDB sync
+import PouchDB from 'pouchdb-browser';
+import { DB_PREFIX, KV_DB_NAME, TABLE_NAMES, getCouchDbConfig, getPeerCouchDbUrl } from './db-config';
+
+// ── Sync Durum Olayları (Custom Events) ───────────────────────
+// pouchdb.ts React'tan bağımsız. Sync durumu değişince browser custom event yayınlanır.
+// GlobalTableSyncContext bu olayları dinleyerek kullanıcıya toast/banner gösterir.
+
+export type PouchSyncEventType = 'error' | 'connected' | 'paused';
+
+export function dispatchSyncEvent(type: PouchSyncEventType, dbName: string, errorMsg?: string): void {
+  if (typeof window === 'undefined') return;
+  window.dispatchEvent(new CustomEvent('pouchdb:sync_status', {
+    detail: { type, dbName, errorMsg },
+  }));
 }
 
 // ── Instance cache ─────────────────────────────────────────────
@@ -99,6 +115,28 @@ export function startSync(tableName: string): PouchDB.Replication.Sync<{}> | nul
   const remoteDb = new PouchDB(remoteUrl, {
     fetch: makeAuthFetch(config.user, config.password),
   });
+  // ─── KRİTİK: URL'e credential GÖMME ─────────────────────────────────────────
+  // getCouchDbAuthUrl() user:pass@host formatı döndürüyor. Modern tarayıcılar
+  // (iOS Safari, Chrome Android 88+, Firefox 87+) URL'e gömülü credential'ları
+  // fetch() çağrılarında güvenlik nedeniyle bloke ediyor / çıkarıyor.
+  // Credential YALNIZCA Authorization header üzerinden iletilir (aşağıdaki fetch override).
+  const config = getCouchDbConfig();
+  if (!config.url) return null;
+
+  const couchUrl = config.url.replace(/\/$/, ''); // plain URL — credential yok
+  const localDb = getDb(dbName);
+
+  const remoteDb = new PouchDB(`${couchUrl}/${dbName}`, {
+    fetch(url: string, opts: RequestInit) {
+      // Her istekte Authorization header ekle — URL'deki credential'a güvenme
+      if (config.user) {
+        const headers = new Headers((opts as any)?.headers);
+        headers.set('Authorization', 'Basic ' + btoa(`${config.user}:${config.password}`));
+        opts = { ...opts, headers };
+      }
+      return (PouchDB as any).fetch(url, opts);
+    },
+  } as any);
 
   const sync = localDb.sync(remoteDb, {
     live: true,
@@ -106,16 +144,23 @@ export function startSync(tableName: string): PouchDB.Replication.Sync<{}> | nul
   })
     .on('error', (err: any) => {
       console.error(`[PouchDB] Sync hatası — ${dbName}:`, err?.message || err);
+      dispatchSyncEvent('error', dbName, err?.message || String(err));
     })
     .on('denied', (err: any) => {
       console.warn(`[PouchDB] Sync reddedildi — ${dbName}:`, err?.message || err);
+      dispatchSyncEvent('error', dbName, `Erişim reddedildi: ${err?.message || err}`);
     })
     .on('active', () => {
       console.info(`[PouchDB] Sync yeniden aktif — ${dbName}`);
+      dispatchSyncEvent('connected', dbName);
     })
     .on('paused', (err: any) => {
       if (err) {
         console.warn(`[PouchDB] Sync duraklatıldı (hata) — ${dbName}:`, err?.message || err);
+        dispatchSyncEvent('paused', dbName, err?.message || String(err));
+      } else {
+        // Hatasız pause = catch-up tamamlandı, bağlantı sağlıklı
+        dispatchSyncEvent('connected', dbName);
       }
     });
 
@@ -177,6 +222,74 @@ export function restartAllSync(): void {
   stopAllSync();
   startAllSync();
 }
+
+/**
+ * Tüm CouchDB sync'lerini yeniden başlat (bağlantı kesildikten sonra geri gelince).
+ * PouchDB'nin `retry: true` seçeneği genellikle bunu otomatik yapar; ancak bazı
+ * ağ geçişlerinde (VPN, Wi-Fi değişimi) sync nesnesi tamamen ölür.
+ * Bu fonksiyon mevcut sync'leri iptal edip yeniden oluşturur.
+ */
+export function restartAllSync(): void {
+  // Mevcut CouchDB sync'lerini temizle (peer sync'lere dokunma)
+  staggerTimers.forEach(t => clearTimeout(t));
+  staggerTimers.length = 0;
+  for (const [, sync] of syncs) {
+    sync.cancel();
+  }
+  syncs.clear();
+  // Kademeli yeniden başlat
+  startAllSync();
+}
+
+// ── Ağ & Görünürlük Kurtarma ──────────────────────────────────
+// Tarayıcı çevrimiçi durumuna geçtiğinde veya sayfa arka plandan öne geldiğinde
+// tüm sync'leri yeniden başlat.
+//
+// Neden gerekli?
+// - PouchDB retry:true çoğu durumu halleder; ancak Wi-Fi/4G geçişinde veya
+//   iOS/Android uygulama arka plana alındığında bağlantı nesnesi tamamen ölür.
+// - visibilitychange: Mobil kullanıcı ekranı kapattıktan sonra geri gelince
+//   sync otomatik olarak yeniden başlar.
+
+let _recoveryListenersAttached = false;
+
+function _attachRecoveryListeners(): void {
+  if (_recoveryListenersAttached || typeof window === 'undefined') return;
+  _recoveryListenersAttached = true;
+
+  // Ağ bağlantısı geri gelince
+  window.addEventListener('online', () => {
+    console.info('[PouchDB] Ağ bağlantısı yeniden kuruldu — sync yeniden başlatılıyor…');
+    setTimeout(() => restartAllSync(), 1000);
+  });
+
+  // Mobil: ekran kilidi açıldığında / sekmeye geri dönüldüğünde
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') {
+      console.info('[PouchDB] Sayfa görünür oldu — sync kontrol ediliyor…');
+      // Kısa bir gecikme: ağ arayüzü stabilize olsun
+      setTimeout(() => {
+        // Aktif sync varsa dokunma; hiç sync yoksa yeniden başlat
+        if (syncs.size === 0) {
+          restartAllSync();
+        } else {
+          // Ölü sync'leri tespit et ve yeniden başlat
+          let hasDeadSync = false;
+          for (const [name, sync] of syncs) {
+            // PouchDB sync nesnesi 'cancelled' ise ölü demektir
+            if ((sync as any).cancelled) {
+              syncs.delete(name);
+              hasDeadSync = true;
+            }
+          }
+          if (hasDeadSync) restartAllSync();
+        }
+      }, 1500);
+    }
+  });
+}
+
+_attachRecoveryListeners();
 
 // ── Peer (2. bilgisayar) Sync ──────────────────────────────────
 
@@ -272,6 +385,282 @@ export async function testPeerConnection(): Promise<{ ok: boolean; version?: str
 export interface DbStats {
   tableName: string;
   docCount: number;
+}
+
+// ── localStorage → PouchDB tablo eşlemesi ─────────────────────
+const TABLE_STORAGE_KEYS: Record<string, string> = {
+  fisler:           'isleyen_et_fisler_data',
+  urunler:          'isleyen_et_stok_data',
+  cari_hesaplar:    'isleyen_et_cari_data',
+  kasa_islemleri:   'isleyen_et_kasa_data',
+  personeller:      'isleyen_et_personel_data',
+  bankalar:         'isleyen_et_bank_data',
+  cekler:           'isleyen_et_cekler_data',
+  araclar:          'isleyen_et_arac_data',
+  arac_shifts:      'isleyen_et_arac_shifts',
+  arac_km_logs:     'isleyen_et_arac_km_logs',
+  uretim_profilleri:'isleyen_et_uretim_profiles',
+  uretim_kayitlari: 'isleyen_et_uretim_data',
+  faturalar:        'isleyen_et_faturalar',
+  fatura_stok:           'isleyen_et_fatura_stok',
+  tahsilatlar:           'isleyen_et_tahsilatlar_data',
+  guncelleme_notlari:    '', // localStorage'da yok — DB'ye doğrudan seed edilir
+  stok_giris:            'isleyen_et_stok_giris_data',
+};
+
+/** Tablo adının Türkçe görüntü adı */
+export const TABLE_DISPLAY_NAMES: Record<string, string> = {
+  fisler:           'Fişler (Satışlar)',
+  urunler:          'Ürünler (Stok)',
+  cari_hesaplar:    'Cari Hesaplar',
+  kasa_islemleri:   'Kasa İşlemleri',
+  personeller:      'Personel',
+  bankalar:         'Bankalar',
+  cekler:           'Çekler',
+  araclar:          'Araçlar',
+  arac_shifts:      'Araç Vardiyaları',
+  arac_km_logs:     'Araç KM Logları',
+  uretim_profilleri:'Üretim Profilleri',
+  uretim_kayitlari: 'Üretim Kayıtları',
+  faturalar:            'Faturalar',
+  fatura_stok:          'Fatura Stok',
+  tahsilatlar:          'Tahsilatlar',
+  guncelleme_notlari:   'Güncelleme Notları',
+  stok_giris:           'Manuel Stok Girişleri',
+  mert_kv_store:        'KV Store',
+};
+
+/** CouchDB'de tüm veritabanlarını oluştur (PUT /{db}) */
+export async function initializeCouchDbDatabases(
+  onProgress?: (msg: string) => void
+): Promise<{ ok: string[]; fail: string[]; alreadyExisted: string[] }> {
+  const config = getCouchDbConfig();
+  if (!config.url) return { ok: [], fail: ['CouchDB URL yapılandırılmamış'], alreadyExisted: [] };
+
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (config.user) {
+    headers['Authorization'] = 'Basic ' + btoa(`${config.user}:${config.password}`);
+  }
+
+  const allDbs = [...TABLE_NAMES.map(t => DB_PREFIX + t), KV_DB_NAME];
+  const ok: string[] = [];
+  const fail: string[] = [];
+  const alreadyExisted: string[] = [];
+
+  for (const dbName of allDbs) {
+    onProgress?.(`Oluşturuluyor: ${dbName}...`);
+    try {
+      const res = await fetch(`${config.url}/${dbName}`, { method: 'PUT', headers });
+      if (res.status === 412) {
+        // Zaten var
+        alreadyExisted.push(dbName);
+        ok.push(dbName);
+      } else if (res.ok) {
+        ok.push(dbName);
+      } else {
+        const body = await res.json().catch(() => ({}));
+        fail.push(`${dbName}: ${body.error || res.status}`);
+      }
+    } catch (e: any) {
+      fail.push(`${dbName}: ${e.message}`);
+    }
+  }
+
+  return { ok, fail, alreadyExisted };
+}
+
+/** localStorage'daki tüm verileri PouchDB'ye yükle (PouchDB → CouchDB sync otomatik devam eder) */
+export async function seedPouchDbFromLocalStorage(
+  onProgress?: (tableName: string, count: number) => void
+): Promise<Record<string, { seeded: number; existed: number; errors: number }>> {
+  const result: Record<string, { seeded: number; existed: number; errors: number }> = {};
+
+  for (const [tableName, storageKey] of Object.entries(TABLE_STORAGE_KEYS)) {
+    result[tableName] = { seeded: 0, existed: 0, errors: 0 };
+
+    try {
+      const raw = localStorage.getItem(storageKey);
+      if (!raw) continue;
+
+      const items: any[] = JSON.parse(raw);
+      if (!Array.isArray(items) || items.length === 0) continue;
+
+      const db = getDb(tableName);
+
+      // Mevcut doc ID'lerini bir kez çek
+      const existing = await db.allDocs({ include_docs: false });
+      const existingIds = new Set(existing.rows.map((r: any) => r.id));
+
+      // Sadece yokolanları batch olarak ekle
+      const toInsert = items
+        .filter(item => {
+          const id = item.id || item._id;
+          return id && !existingIds.has(id);
+        })
+        .map(item => {
+          const { _id, _rev, _deleted, ...rest } = item;
+          const docId = item.id || _id;
+          return { ...rest, _id: docId };
+        });
+
+      if (toInsert.length > 0) {
+        const bulkResult = await db.bulkDocs(toInsert);
+        for (const r of bulkResult as any[]) {
+          if ((r as any).error) result[tableName].errors++;
+          else result[tableName].seeded++;
+        }
+      }
+
+      result[tableName].existed = existingIds.size;
+      onProgress?.(tableName, result[tableName].seeded);
+    } catch (e: any) {
+      console.error(`[seedPouchDb] ${tableName} hatası:`, e?.message);
+    }
+  }
+
+  return result;
+}
+
+/**
+ * Uygulama başlangıcında otomatik çağrılır.
+ * localStorage'daki her kaydı kontrol eder; PouchDB'de olmayan kayıtları ekler.
+ * Kısmi dolu tablolara da dokunur (diff tabanlı) — idempotent & güvenli.
+ * PouchDB dolunca çalışan startAllSync() bu verileri otomatik CouchDB'ye iter.
+ */
+export async function autoSeedIfEmpty(
+  onDone?: (totalSeeded: number) => void,
+  /** Tablo adı → toDb dönüşüm fonksiyonu (ör. productToDb, cariToDb) */
+  transforms?: Record<string, (item: any) => any>
+): Promise<void> {
+  let totalSeeded = 0;
+
+  for (const [tableName, storageKey] of Object.entries(TABLE_STORAGE_KEYS)) {
+    try {
+      if (!storageKey) continue; // localStorage'da karşılığı olmayan tablo (ör. guncelleme_notlari)
+
+      const raw = localStorage.getItem(storageKey);
+      if (!raw) continue;
+      const items: any[] = JSON.parse(raw);
+      if (!Array.isArray(items) || items.length === 0) continue;
+
+      const db = getDb(tableName);
+
+      // Mevcut doc ID'lerini çek — sadece eksik olanları ekle (diff tabanlı)
+      const existing = await db.allDocs({ include_docs: false });
+      const existingIds = new Set(existing.rows.map((r: any) => r.id));
+
+      const toDb = transforms?.[tableName];
+
+      const toInsert = items
+        .filter(item => {
+          const id = item.id || item._id;
+          return id && !existingIds.has(id); // sadece PouchDB'de olmayan kayıtlar
+        })
+        .map(item => {
+          // toDb dönüşümü varsa uygula (camelCase → snake_case), yoksa ham veriyi kullan
+          const dbRow = toDb ? toDb(item) : (() => {
+            // eslint-disable-next-line @typescript-eslint/no-unused-vars
+            const { _id, _rev, _deleted, ...rest } = item;
+            return rest;
+          })();
+          return { ...dbRow, _id: item.id || item._id };
+        });
+      if (toInsert.length === 0) continue;
+
+      const results = await db.bulkDocs(toInsert);
+      const seeded = (results as any[]).filter((r: any) => !r.error).length;
+      totalSeeded += seeded;
+    } catch {
+      // sessizce geç — başlatma sırasında hata kritik değil
+    }
+  }
+
+  onDone?.(totalSeeded);
+}
+
+export interface CouchDbTableStatus {
+  name: string;
+  displayName: string;
+  exists: boolean;
+  couchDocCount: number;
+  localDocCount: number;
+  localStorageCount: number;
+  error?: string;
+}
+
+/** CouchDB'deki tüm veritabanlarının detaylı durumunu getir */
+export async function getCouchDbTableStatus(): Promise<CouchDbTableStatus[]> {
+  const config = getCouchDbConfig();
+  if (!config.url) return [];
+
+  const headers: Record<string, string> = {};
+  if (config.user) {
+    headers['Authorization'] = 'Basic ' + btoa(`${config.user}:${config.password}`);
+  }
+
+  const allDbs = [...TABLE_NAMES.map(t => DB_PREFIX + t), KV_DB_NAME];
+  const statuses: CouchDbTableStatus[] = [];
+
+  for (const dbName of allDbs) {
+    const shortName = dbName.replace(DB_PREFIX, '');
+    const localStorageKey = TABLE_STORAGE_KEYS[shortName];
+
+    // LocalStorage sayısı
+    let localStorageCount = 0;
+    try {
+      const raw = localStorageKey ? localStorage.getItem(localStorageKey) : null;
+      if (raw) {
+        const arr = JSON.parse(raw);
+        if (Array.isArray(arr)) localStorageCount = arr.length;
+      }
+    } catch {}
+
+    // PouchDB (yerel IndexedDB) sayısı
+    let localDocCount = 0;
+    try {
+      const db = getDb(dbName);
+      const info = await db.info();
+      localDocCount = info.doc_count;
+    } catch {}
+
+    // CouchDB sayısı
+    try {
+      const res = await fetch(`${config.url}/${dbName}`, { method: 'GET', headers });
+      if (res.ok) {
+        const data = await res.json();
+        statuses.push({
+          name: dbName,
+          displayName: TABLE_DISPLAY_NAMES[shortName] || TABLE_DISPLAY_NAMES[dbName] || shortName,
+          exists: true,
+          couchDocCount: data.doc_count || 0,
+          localDocCount,
+          localStorageCount,
+        });
+      } else {
+        statuses.push({
+          name: dbName,
+          displayName: TABLE_DISPLAY_NAMES[shortName] || shortName,
+          exists: false,
+          couchDocCount: 0,
+          localDocCount,
+          localStorageCount,
+          error: `HTTP ${res.status}`,
+        });
+      }
+    } catch (e: any) {
+      statuses.push({
+        name: dbName,
+        displayName: TABLE_DISPLAY_NAMES[shortName] || shortName,
+        exists: false,
+        couchDocCount: 0,
+        localDocCount,
+        localStorageCount,
+        error: e.message,
+      });
+    }
+  }
+
+  return statuses;
 }
 
 /** Tüm tabloların kayıt sayılarını getir */

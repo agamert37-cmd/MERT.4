@@ -1,5 +1,6 @@
 // [AJAN-2 | claude/serene-gagarin | 2026-03-25] Son düzenleyen: Claude Sonnet 4.6
 import React, { useState, useMemo, useEffect } from 'react';
+import { useGlobalTableData } from '../contexts/GlobalTableSyncContext';
 import { getFromStorage, setInStorage, StorageKey } from '../utils/storage';
 import { useAuth } from '../contexts/AuthContext';
 import { useEmployee } from '../contexts/EmployeeContext';
@@ -73,39 +74,23 @@ export function GunSonuPage() {
   const [isCloseDialogOpen, setIsCloseDialogOpen] = useState(false);
   const [isReopenDialogOpen, setIsReopenDialogOpen] = useState(false);
 
-  // BUG FIX [AJAN-2]: Mount'ta KV'den gün sonu durumunu yükle — başka cihazdaki kapanış görünsün
+  // Mount'ta KV'den gün sonu durumunu yükle — KV her zaman otorite (başka cihazdaki kapanış görünsün)
   useEffect(() => {
-    const local = localStorage.getItem(GUN_SONU_KEY);
-    if (!local) {
-      kvGet<{ closed: boolean }>(`gun_sonu_${todayISO}`).then(remote => {
-        if (remote && remote.closed === true) {
-          setIsDayClosed(true);
-          localStorage.setItem(GUN_SONU_KEY, JSON.stringify(remote));
-          window.dispatchEvent(new Event('storage_update'));
-        }
-      }).catch(() => {});
-    }
+    kvGet<{ closed: boolean }>(`gun_sonu_${todayISO}`).then(remote => {
+      if (remote) {
+        setIsDayClosed(remote.closed === true);
+        localStorage.setItem(GUN_SONU_KEY, JSON.stringify(remote));
+        window.dispatchEvent(new Event('storage_update'));
+      }
+    }).catch(() => {});
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Storage'dan veri yenileme counter'ı
-  const [refreshCounter, setRefreshCounter] = useState(0);
-
-  // Storage değişikliklerini dinle
-  useEffect(() => {
-    const handler = () => setRefreshCounter(c => c + 1);
-    window.addEventListener('storage_update', handler);
-    window.addEventListener('storage', handler);
-    return () => {
-      window.removeEventListener('storage_update', handler);
-      window.removeEventListener('storage', handler);
-    };
-  }, []);
+  const rawFisler = useGlobalTableData<any>('fisler');
+  const rawKasa = useGlobalTableData<any>('kasa_islemleri');
 
   // Gerçek verilerden bugünün işlemlerini yükle
   const transactions = useMemo(() => {
-    const rawFisler = getFromStorage<any[]>(StorageKey.FISLER) || [];
-    const rawKasa = getFromStorage<any[]>(StorageKey.KASA_DATA) || [];
     const result: Transaction[] = [];
 
     // Fişlerden bugünkü satış/alış işlemlerini al
@@ -188,7 +173,7 @@ export function GunSonuPage() {
       return parseInt(parts[0], 10) * 60 + parseInt(parts[1], 10);
     };
     return result.sort((a, b) => toMinutes(b.time) - toMinutes(a.time));
-  }, [todayISO, todayTR, refreshCounter]);
+  }, [todayISO, todayTR, rawFisler, rawKasa]);
 
   const totalSales = transactions
     .filter(t => t.type === 'sale')
@@ -213,7 +198,6 @@ export function GunSonuPage() {
   // ─── Dashboard çapraz doğrulama ────────────────────────────────────────────
   const crossValidation = useMemo(() => {
     // Dashboard ile aynı hesaplama mantığını kullan
-    const rawFisler = getFromStorage<any[]>(StorageKey.FISLER) || [];
     const todaySalesFisler = rawFisler.filter(
       f => (f.mode === 'sale' || f.mode === 'satis') && f.date?.startsWith(todayISO)
     );
@@ -234,12 +218,10 @@ export function GunSonuPage() {
     const match = diff < 1; // 1 TL tolerans
 
     return { dashboardRevenue, gunSonuSales: totalSales, match, diff };
-  }, [todayISO, totalSales, refreshCounter]);
+  }, [todayISO, totalSales, rawFisler]);
 
   // ─── Kasa çapraz doğrulama ─────────────────────────────────────────────────
   const kasaValidation = useMemo(() => {
-    const rawKasa = getFromStorage<any[]>(StorageKey.KASA_DATA) || [];
-    const rawFisler = getFromStorage<any[]>(StorageKey.FISLER) || [];
     const todayTRLocal = new Date().toLocaleDateString('tr-TR');
 
     const kasaTodayIncome = rawKasa
@@ -279,7 +261,7 @@ export function GunSonuPage() {
     const match = diff < 1;
 
     return { kasaTodayIncome, kasaTodayExpense, kasaNet, kasaTotalBalance, match, diff, kasaTodayPurchase };
-  }, [todayISO, netCash, refreshCounter]);
+  }, [todayISO, netCash, rawFisler, rawKasa]);
 
   // ─── PDF İndirme ───────────────────────────────────────────────────────────
   const handleDownloadPDF = () => {
@@ -331,9 +313,9 @@ export function GunSonuPage() {
       closedAt: new Date().toISOString(),
       closedBy: currentEmployee?.name || 'Bilinmeyen',
     };
-    localStorage.setItem(GUN_SONU_KEY, JSON.stringify(gunSonuRecord));
-    // BUG FIX [AJAN-2]: Gün sonu durumu KV store'a da yaz — çapraz cihaz senkronu
+    // KV store birincil (CouchDB senkronize), localStorage önbellek
     kvSet(`gun_sonu_${todayISO}`, gunSonuRecord).catch(() => toast.warning('Gün sonu çapraz cihaz senkronizasyonu başarısız. Diğer cihazlar bu kapatmayı göremeyebilir.'));
+    localStorage.setItem(GUN_SONU_KEY, JSON.stringify(gunSonuRecord));
     // Diğer sayfaları bilgilendir (SalesPage, KasaPage)
     window.dispatchEvent(new Event('storage_update'));
     setIsCloseDialogOpen(false);
@@ -349,11 +331,10 @@ export function GunSonuPage() {
       return;
     }
     setIsDayClosed(false);
-    // localStorage'dan kaldır
-    localStorage.removeItem(GUN_SONU_KEY);
-    // BUG FIX [AJAN-2]: Gün sonu açıldı — KV store'a da yaz
+    // KV store birincil (CouchDB senkronize), localStorage önbellek temizle
     kvSet(`gun_sonu_${todayISO}`, { closed: false, reopenedAt: new Date().toISOString(), reopenedBy: currentEmployee?.name || 'Bilinmeyen' })
       .catch(() => toast.warning('Gün sonu açma çapraz cihaz senkronizasyonu başarısız.'));
+    localStorage.removeItem(GUN_SONU_KEY);
     // Diğer sayfaları bilgilendir (SalesPage, KasaPage)
     window.dispatchEvent(new Event('storage_update'));
     setIsReopenDialogOpen(false);
@@ -415,7 +396,7 @@ export function GunSonuPage() {
   };
 
   return (
-    <div className="p-3 sm:p-6 lg:p-8 space-y-4 sm:space-y-6 pb-28 sm:pb-6">
+    <div className="p-3 sm:p-6 lg:p-8 space-y-4 sm:space-y-6 pb-4 sm:pb-6">
       {/* Header */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4">
         <div>

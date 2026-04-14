@@ -195,15 +195,23 @@ export function PersonelPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [isRequestsModalOpen, setIsRequestsModalOpen] = useState(false);
   const [roleRequests, setRoleRequests] = useState<any[]>([]);
+  const [sortBy, setSortBy] = useState<'date' | 'name' | 'role' | 'status'>('date');
 
   const filteredPersonnel = useMemo(() => {
-    return personnelList.filter(p => {
+    const filtered = personnelList.filter(p => {
       const name = (p.name || '').toLowerCase();
       const username = (p.username || '').toLowerCase();
+      const dept = (p.department || '').toLowerCase();
       const term = searchTerm.toLowerCase();
-      return name.includes(term) || username.includes(term);
+      return name.includes(term) || username.includes(term) || dept.includes(term);
     });
-  }, [personnelList, searchTerm]);
+    return [...filtered].sort((a, b) => {
+      if (sortBy === 'name') return (a.name || '').localeCompare(b.name || '', 'tr');
+      if (sortBy === 'role') return (a.role || '').localeCompare(b.role || '', 'tr');
+      if (sortBy === 'status') return (a.status === 'online' ? 0 : 1) - (b.status === 'online' ? 0 : 1);
+      return 0; // date — useTableSync already orders by created_at desc
+    });
+  }, [personnelList, searchTerm, sortBy]);
 
   const onlineCount = personnelList.filter(p => p.status === 'online').length;
   const offlineCount = personnelList.filter(p => p.status === 'offline').length;
@@ -391,8 +399,7 @@ export function PersonelPage() {
               by: user?.name || 'Admin',
               at: new Date().toISOString(),
             });
-            // Personel durumunu offline olarak işaretle — [AJAN-2]: useTableSync üzerinden güncelle
-            // setInStorage bypass kaldırıldı — useTableSync hem localStorage hem Supabase'i yönetir
+            // Personel durumunu offline olarak işaretle — useTableSync → PouchDB → CouchDB
             updateItem(personId, { status: 'offline' } as any).catch(e => console.warn('[PersonelPage] status update hatası:', e));
             logActivity('security_alert', 'Uzaktan oturum kapatma tetiklendi', {
               employeeName: user?.name,
@@ -452,7 +459,7 @@ export function PersonelPage() {
       return p;
     });
     setInStorage('personel_data', updatedPersonnel);
-    // BUG FIX [AJAN-2]: Personel izin değişikliği Supabase'e de yaz
+    // Personel izin değişikliğini PouchDB'ye de yaz (→ CouchDB sync)
     const updatedEmployee = updatedPersonnel.find((p: any) => p.id === request.employeeId);
     if (updatedEmployee) {
       updateItem(request.employeeId, { permissions: updatedEmployee.permissions, tempPermissions: updatedEmployee.tempPermissions } as any)
@@ -527,14 +534,14 @@ export function PersonelPage() {
   }, [selectedEmployee]);
 
   return (
-    <div className="p-3 sm:p-6 lg:p-10 space-y-4 sm:space-y-6 lg:space-y-8 bg-background min-h-screen text-white font-sans pb-28 sm:pb-6">
+    <div className="p-3 sm:p-6 lg:p-10 space-y-4 sm:space-y-6 lg:space-y-8 bg-background min-h-screen text-white font-sans pb-4 sm:pb-6">
       <SyncStatusBar tableName="personeller" />
 
       {/* Header */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 sm:gap-6">
         <div>
           <div className="flex items-center gap-3 mb-1">
-            <h1 className="text-3xl lg:text-4xl font-extrabold tracking-tight">Personel Yönetimi</h1>
+            <h1 className="text-xl sm:text-3xl lg:text-4xl font-extrabold tracking-tight">Personel Yönetimi</h1>
             <SyncBadge tableName="personeller" />
           </div>
           <p className="text-gray-400">Sistem kullanıcıları, yetkiler ve güvenlik ayarları</p>
@@ -565,7 +572,7 @@ export function PersonelPage() {
                 {s.pulse && <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-emerald-400 animate-pulse shadow-[0_0_8px_#34d399]" />}
               </div>
               <div>
-                <p className="text-3xl font-black">{s.value}</p>
+                <p className="text-2xl sm:text-3xl font-black">{s.value}</p>
                 <p className="text-xs text-gray-500 font-bold uppercase tracking-widest mt-1">{s.label}</p>
               </div>
             </div>
@@ -574,90 +581,166 @@ export function PersonelPage() {
       </div>
 
       {/* Search Bar */}
-      <div className="flex items-center gap-3 bg-[#111] p-2 rounded-2xl border border-white/5">
-        <div className="pl-4"><Search className="w-5 h-5 text-gray-500" /></div>
-        <input 
-          type="text" 
-          placeholder="İsim veya kullanıcı adı ile personel ara..." 
-          value={searchTerm}
-          onChange={e => setSearchTerm(e.target.value)}
-          className="w-full bg-transparent text-white outline-none placeholder-gray-600 py-3"
-        />
+      <div className="flex gap-3">
+        <div className="flex-1 flex items-center gap-3 bg-[#111] px-2 rounded-2xl border border-white/5">
+          <div className="pl-3"><Search className="w-5 h-5 text-gray-500" /></div>
+          <input
+            type="text"
+            placeholder="İsim, kullanıcı adı veya departman ara..."
+            value={searchTerm}
+            onChange={e => setSearchTerm(e.target.value)}
+            className="w-full bg-transparent text-white outline-none placeholder-gray-600 py-3 text-sm"
+          />
+          {searchTerm ? (
+            <button onClick={() => setSearchTerm('')} className="pr-3 text-gray-500 hover:text-white transition-colors">
+              <X className="w-4 h-4" />
+            </button>
+          ) : (
+            <span className="pr-3 text-xs text-gray-600 font-mono shrink-0">{filteredPersonnel.length} kişi</span>
+          )}
+        </div>
+        <select
+          value={sortBy}
+          onChange={e => setSortBy(e.target.value as any)}
+          className="bg-[#111] border border-white/5 rounded-2xl px-4 py-3 text-sm text-gray-400 outline-none cursor-pointer hover:border-white/15 transition-colors"
+        >
+          <option value="date">Yeni Önce</option>
+          <option value="name">Ada Göre</option>
+          <option value="role">Role Göre</option>
+          <option value="status">Duruma Göre</option>
+        </select>
       </div>
 
       {/* Personnel Grid */}
       <motion.div
-        className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5 sm:gap-6"
-        variants={staggerContainer(0.07, 0.03)}
+        className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 sm:gap-5"
+        variants={staggerContainer(0.06, 0.02)}
         initial="initial"
         animate="animate"
       >
-        <AnimatePresence>
-          {filteredPersonnel.map((person) => (
-            <motion.div
-              key={person.id}
-              layout
-              variants={gridCard}
-              exit={{ opacity: 0, scale: 0.92, filter: 'blur(6px)', transition: { duration: 0.2 } }}
-              whileHover={hover.card}
-              whileTap={tap.card}
-              onClick={() => setSelectedEmployee(person)}
-              className="p-5 sm:p-6 rounded-3xl bg-[#111] border border-white/5 hover:border-white/15 cursor-pointer group flex flex-col justify-between min-h-[220px] hover:shadow-xl hover:shadow-black/30 transition-colors"
-            >
-              <div>
-                <div className="flex justify-between items-start mb-4">
-                  <div className="flex items-center gap-4">
-                    <div className="relative">
-                      <div className={`w-14 h-14 rounded-2xl flex items-center justify-center text-xl font-black shadow-lg ${person.role === 'Yönetici' ? 'bg-gradient-to-br from-orange-500 to-red-600' : 'bg-gradient-to-br from-blue-600 to-purple-600'}`}>
-                        {(person.name || '?').charAt(0).toUpperCase()}
+        <AnimatePresence mode="popLayout">
+          {filteredPersonnel.map((person) => {
+            const permCount = Array.isArray(person.permissions) ? person.permissions.length : 0;
+            const isOnline = person.status === 'online';
+            const isManager = person.role === 'Yönetici';
+            return (
+              <motion.div
+                key={person.id}
+                layout
+                variants={gridCard}
+                exit={{ opacity: 0, scale: 0.9, y: -10, filter: 'blur(4px)', transition: { duration: 0.2 } }}
+                whileHover={{ y: -2, transition: { duration: 0.15 } }}
+                whileTap={{ scale: 0.98 }}
+                onClick={() => setSelectedEmployee(person)}
+                className={`relative rounded-2xl sm:rounded-3xl border cursor-pointer group flex flex-col overflow-hidden transition-all duration-200 ${
+                  isOnline
+                    ? 'bg-[#111] border-emerald-500/20 hover:border-emerald-500/40 hover:shadow-lg hover:shadow-emerald-500/5'
+                    : 'bg-[#111] border-white/5 hover:border-white/15 hover:shadow-lg hover:shadow-black/20'
+                }`}
+              >
+                {/* Top accent line */}
+                <div className={`h-0.5 w-full ${isManager ? 'bg-gradient-to-r from-orange-500/60 to-red-600/60' : 'bg-gradient-to-r from-blue-600/40 to-purple-600/40'}`} />
+
+                <div className="p-4 sm:p-5 flex flex-col gap-3 flex-1">
+                  {/* Row 1: avatar + name + actions */}
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-center gap-3 min-w-0">
+                      {/* Avatar */}
+                      <div className="relative shrink-0">
+                        <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-lg font-black shadow-md ${isManager ? 'bg-gradient-to-br from-orange-500 to-red-600' : 'bg-gradient-to-br from-blue-600 to-purple-600'}`}>
+                          {(person.name || '?').charAt(0).toUpperCase()}
+                        </div>
+                        {/* Online dot with ping animation */}
+                        <div className={`absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full border-2 border-[#111] flex items-center justify-center ${isOnline ? 'bg-emerald-500' : 'bg-gray-600'}`}>
+                          {isOnline && <span className="absolute inset-0 rounded-full bg-emerald-400 animate-ping opacity-60" />}
+                        </div>
                       </div>
-                      <div className={`absolute -bottom-1 -right-1 w-4 h-4 rounded-full border-2 border-[#111] ${person.status === 'online' ? 'bg-emerald-500' : 'bg-gray-600'}`} />
+                      {/* Name / username */}
+                      <div className="min-w-0">
+                        <h3 className="text-sm sm:text-base font-bold text-white group-hover:text-blue-300 transition-colors truncate leading-tight">{person.name}</h3>
+                        <p className="text-xs text-gray-500 font-mono truncate">@{person.username}</p>
+                      </div>
+                    </div>
+                    {/* Action buttons — always visible on mobile, hover-only on desktop */}
+                    <div className="flex items-center gap-1 shrink-0 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity duration-150">
+                      <button
+                        onClick={(e) => openEditModal(person, e)}
+                        className="p-1.5 bg-white/5 hover:bg-blue-600 rounded-lg text-gray-400 hover:text-white transition-all"
+                        title="Düzenle"
+                      >
+                        <Edit3 className="w-3.5 h-3.5" />
+                      </button>
+                      {person.id !== '1' && person.id !== 'admin-super' && isOnline && (
+                        <button
+                          onClick={(e) => handleForceLogout(e, person.id, person.name)}
+                          className="p-1.5 bg-white/5 hover:bg-orange-600 rounded-lg text-gray-400 hover:text-white transition-all"
+                          title="Oturumu Uzaktan Kapat"
+                        >
+                          <WifiOff className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                      {person.id !== '1' && person.id !== 'admin-super' && (
+                        <button
+                          onClick={(e) => handleDelete(e, person.id, person.name)}
+                          className="p-1.5 bg-white/5 hover:bg-red-600 rounded-lg text-gray-400 hover:text-white transition-all"
+                          title="Sil"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Row 2: chips */}
+                  <div className="flex flex-wrap gap-1.5">
+                    <span className={`px-2.5 py-1 rounded-lg text-[11px] font-bold flex items-center gap-1 ${isManager ? 'bg-orange-500/10 text-orange-400 border border-orange-500/20' : 'bg-blue-500/10 text-blue-400 border border-blue-500/20'}`}>
+                      {isManager && <Shield className="w-2.5 h-2.5"/>}{person.role}
+                    </span>
+                    <span className="px-2.5 py-1 bg-white/5 rounded-lg text-[11px] font-bold text-gray-400 border border-white/5 truncate max-w-[120px]">
+                      {person.department || 'Bölüm Yok'}
+                    </span>
+                    {permCount > 0 && (
+                      <span className="px-2.5 py-1 bg-purple-500/10 rounded-lg text-[11px] font-bold text-purple-400 border border-purple-500/20 flex items-center gap-1">
+                        <Key className="w-2.5 h-2.5"/>{permCount} modül
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Row 3: bottom stats */}
+                  <div className="mt-auto pt-3 border-t border-white/5 grid grid-cols-2 gap-3">
+                    <div>
+                      <p className="text-[10px] text-gray-600 font-bold uppercase tracking-widest mb-0.5">Son Giriş</p>
+                      <p className="text-xs text-gray-300 truncate">{person.lastLogin !== '-' ? person.lastLogin : '—'}</p>
                     </div>
                     <div>
-                      <h3 className="text-lg font-bold text-white group-hover:text-blue-400 transition-colors line-clamp-1">{person.name}</h3>
-                      <p className="text-sm text-gray-500 font-mono">@{person.username}</p>
+                      <p className="text-[10px] text-gray-600 font-bold uppercase tracking-widest mb-0.5">Güvenlik</p>
+                      <p className="text-xs flex items-center gap-1">
+                        {person.password
+                          ? <span className="text-emerald-400 flex items-center gap-1"><Lock className="w-3 h-3"/>Şifreli</span>
+                          : <span className="text-orange-400 flex items-center gap-1"><Lock className="w-3 h-3"/>Şifresiz</span>}
+                      </p>
                     </div>
                   </div>
-                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <button onClick={(e) => openEditModal(person, e)} className="p-2 bg-white/5 hover:bg-blue-600 rounded-xl text-gray-400 hover:text-white transition-all" title="Düzenle"><Edit3 className="w-4 h-4" /></button>
-                    {person.id !== '1' && person.id !== 'admin-super' && person.status === 'online' && (
-                      <button
-                        onClick={(e) => handleForceLogout(e, person.id, person.name)}
-                        className="p-2 bg-white/5 hover:bg-orange-600 rounded-xl text-gray-400 hover:text-white transition-all"
-                        title="Oturumu Uzaktan Kapat"
-                      >
-                        <WifiOff className="w-4 h-4" />
-                      </button>
-                    )}
-                    {person.id !== '1' && person.id !== 'admin-super' && (
-                      <button onClick={(e) => handleDelete(e, person.id, person.name)} className="p-2 bg-white/5 hover:bg-red-600 rounded-xl text-gray-400 hover:text-white transition-all" title="Sil"><Trash2 className="w-4 h-4" /></button>
-                    )}
-                  </div>
                 </div>
-
-                <div className="flex flex-wrap gap-2 mb-4">
-                  <span className={`px-3 py-1 rounded-lg text-xs font-bold flex items-center gap-1.5 ${person.role === 'Yönetici' ? 'bg-orange-500/10 text-orange-400 border border-orange-500/20' : 'bg-blue-500/10 text-blue-400 border border-blue-500/20'}`}>
-                    {person.role === 'Yönetici' && <Shield className="w-3 h-3"/>} {person.role}
-                  </span>
-                  <span className="px-3 py-1 bg-white/5 rounded-lg text-xs font-bold text-gray-400 border border-white/5">{person.department || 'Bölüm Yok'}</span>
-                </div>
-              </div>
-
-              <div className="pt-4 border-t border-white/5 grid grid-cols-2 gap-4">
-                <div>
-                  <p className="text-[10px] text-gray-600 font-bold uppercase tracking-widest mb-1">Son Giriş</p>
-                  <p className="text-xs font-medium text-gray-300">{person.lastLogin}</p>
-                </div>
-                <div>
-                  <p className="text-[10px] text-gray-600 font-bold uppercase tracking-widest mb-1">Güvenlik</p>
-                  <p className="text-xs font-medium text-gray-300 flex items-center gap-1">
-                    {person.password ? <span className="text-emerald-400 flex items-center gap-1"><Lock className="w-3 h-3"/> Şifreli</span> : <span className="text-orange-400 flex items-center gap-1"><Lock className="w-3 h-3"/> Şifresiz</span>}
-                  </p>
-                </div>
-              </div>
-            </motion.div>
-          ))}
+              </motion.div>
+            );
+          })}
         </AnimatePresence>
+
+        {/* Empty state */}
+        {filteredPersonnel.length === 0 && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="col-span-full flex flex-col items-center justify-center py-24 text-gray-600"
+          >
+            <UserCog className="w-14 h-14 mb-4 opacity-20" />
+            <p className="text-lg font-bold text-gray-500">Personel bulunamadı</p>
+            {searchTerm
+              ? <p className="text-sm mt-1 text-gray-600">"{searchTerm}" için sonuç yok</p>
+              : <p className="text-sm mt-1 text-gray-600">Henüz personel eklenmemiş</p>}
+          </motion.div>
+        )}
       </motion.div>
 
       {/* Add Modal */}
@@ -776,7 +859,7 @@ export function PersonelPage() {
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div className="p-6 rounded-2xl border border-white/5 bg-white/5">
                     <p className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">Bugünkü İşlemler</p>
-                    <p className="text-4xl font-black">{employeeActivityData.todayCount}</p>
+                    <p className="text-3xl sm:text-4xl font-black">{employeeActivityData.todayCount}</p>
                   </div>
                   <div className="p-6 rounded-2xl border border-white/5 bg-white/5 md:col-span-2">
                     <p className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-4">Haftalık Aktivite</p>

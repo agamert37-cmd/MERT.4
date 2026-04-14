@@ -20,7 +20,9 @@ import { logActivity } from '../utils/activityLogger';
 import { getPagePermissions } from '../utils/permissions';
 import { generateCariDetailPDF, generateSingleFisPDF } from '../utils/cariDetailPdf';
 import { useTableSync } from '../hooks/useTableSync';
+import { getDb } from '../lib/pouchdb';
 import { useModuleBus } from '../hooks/useModuleBus';
+import { useGlobalTableData } from '../contexts/GlobalTableSyncContext';
 import { cariToDb, cariFromDb } from './CariPage';
 import { getCompanyInfo } from './SettingsPage';
 
@@ -54,7 +56,7 @@ export function CariDetailPage() {
 
   // Güvenlik kontrolleri (RBAC) - merkezi utility
   const { canEdit } = getPagePermissions(user, currentEmployee, 'cariler');
-  const { emit } = useModuleBus();
+  const { emit, on } = useModuleBus();
   
   const [selectedExtract, setSelectedExtract] = useState<RealDailyExtract | null>(null);
   const [isOrderDetailOpen, setIsOrderDetailOpen] = useState(false);
@@ -73,19 +75,11 @@ export function CariDetailPage() {
     fromDb: cariFromDb,
   });
 
-  const [refreshCounter, setRefreshCounter] = useState(0);
-  useEffect(() => {
-    const handler = () => setRefreshCounter(c => c + 1);
-    window.addEventListener('storage_update', handler);
-    window.addEventListener('storage', handler);
-    return () => {
-      window.removeEventListener('storage_update', handler);
-      window.removeEventListener('storage', handler);
-    };
-  }, []);
-
-  const cariList = useMemo(() => getFromStorage<any[]>(StorageKey.CARI_DATA) || [], [refreshCounter]);
+  const cariList = useGlobalTableData<any>('cari_hesaplar');
   const cari = useMemo(() => cariList.find(c => c.id === id), [cariList, id]);
+
+  // Canlı PouchDB fişleri — GlobalTableSyncContext üzerinden reaktif
+  const globalFisler = useGlobalTableData<any>('fisler');
 
   const [editForm, setEditForm] = useState({
     companyName: cari?.companyName || '',
@@ -106,12 +100,28 @@ export function CariDetailPage() {
 
   const companyInfo = useMemo(() => getCompanyInfo(), []);
 
+  // Silinen fişler için reaktif Set — fis:deleted event'i gelince anında güncellenir
+  const [deletedFisIds, setDeletedFisIds] = useState<Set<string>>(
+    () => new Set((getFromStorage<any[]>(StorageKey.DELETED_FISLER) || []).map((f: any) => f.id))
+  );
+  useEffect(() => {
+    return on('fis:deleted', ({ fisId }: any) => {
+      setDeletedFisIds(prev => new Set([...prev, fisId]));
+    });
+  }, [on]);
+
   const allFisler = useMemo(() => {
-    const fisler = getFromStorage<any[]>(StorageKey.FISLER) || [];
+    // PouchDB canlı veri önce, yoksa localStorage fallback
+    const fisler = globalFisler.length > 0
+      ? globalFisler
+      : (getFromStorage<any[]>(StorageKey.FISLER) || []);
     return fisler
-      .filter(fis => fis.cariId === id || fis.cari_id === id || fis.cari?.id === id)
+      .filter(fis =>
+        !deletedFisIds.has(fis.id) &&
+        (fis.cariId === id || fis.cari_id === id || fis.cari?.id === id)
+      )
       .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-  }, [id, refreshCounter]);
+  }, [id, globalFisler, deletedFisIds]);
 
   const fisBalanceMap = useMemo(() => {
     const map = new Map<string, { previousBalance: number; newBalance: number }>();
@@ -302,7 +312,6 @@ export function CariDetailPage() {
     toast.success('Müşteri bilgileri güncellendi.');
     setIsEditModalOpen(false);
     setEditNote('');
-    setRefreshCounter(c => c + 1);
   };
 
   const handleOpenEditModal = () => {
@@ -377,7 +386,9 @@ export function CariDetailPage() {
     return [...cariNotes].sort((a, b) => {
       if (a.pinned && !b.pinned) return -1;
       if (!a.pinned && b.pinned) return 1;
-      return new Date(b.date.split('.').reverse().join('-') + 'T' + b.time).getTime() - new Date(a.date.split('.').reverse().join('-') + 'T' + a.time).getTime();
+      const bStr = (b.date || '01.01.2000').split('.').reverse().join('-') + 'T' + (b.time || '00:00');
+      const aStr = (a.date || '01.01.2000').split('.').reverse().join('-') + 'T' + (a.time || '00:00');
+      return new Date(bStr).getTime() - new Date(aStr).getTime();
     });
   }, [cariNotes]);
 
@@ -394,14 +405,44 @@ export function CariDetailPage() {
   const [invoiceKdvRate, setInvoiceKdvRate] = useState(cari?.defaultKdvRate || 20);
   const [invoicePhoto, setInvoicePhoto] = useState<string>('');
 
+  const compressImage = (file: File, maxWidth = 1200, quality = 0.75): Promise<string> =>
+    new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onerror = reject;
+      reader.onloadend = () => {
+        const img = new Image();
+        img.onerror = reject;
+        img.onload = () => {
+          let { width, height } = img;
+          if (width > maxWidth) { height = Math.round((height * maxWidth) / width); width = maxWidth; }
+          const canvas = document.createElement('canvas');
+          canvas.width = width; canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          if (!ctx) { reject(new Error('Canvas yok')); return; }
+          ctx.drawImage(img, 0, 0, width, height);
+          resolve(canvas.toDataURL('image/jpeg', quality));
+        };
+        img.src = reader.result as string;
+      };
+      reader.readAsDataURL(file);
+    });
+
   const updateFisInStorage = (fisId: string, updater: (fis: any) => any) => {
     const allFis = getFromStorage<any[]>(StorageKey.FISLER) || [];
-    const updatedFis = allFis.find(f => f.id === fisId);
     const updated = allFis.map(f => f.id === fisId ? updater(f) : f);
     setInStorage(StorageKey.FISLER, updated);
     window.dispatchEvent(new Event('storage_update'));
-    setRefreshCounter(c => c + 1);
-    // Sync handled by useTableSync
+    // PouchDB güncelle — cross-device sync için
+    const updatedFis = updated.find(f => f.id === fisId);
+    if (updatedFis) {
+      (async () => {
+        try {
+          const db = getDb('fisler');
+          const doc = await db.get(fisId) as any;
+          await db.put({ ...doc, ...updatedFis, _id: doc._id, _rev: doc._rev });
+        } catch {}
+      })();
+    }
   };
 
   const handleAddInvoice = (fisId: string) => {
@@ -452,16 +493,16 @@ export function CariDetailPage() {
   };
 
   return (
-    <div className="p-3 sm:p-6 lg:p-10 space-y-4 sm:space-y-6 lg:space-y-8 bg-background min-h-screen text-white font-sans pb-28 sm:pb-6">
+    <div className="p-3 sm:p-6 lg:p-10 space-y-4 sm:space-y-6 lg:space-y-8 bg-background min-h-screen text-white font-sans pb-4 sm:pb-6">
       
       {/* ─── Header ─── */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
-        <div className="flex items-center gap-4">
-          <button onClick={() => navigate('/cari')} className="w-12 h-12 flex items-center justify-center bg-white/5 hover:bg-white/10 border border-white/10 rounded-2xl transition-all">
-            <ArrowLeft className="w-6 h-6 text-gray-400" />
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-6">
+        <div className="flex items-center gap-3 sm:gap-4">
+          <button onClick={() => navigate('/cari')} className="w-10 h-10 sm:w-12 sm:h-12 flex items-center justify-center bg-white/5 hover:bg-white/10 border border-white/10 rounded-2xl transition-all shrink-0">
+            <ArrowLeft className="w-5 h-5 sm:w-6 sm:h-6 text-gray-400" />
           </button>
-          <div>
-            <h1 className="text-3xl lg:text-4xl font-extrabold tracking-tight">{cari.companyName}</h1>
+          <div className="min-w-0">
+            <h1 className="text-xl sm:text-3xl lg:text-4xl font-extrabold tracking-tight truncate">{cari.companyName}</h1>
             <p className="text-gray-400 mt-1 flex items-center gap-2">
               <span className={`w-2 h-2 rounded-full ${cari.type === 'Toptancı' ? 'bg-orange-500' : 'bg-blue-500'}`}></span>
               Müşteri Cari Özeti
@@ -473,27 +514,27 @@ export function CariDetailPage() {
             </p>
           </div>
         </div>
-        <div className="flex gap-3 w-full md:w-auto">
-          <button onClick={handleOpenEditModal} className="flex-1 md:flex-none flex items-center justify-center gap-2 px-5 py-3 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl font-bold transition-all">
+        <div className="flex gap-2 sm:gap-3 w-full sm:w-auto">
+          <button onClick={handleOpenEditModal} className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 sm:px-5 py-2.5 sm:py-3 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl font-bold transition-all text-sm sm:text-base">
             <Edit className="w-4 h-4" /> Düzenle
           </button>
-          <button onClick={() => handleExportPDF()} className="flex-1 md:flex-none flex items-center justify-center gap-2 px-5 py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-xl font-bold transition-all shadow-lg shadow-blue-600/20">
+          <button onClick={() => handleExportPDF()} className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 sm:px-5 py-2.5 sm:py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-xl font-bold transition-all shadow-lg shadow-blue-600/20 text-sm sm:text-base">
             <FileArchive className="w-4 h-4" /> Ekstre Al
           </button>
         </div>
       </div>
 
       {/* ─── Grid: Info & Stats ─── */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
+
         {/* Company Info */}
-        <div className="lg:col-span-2 p-8 rounded-3xl bg-white/5 border border-white/10 relative overflow-hidden">
+        <div className="lg:col-span-2 p-4 sm:p-8 rounded-3xl bg-white/5 border border-white/10 relative overflow-hidden">
           <div className="absolute top-0 right-0 w-64 h-64 bg-blue-600/5 rounded-bl-full blur-3xl" />
-          <h3 className="text-xl font-bold mb-6 text-white flex items-center gap-2">
-            <Building2 className="w-5 h-5 text-blue-400" /> İletişim & Vergi Bilgileri
+          <h3 className="text-base sm:text-xl font-bold mb-4 sm:mb-6 text-white flex items-center gap-2">
+            <Building2 className="w-4 h-4 sm:w-5 sm:h-5 text-blue-400" /> İletişim & Vergi Bilgileri
           </h3>
-          
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-6 gap-x-8 relative z-10">
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-4 sm:gap-y-6 gap-x-4 sm:gap-x-8 relative z-10">
             <div>
               <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1">Yetkili Kişi</p>
               <p className="font-medium text-lg">{cari.contactPerson || 'Belirtilmemiş'}</p>
@@ -522,10 +563,10 @@ export function CariDetailPage() {
         </div>
 
         {/* Stats Column */}
-        <div className="flex flex-col gap-6">
-          <div className={`p-8 rounded-3xl border flex-1 flex flex-col justify-center ${totalBalance < 0 ? 'bg-red-950/20 border-red-500/30' : 'bg-emerald-950/20 border-emerald-500/30'}`}>
+        <div className="flex flex-col gap-4 sm:gap-6">
+          <div className={`p-4 sm:p-8 rounded-3xl border flex-1 flex flex-col justify-center ${totalBalance < 0 ? 'bg-red-950/20 border-red-500/30' : 'bg-emerald-950/20 border-emerald-500/30'}`}>
             <p className="text-xs font-bold uppercase tracking-widest mb-2 opacity-70">Güncel Bakiye</p>
-            <p className={`text-5xl font-black tracking-tighter ${totalBalance < 0 ? 'text-red-400' : 'text-emerald-400'}`}>
+            <p className={`text-3xl sm:text-5xl font-black tracking-tighter ${totalBalance < 0 ? 'text-red-400' : 'text-emerald-400'}`}>
               {totalBalance > 0 ? '+' : ''}₺{Math.abs(totalBalance).toLocaleString()}
             </p>
             <div className="mt-4 flex items-center gap-2">
@@ -534,28 +575,28 @@ export function CariDetailPage() {
               </span>
             </div>
           </div>
-          <div className="grid grid-cols-3 gap-4">
-            <div className="p-6 bg-white/5 border border-white/10 rounded-3xl">
-              <Receipt className="w-6 h-6 text-blue-400 mb-3" />
-              <p className="text-2xl font-bold">{totalFisler}</p>
-              <p className="text-xs text-gray-500 uppercase mt-1">İşlem Fişi</p>
+          <div className="grid grid-cols-3 gap-2 sm:gap-4">
+            <div className="p-3 sm:p-6 bg-white/5 border border-white/10 rounded-2xl sm:rounded-3xl">
+              <Receipt className="w-4 h-4 sm:w-6 sm:h-6 text-blue-400 mb-1.5 sm:mb-3" />
+              <p className="text-lg sm:text-2xl font-bold">{totalFisler}</p>
+              <p className="text-[10px] sm:text-xs text-gray-500 uppercase mt-0.5 sm:mt-1">İşlem Fişi</p>
             </div>
-            <div className="p-6 bg-white/5 border border-white/10 rounded-3xl">
-              <Calendar className="w-6 h-6 text-purple-400 mb-3" />
-              <p className="text-2xl font-bold">{dailyExtracts.length}</p>
-              <p className="text-xs text-gray-500 uppercase mt-1">İşlem Günü</p>
+            <div className="p-3 sm:p-6 bg-white/5 border border-white/10 rounded-2xl sm:rounded-3xl">
+              <Calendar className="w-4 h-4 sm:w-6 sm:h-6 text-purple-400 mb-1.5 sm:mb-3" />
+              <p className="text-lg sm:text-2xl font-bold">{dailyExtracts.length}</p>
+              <p className="text-[10px] sm:text-xs text-gray-500 uppercase mt-0.5 sm:mt-1">İşlem Günü</p>
             </div>
-            <div className="p-6 bg-white/5 border border-white/10 rounded-3xl cursor-pointer hover:bg-white/10 transition-all" onClick={() => setIsNoteModalOpen(true)}>
-              <StickyNote className="w-6 h-6 text-amber-400 mb-3" />
-              <p className="text-2xl font-bold">{cariNotes.length}</p>
-              <p className="text-xs text-gray-500 uppercase mt-1">Not</p>
+            <div className="p-3 sm:p-6 bg-white/5 border border-white/10 rounded-2xl sm:rounded-3xl cursor-pointer hover:bg-white/10 transition-all" onClick={() => setIsNoteModalOpen(true)}>
+              <StickyNote className="w-4 h-4 sm:w-6 sm:h-6 text-amber-400 mb-1.5 sm:mb-3" />
+              <p className="text-lg sm:text-2xl font-bold">{cariNotes.length}</p>
+              <p className="text-[10px] sm:text-xs text-gray-500 uppercase mt-0.5 sm:mt-1">Not</p>
             </div>
           </div>
         </div>
       </div>
 
       {/* ─── Tabs / Sections ─── */}
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 sm:gap-8">
         
         {/* Left: Ekstre */}
         <div className="space-y-4">
@@ -581,8 +622,8 @@ export function CariDetailPage() {
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                     <div className="flex items-center gap-4">
                       <div className="w-12 h-12 rounded-xl bg-indigo-500/10 text-indigo-400 flex flex-col items-center justify-center">
-                        <span className="text-lg font-bold leading-none">{ex.date.split('.')[0]}</span>
-                        <span className="text-[9px] uppercase font-bold">{new Date(ex.date.split('.').reverse().join('-')).toLocaleString('tr-TR', {month:'short'})}</span>
+                        <span className="text-lg font-bold leading-none">{(ex.date || '').split('.')[0] || '—'}</span>
+                        <span className="text-[9px] uppercase font-bold">{ex.date ? new Date(ex.date.split('.').reverse().join('-')).toLocaleString('tr-TR', {month:'short'}) : '—'}</span>
                       </div>
                       <div>
                         <p className="text-sm text-gray-400">Önceki: <span className="text-white">₺{ex.previousBalance.toLocaleString()}</span></p>
@@ -863,11 +904,7 @@ export function CariDetailPage() {
                             <span className="text-xs text-gray-400">{invoicePhoto ? 'Fotoğraf yüklendi ✓' : 'Fotoğraf yükle...'}</span>
                             <input type="file" accept="image/*" className="hidden" onChange={(e) => {
                               const file = e.target.files?.[0];
-                              if (file) {
-                                const reader = new FileReader();
-                                reader.onload = (ev) => setInvoicePhoto(ev.target?.result as string);
-                                reader.readAsDataURL(file);
-                              }
+                              if (file) compressImage(file).then(setInvoicePhoto).catch(() => toast.error('Fotoğraf yüklenemedi'));
                             }} />
                           </label>
                           {invoicePhoto && <img src={invoicePhoto} alt="preview" className="mt-2 max-h-24 rounded-lg border border-white/10" />}

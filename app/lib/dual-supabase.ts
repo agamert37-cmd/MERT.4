@@ -347,7 +347,7 @@ export async function createFullTableBackup(type: 'manual' | 'auto' = 'manual'):
     sizeKB: result.sizeKB,
     tableStats: result.backup.meta.tableStats,
   };
-  saveBackupMeta(meta);
+  await saveBackupMeta(meta);
 
   // Manuel yedekte dosyayı indir
   if (type === 'manual') {
