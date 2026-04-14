@@ -4,12 +4,10 @@ import React, { useState } from 'react';
 import { WifiOff, RefreshCw, ChevronDown, ChevronUp } from 'lucide-react';
 import { useCouchDbStatus } from '../contexts/GlobalTableSyncContext';
 import { restartAllSync } from '../lib/pouchdb';
-import { useNavigate } from 'react-router';
 
 export function SyncStatusBanner() {
   const { couchdbConnected, couchdbError } = useCouchDbStatus();
   const [expanded, setExpanded] = useState(false);
-  const navigate = useNavigate();
 
   // null = henüz bilinmiyor → banner gösterme
   // true = bağlı → banner gösterme
@@ -32,12 +30,12 @@ export function SyncStatusBanner() {
             <RefreshCw className="w-3 h-3" />
             Yeniden Bağlan
           </button>
-          <button
-            onClick={() => navigate('/sunucu')}
+          <a
+            href="/sunucu"
             className="text-[10px] font-bold text-amber-900/70 hover:text-amber-900 px-2 py-1 rounded-lg hover:bg-amber-900/20 transition-colors"
           >
             Ayarlar
-          </button>
+          </a>
           <button
             onClick={() => setExpanded(v => !v)}
             className="text-amber-900/60 hover:text-amber-900 p-1 rounded transition-colors"
