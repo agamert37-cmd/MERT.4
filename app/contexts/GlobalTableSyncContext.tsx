@@ -20,6 +20,8 @@ import type { SyncState } from '../hooks/useTableSync';
 import { cariFromDb, cariToDb } from '../pages/CariPage';
 import { productFromDb, productToDb } from '../pages/StokPage';
 import { StorageKey } from '../utils/storage';
+import { startAllSync, stopAllSync, startPeerSync, stopPeerSync } from '../lib/pouchdb';
+import { getCouchDbConfig } from '../lib/db-config';
 import { startAllSync, stopAllSync, autoSeedIfEmpty } from '../lib/pouchdb';
 import { toast } from 'sonner';
 
@@ -221,6 +223,14 @@ export function GlobalTableSyncProvider({ children }: GlobalTableSyncProviderPro
   }, []);
 
   // PouchDB ↔ CouchDB continuous sync başlat (kademeli — 200ms aralık)
+  // Peer URL yapılandırılmışsa eş senkronizasyonu da başlat
+  useEffect(() => {
+    startAllSync();
+    const cfg = getCouchDbConfig();
+    if (cfg.peerUrl) startPeerSync();
+    return () => {
+      stopAllSync();
+      stopPeerSync();
   // Ağ kurtarma: pouchdb.ts'deki online/visibilitychange listener'ları otomatik restartAllSync() çağırır.
   // Ardından: PouchDB boşsa localStorage'dan otomatik doldur → sync CouchDB'ye iter.
   useEffect(() => {

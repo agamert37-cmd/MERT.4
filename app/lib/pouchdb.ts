@@ -1,3 +1,56 @@
+// [AJAN-3 | claude/multi-db-sync-setup-3DmYn | 2026-04-11]
+// PouchDB instance yöneticisi — tablo başına DB + CouchDB sync + gerçek zamanlı sync olayları
+import PouchDB from 'pouchdb-browser';
+import { DB_PREFIX, KV_DB_NAME, TABLE_NAMES, getCouchDbConfig } from './db-config';
+
+// ── Sync Durum Sistemi ─────────────────────────────────────────
+export type SyncStatus = 'active' | 'paused' | 'error' | 'stopped';
+
+export interface TableSyncState {
+  tableName: string;
+  status: SyncStatus;
+  error?: string;
+  lastChange?: number; // timestamp
+  pending?: number;
+}
+
+// Module-level durum haritası
+const syncStatuses = new Map<string, TableSyncState>();
+
+/** Sync durumunu güncelle ve window event yayımla */
+function updateSyncStatus(
+  name: string,
+  status: SyncStatus,
+  error?: string,
+  pending?: number
+): void {
+  const state: TableSyncState = {
+    tableName: name,
+    status,
+    error,
+    pending,
+    lastChange: Date.now(),
+  };
+  syncStatuses.set(name, state);
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('pouchdb_sync_status', { detail: state }));
+  }
+}
+
+/** Belirli tablo için sync durumunu getir */
+export function getSyncStatus(tableName: string): TableSyncState | null {
+  const name = tableName.startsWith(DB_PREFIX) ? tableName : DB_PREFIX + tableName;
+  return syncStatuses.get(name) ?? null;
+}
+
+/** Tüm tabloların sync durumlarını getir */
+export function getAllSyncStatuses(): TableSyncState[] {
+  return Array.from(syncStatuses.values());
+}
+
+/** Aktif sync sayısını getir */
+export function getActiveSyncCount(): number {
+  return Array.from(syncStatuses.values()).filter(s => s.status === 'active').length;
 // [AJAN-2 | claude/debug-system-pages-M8P0c | 2026-04-10] Son düzenleyen: Claude Sonnet 4.6
 // PouchDB instance yöneticisi — tablo başına DB + CouchDB sync
 import PouchDB from 'pouchdb-browser';
@@ -38,11 +91,30 @@ export function getKvDb(): PouchDB.Database {
 
 // ── CouchDB Sync ──────────────────────────────────────────────
 
+/** Authorization header ile güvenli fetch — mobil tarayıcılar URL'deki credentials'ı engeller */
+function makeAuthFetch(user: string, password: string) {
+  return (url: RequestInfo | URL, opts?: RequestInit) => {
+    const headers = new Headers((opts as any)?.headers || {});
+    if (user) {
+      headers.set('Authorization', 'Basic ' + btoa(`${user}:${password}`));
+    }
+    return fetch(url, { ...(opts || {}), headers });
+  };
+}
+
 /** Tek tablo için CouchDB ile continuous sync başlat */
 export function startSync(tableName: string): PouchDB.Replication.Sync<{}> | null {
   const dbName = tableName.startsWith(DB_PREFIX) ? tableName : DB_PREFIX + tableName;
   if (syncs.has(dbName)) return syncs.get(dbName)!;
 
+  const config = getCouchDbConfig();
+  if (!config.url) return null;
+
+  const remoteUrl = config.url.replace(/\/$/, '') + '/' + dbName;
+  const localDb = getDb(dbName);
+  const remoteDb = new PouchDB(remoteUrl, {
+    fetch: makeAuthFetch(config.user, config.password),
+  });
   // ─── KRİTİK: URL'e credential GÖMME ─────────────────────────────────────────
   // getCouchDbAuthUrl() user:pass@host formatı döndürüyor. Modern tarayıcılar
   // (iOS Safari, Chrome Android 88+, Firefox 87+) URL'e gömülü credential'ları
@@ -92,6 +164,13 @@ export function startSync(tableName: string): PouchDB.Replication.Sync<{}> | nul
       }
     });
 
+  // Gerçek zamanlı sync durum olayları
+  sync
+    .on('active', () => updateSyncStatus(dbName, 'active'))
+    .on('paused', (err: any) => updateSyncStatus(dbName, 'paused', err?.message))
+    .on('error', (err: any) => updateSyncStatus(dbName, 'error', err?.message ?? 'Sync hatası'))
+    .on('change', (info: any) => updateSyncStatus(dbName, 'active', undefined, info?.pending));
+
   syncs.set(dbName, sync);
   return sync;
 }
@@ -103,6 +182,7 @@ export function stopSync(tableName: string): void {
   if (sync) {
     sync.cancel();
     syncs.delete(dbName);
+    updateSyncStatus(dbName, 'stopped');
   }
 }
 
@@ -120,14 +200,27 @@ export function stopAllSync(): void {
   // Henüz başlamamış bekleyen zamanlayıcıları iptal et
   staggerTimers.forEach(t => clearTimeout(t));
   staggerTimers.length = 0;
-  for (const [, sync] of syncs) {
+  for (const [dbName, sync] of syncs) {
     sync.cancel();
+    updateSyncStatus(dbName, 'stopped');
   }
   syncs.clear();
   for (const [, sync] of peerSyncs) {
     sync.cancel();
   }
   peerSyncs.clear();
+}
+
+/** Belirli tabloyu yeniden sync başlat */
+export function restartSync(tableName: string): void {
+  stopSync(tableName);
+  startSync(tableName);
+}
+
+/** Tüm sync'leri yeniden başlat */
+export function restartAllSync(): void {
+  stopAllSync();
+  startAllSync();
 }
 
 /**
@@ -202,16 +295,19 @@ _attachRecoveryListeners();
 
 /** Diğer bilgisayarla tüm tabloları senkronize et */
 export function startPeerSync(): void {
-  const peerUrl = getPeerCouchDbUrl();
-  if (!peerUrl) return;
+  const config = getCouchDbConfig();
+  if (!config.peerUrl) return;
 
+  const baseUrl = config.peerUrl.replace(/\/$/, '');
   const allDbs = [...TABLE_NAMES.map(t => DB_PREFIX + t), KV_DB_NAME];
 
   for (const dbName of allDbs) {
     if (peerSyncs.has(dbName)) continue;
 
     const localDb = getDb(dbName);
-    const peerDb = new PouchDB(`${peerUrl}/${dbName}`);
+    const peerDb = new PouchDB(`${baseUrl}/${dbName}`, {
+      fetch: makeAuthFetch(config.user, config.password),
+    });
 
     const sync = localDb.sync(peerDb, {
       live: true,
