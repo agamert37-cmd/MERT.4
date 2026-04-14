@@ -165,34 +165,34 @@ export function GlobalTableSyncProvider({ children }: GlobalTableSyncProviderPro
 
   useEffect(() => {
     function handleSyncEvent(e: Event) {
-      const { type, errorMsg } = (e as CustomEvent).detail as {
-        type: 'error' | 'connected' | 'paused';
-        dbName: string;
-        errorMsg?: string;
+      const state = (e as CustomEvent).detail as {
+        tableName: string;
+        status: 'active' | 'paused' | 'error' | 'stopped';
+        error?: string;
       };
 
-      if (type === 'error') {
+      if (state.status === 'error') {
         setCouchdbConnected(false);
-        setCouchdbError(errorMsg || 'Bağlantı hatası');
-        shownConnectedToastRef.current = false; // Reconnect toast için sıfırla
+        setCouchdbError(state.error || 'Bağlantı hatası');
+        shownConnectedToastRef.current = false;
         if (!shownErrorToastRef.current) {
           shownErrorToastRef.current = true;
           toast.error(
             '⚠️ CouchDB sunucusuna bağlanılamıyor — veriler yalnızca bu cihazda kaydedilir.',
             {
               duration: 6000,
-              description: errorMsg
-                ? `Hata: ${errorMsg.substring(0, 80)}`
+              description: state.error
+                ? `Hata: ${state.error.substring(0, 80)}`
                 : 'Sunucu sayfasından bağlantıyı kontrol edin.',
             }
           );
         }
-      } else if (type === 'connected' || type === 'paused') {
-        // paused hatasız = catch-up tamamlandı, bağlantı sağlıklı
+      } else if (state.status === 'active' || state.status === 'paused') {
+        // active veya hatasız paused = bağlantı sağlıklı
         const wasDisconnected = couchdbConnected === false;
         setCouchdbConnected(true);
         setCouchdbError(null);
-        shownErrorToastRef.current = false; // Yeni hata için sıfırla
+        shownErrorToastRef.current = false;
         if (wasDisconnected && !shownConnectedToastRef.current) {
           shownConnectedToastRef.current = true;
           toast.success('✅ CouchDB bağlantısı yeniden kuruldu — senkronizasyon devam ediyor.', {
@@ -202,8 +202,8 @@ export function GlobalTableSyncProvider({ children }: GlobalTableSyncProviderPro
       }
     }
 
-    window.addEventListener('pouchdb:sync_status', handleSyncEvent);
-    return () => window.removeEventListener('pouchdb:sync_status', handleSyncEvent);
+    window.addEventListener('pouchdb_sync_status', handleSyncEvent);
+    return () => window.removeEventListener('pouchdb_sync_status', handleSyncEvent);
   }, [couchdbConnected]);
 
   const registerTable = useCallback((status: TableSyncStatus) => {

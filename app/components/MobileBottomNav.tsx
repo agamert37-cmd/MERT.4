@@ -14,7 +14,6 @@ import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useEmployee } from '../contexts/EmployeeContext';
 import { restartAllSync, testCouchDbConnection } from '../lib/pouchdb';
-import { startAllSync, restartAllSync } from '../lib/pouchdb';
 import { useCouchDbStatus } from '../contexts/GlobalTableSyncContext';
 import { toast } from 'sonner';
 

@@ -53,14 +53,6 @@ export function getActiveSyncCount(): number {
   return Array.from(syncStatuses.values()).filter(s => s.status === 'active').length;
 }
 
-export type PouchSyncEventType = 'error' | 'connected' | 'paused';
-
-export function dispatchSyncEvent(type: PouchSyncEventType, dbName: string, errorMsg?: string): void {
-  if (typeof window === 'undefined') return;
-  window.dispatchEvent(new CustomEvent('pouchdb:sync_status', {
-    detail: { type, dbName, errorMsg },
-  }));
-}
 
 // ── Instance cache ─────────────────────────────────────────────
 const instances = new Map<string, PouchDB.Database>();
@@ -115,32 +107,27 @@ export function startSync(tableName: string): PouchDB.Replication.Sync<{}> | nul
   })
     .on('error', (err: any) => {
       console.error(`[PouchDB] Sync hatası — ${dbName}:`, err?.message || err);
-      dispatchSyncEvent('error', dbName, err?.message || String(err));
+      updateSyncStatus(dbName, 'error', err?.message ?? String(err));
     })
     .on('denied', (err: any) => {
       console.warn(`[PouchDB] Sync reddedildi — ${dbName}:`, err?.message || err);
-      dispatchSyncEvent('error', dbName, `Erişim reddedildi: ${err?.message || err}`);
+      updateSyncStatus(dbName, 'error', `Erişim reddedildi: ${err?.message ?? String(err)}`);
     })
     .on('active', () => {
-      console.info(`[PouchDB] Sync yeniden aktif — ${dbName}`);
-      dispatchSyncEvent('connected', dbName);
+      console.info(`[PouchDB] Sync aktif — ${dbName}`);
+      updateSyncStatus(dbName, 'active');
     })
     .on('paused', (err: any) => {
       if (err) {
         console.warn(`[PouchDB] Sync duraklatıldı (hata) — ${dbName}:`, err?.message || err);
-        dispatchSyncEvent('paused', dbName, err?.message || String(err));
+        updateSyncStatus(dbName, 'paused', err?.message ?? String(err));
       } else {
-        // Hatasız pause = catch-up tamamlandı, bağlantı sağlıklı
-        dispatchSyncEvent('connected', dbName);
+        updateSyncStatus(dbName, 'paused');
       }
+    })
+    .on('change', (info: any) => {
+      updateSyncStatus(dbName, 'active', undefined, info?.pending);
     });
-
-  // Gerçek zamanlı sync durum olayları
-  sync
-    .on('active', () => updateSyncStatus(dbName, 'active'))
-    .on('paused', (err: any) => updateSyncStatus(dbName, 'paused', err?.message))
-    .on('error', (err: any) => updateSyncStatus(dbName, 'error', err?.message ?? 'Sync hatası'))
-    .on('change', (info: any) => updateSyncStatus(dbName, 'active', undefined, info?.pending));
 
   syncs.set(dbName, sync);
   return sync;
