@@ -114,10 +114,7 @@ export function AracTakipPage() {
   // Güvenlik kontrolleri (RBAC) - merkezi utility
   const { canAdd, canDelete, canEdit } = getPagePermissions(user, currentEmployee, 'araclar');
 
-  // useTableSync — PouchDB arac_shifts tablosu
   const { data: syncedShifts, addItem: addShiftToPouchDB, updateItem: updateShiftInPouchDB } = useTableSync<VehicleShift>({
-  // useTableSync ile PouchDB/CouchDB senkronizasyonu
-  const { data: syncedShifts, addItem: addShift } = useTableSync<VehicleShift>({
     tableName: 'arac_shifts',
     storageKey: StorageKey.ARAC_SHIFTS,
     initialData: [],
@@ -125,10 +122,7 @@ export function AracTakipPage() {
     orderAsc: false,
   });
 
-  // PouchDB arac_km_logs tablosu
   const { addItem: addKmLogToPouchDB } = useTableSync<KmLog>({
-  // KM logları için PouchDB sync
-  const { addItem: addKmLog } = useTableSync<KmLog>({
     tableName: 'arac_km_logs',
     storageKey: StorageKey.ARAC_KM_LOGS,
     initialData: [],

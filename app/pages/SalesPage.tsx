@@ -1923,9 +1923,9 @@ export function SalesPage() {
                           id: `kasa-fis-${Date.now()}`,
                           type: kasaType,
                           category: kasaCategory,
-                          description: `${methodNames[paymentInfo.method] || paymentInfo.method} - ${selectedCari?.companyName || t('salesPage.cash')}`,
-                          amount: paymentInfo.amount,
-                          date: new Date().toISOString().split('T')[0],
+                          description: `${methodNames[paymentInfo!.method] || paymentInfo!.method} - ${selectedCari?.companyName || t('salesPage.cash')}`,
+                          amount: paymentInfo!.amount,
+                          date: new Date().toLocaleDateString('tr-TR'),
                           time: new Date().toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' }),
                         };
                         addKasaSync(newKasaEntry);
