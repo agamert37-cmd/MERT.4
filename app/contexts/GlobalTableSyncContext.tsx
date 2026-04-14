@@ -17,8 +17,7 @@
 import React, { useEffect, useContext, createContext, useState, useCallback, useRef } from 'react';
 import { useTableSync } from '../hooks/useTableSync';
 import type { SyncState } from '../hooks/useTableSync';
-import { cariFromDb, cariToDb } from '../pages/CariPage';
-import { productFromDb, productToDb } from '../pages/StokPage';
+import { cariFromDb, cariToDb, productFromDb, productToDb } from '../lib/db-transforms';
 import { StorageKey } from '../utils/storage';
 import { startAllSync, stopAllSync, startPeerSync, stopPeerSync, autoSeedIfEmpty } from '../lib/pouchdb';
 import { getCouchDbConfig } from '../lib/db-config';
