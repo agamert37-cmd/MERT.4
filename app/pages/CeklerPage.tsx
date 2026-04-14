@@ -192,6 +192,9 @@ export function CeklerPage() {
   const { canAdd, canDelete, canEdit } = getPagePermissions(user, currentEmployee, 'cekler');
   const sec = usePageSecurity('cekler');
 
+  // Bankalar listesi (GlobalTableSyncContext'ten canlı)
+  const rawBankalar = useGlobalTableData<any>('bankalar');
+
   // PouchDB CRUD — addItem/updateItem/deleteItem PouchDB'ye yazar, CouchDB sync otomatik
   const {
     data: syncedCekler,
@@ -199,11 +202,6 @@ export function CeklerPage() {
     updateItem: updateCekInPouchDB,
     deleteItem: deleteCekFromPouchDB,
   } = useTableSync<CekData>({
-  // Bankalar listesi (GlobalTableSyncContext'ten canlı)
-  const rawBankalar = useGlobalTableData<any>('bankalar');
-
-  // PouchDB/CouchDB senkronizasyonu
-  const { data: syncedCekler, deleteItem: deleteCek } = useTableSync<CekData>({
     tableName: 'cekler',
     storageKey: StorageKey.CEKLER_DATA,
     initialData: [],

@@ -20,9 +20,8 @@ import type { SyncState } from '../hooks/useTableSync';
 import { cariFromDb, cariToDb } from '../pages/CariPage';
 import { productFromDb, productToDb } from '../pages/StokPage';
 import { StorageKey } from '../utils/storage';
-import { startAllSync, stopAllSync, startPeerSync, stopPeerSync } from '../lib/pouchdb';
+import { startAllSync, stopAllSync, startPeerSync, stopPeerSync, autoSeedIfEmpty } from '../lib/pouchdb';
 import { getCouchDbConfig } from '../lib/db-config';
-import { startAllSync, stopAllSync, autoSeedIfEmpty } from '../lib/pouchdb';
 import { toast } from 'sonner';
 
 // ─── Per-tablo sync durumu context ────────────────────────────────────────────
@@ -222,23 +221,13 @@ export function GlobalTableSyncProvider({ children }: GlobalTableSyncProviderPro
     setTableVersions(prev => ({ ...prev, [name]: (prev[name] ?? 0) + 1 }));
   }, []);
 
-  // PouchDB ↔ CouchDB continuous sync başlat (kademeli — 200ms aralık)
-  // Peer URL yapılandırılmışsa eş senkronizasyonu da başlat
+  // PouchDB ↔ CouchDB continuous sync başlat + peer sync + otomatik seed
   useEffect(() => {
     startAllSync();
     const cfg = getCouchDbConfig();
     if (cfg.peerUrl) startPeerSync();
-    return () => {
-      stopAllSync();
-      stopPeerSync();
-  // Ağ kurtarma: pouchdb.ts'deki online/visibilitychange listener'ları otomatik restartAllSync() çağırır.
-  // Ardından: PouchDB boşsa localStorage'dan otomatik doldur → sync CouchDB'ye iter.
-  useEffect(() => {
-    startAllSync();
 
     const seedTimer = setTimeout(() => {
-      // toDb dönüşümlerini geçir — localStorage'da camelCase duran veriyi
-      // PouchDB'ye snake_case olarak kaydet (productFromDb/cariFromDb ile uyumlu)
       autoSeedIfEmpty(
         (totalSeeded) => {
           if (totalSeeded > 0) {
@@ -257,6 +246,7 @@ export function GlobalTableSyncProvider({ children }: GlobalTableSyncProviderPro
 
     return () => {
       stopAllSync();
+      stopPeerSync();
       clearTimeout(seedTimer);
     };
   }, []);
