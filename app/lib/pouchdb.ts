@@ -150,50 +150,68 @@ export function restartAllSync(): void {
 
 // ── Ağ & Görünürlük Kurtarma ──────────────────────────────────
 // Tarayıcı çevrimiçi durumuna geçtiğinde veya sayfa arka plandan öne geldiğinde
-// tüm sync'leri yeniden başlat.
+// tüm sync'leri yeniden başlat + UI'ı taze veri ile güncelle.
 //
 // Neden gerekli?
 // - PouchDB retry:true çoğu durumu halleder; ancak Wi-Fi/4G geçişinde veya
 //   iOS/Android uygulama arka plana alındığında bağlantı nesnesi tamamen ölür.
 // - visibilitychange: Mobil kullanıcı ekranı kapattıktan sonra geri gelince
-//   sync otomatik olarak yeniden başlar.
+//   sync yeniden başlar VE UI tüm tabloları yeniden fetch eder.
+// - pouchdb:app_foregrounded: useTableSync bu olayı dinleyerek fetchData() çağırır,
+//   böylece arka planda başka cihazdan gelen değişiklikler anında UI'a yansır.
 
 let _recoveryListenersAttached = false;
+
+/** Ön plana geliş olayını yayınla — useTableSync dinleyerek fetchData() çağırır */
+function _dispatchForegrounded(): void {
+  if (typeof window === 'undefined') return;
+  window.dispatchEvent(new CustomEvent('pouchdb:app_foregrounded'));
+}
+
+// Çok sık restart'ı önlemek için debounce
+let _restartTimer: ReturnType<typeof setTimeout> | null = null;
+function _debouncedRestart(delayMs: number): void {
+  if (_restartTimer) clearTimeout(_restartTimer);
+  _restartTimer = setTimeout(() => {
+    _restartTimer = null;
+    // Eğer stagger timer'lar zaten çalışıyorsa (startAllSync devam ediyor) dokunma
+    if (staggerTimers.length > 0) {
+      _dispatchForegrounded(); // yine de UI refresh yap
+      return;
+    }
+    restartAllSync();
+    // Restart tamamlandıktan kısa süre sonra UI'ı güncelle
+    setTimeout(_dispatchForegrounded, 600);
+  }, delayMs);
+}
 
 function _attachRecoveryListeners(): void {
   if (_recoveryListenersAttached || typeof window === 'undefined') return;
   _recoveryListenersAttached = true;
 
-  // Ağ bağlantısı geri gelince
+  // Ağ bağlantısı geri gelince — kısa bekleme (ağ adaptörü stabilize olsun)
   window.addEventListener('online', () => {
     console.info('[PouchDB] Ağ bağlantısı yeniden kuruldu — sync yeniden başlatılıyor…');
-    setTimeout(() => restartAllSync(), 1000);
+    _debouncedRestart(800);
   });
 
   // Mobil: ekran kilidi açıldığında / sekmeye geri dönüldüğünde
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible') {
-      console.info('[PouchDB] Sayfa görünür oldu — sync kontrol ediliyor…');
-      // Kısa bir gecikme: ağ arayüzü stabilize olsun
-      setTimeout(() => {
-        // Aktif sync varsa dokunma; hiç sync yoksa yeniden başlat
-        if (syncs.size === 0) {
-          restartAllSync();
-        } else {
-          // Ölü sync'leri tespit et ve yeniden başlat
-          let hasDeadSync = false;
-          for (const [name, sync] of syncs) {
-            // PouchDB sync nesnesi 'cancelled' ise ölü demektir
-            if ((sync as any).cancelled) {
-              syncs.delete(name);
-              hasDeadSync = true;
-            }
-          }
-          if (hasDeadSync) restartAllSync();
-        }
-      }, 1500);
-    }
+    if (document.visibilityState !== 'visible') return;
+    console.info('[PouchDB] Sayfa görünür oldu — sync + UI yenileniyor…');
+
+    // Mobilde ağın hazır olması için biraz bekle
+    _debouncedRestart(1000);
   });
+
+  // Android: ağ tipi değişimi (Wi-Fi ↔ 5G geçişi)
+  const conn = (navigator as any).connection;
+  if (conn) {
+    conn.addEventListener('change', () => {
+      console.info('[PouchDB] Ağ tipi değişti — sync yeniden başlatılıyor…');
+      _debouncedRestart(1200);
+    });
+  }
 }
 
 _attachRecoveryListeners();

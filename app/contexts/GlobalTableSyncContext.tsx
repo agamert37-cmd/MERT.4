@@ -161,6 +161,8 @@ export function GlobalTableSyncProvider({ children }: GlobalTableSyncProviderPro
   // Hata toast'u sadece bir kez göster (her hatalı sync olayında gösterme)
   const shownErrorToastRef = useRef(false);
   const shownConnectedToastRef = useRef(false);
+  // Ref ile tutan — listener closure'ından güncel değeri okumak için
+  const couchdbConnectedRef = useRef<boolean | null>(null);
 
   useEffect(() => {
     function handleSyncEvent(e: Event) {
@@ -171,9 +173,10 @@ export function GlobalTableSyncProvider({ children }: GlobalTableSyncProviderPro
       };
 
       if (type === 'error') {
+        couchdbConnectedRef.current = false;
         setCouchdbConnected(false);
         setCouchdbError(errorMsg || 'Bağlantı hatası');
-        shownConnectedToastRef.current = false; // Reconnect toast için sıfırla
+        shownConnectedToastRef.current = false;
         if (!shownErrorToastRef.current) {
           shownErrorToastRef.current = true;
           toast.error(
@@ -188,10 +191,11 @@ export function GlobalTableSyncProvider({ children }: GlobalTableSyncProviderPro
         }
       } else if (type === 'connected' || type === 'paused') {
         // paused hatasız = catch-up tamamlandı, bağlantı sağlıklı
-        const wasDisconnected = couchdbConnected === false;
+        const wasDisconnected = couchdbConnectedRef.current === false;
+        couchdbConnectedRef.current = true;
         setCouchdbConnected(true);
         setCouchdbError(null);
-        shownErrorToastRef.current = false; // Yeni hata için sıfırla
+        shownErrorToastRef.current = false;
         if (wasDisconnected && !shownConnectedToastRef.current) {
           shownConnectedToastRef.current = true;
           toast.success('✅ CouchDB bağlantısı yeniden kuruldu — senkronizasyon devam ediyor.', {
@@ -203,7 +207,7 @@ export function GlobalTableSyncProvider({ children }: GlobalTableSyncProviderPro
 
     window.addEventListener('pouchdb:sync_status', handleSyncEvent);
     return () => window.removeEventListener('pouchdb:sync_status', handleSyncEvent);
-  }, [couchdbConnected]);
+  }, []);  // Artık dependency yok — ref üzerinden güncel değer okunuyor
 
   const registerTable = useCallback((status: TableSyncStatus) => {
     setTables(prev => {

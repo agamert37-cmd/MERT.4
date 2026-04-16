@@ -147,11 +147,15 @@ export function MobileBottomNav() {
     haptic('medium');
     try {
       startAllSync();
+      // Sync başladıktan sonra tüm tabloları yeniden fetch et — UI taze veriyi görsün
+      setTimeout(() => {
+        window.dispatchEvent(new CustomEvent('pouchdb:app_foregrounded'));
+      }, 800);
       toast.success('Veriler güncellendi', { id: 'mobile-sync', duration: 2000 });
     } catch {
       toast.error('Senkronizasyon başarısız', { id: 'mobile-sync', duration: 2000 });
     } finally {
-      setIsSyncing(false);
+      setTimeout(() => setIsSyncing(false), 1000);
     }
   }, [isSyncing]);
 
