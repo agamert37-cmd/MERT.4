@@ -13,8 +13,12 @@ echo.
 where python >nul 2>nul
 if %errorlevel% neq 0 (
     echo  [HATA]  Python bulunamadi!
-    echo  Cozum   : https://python.org/downloads
-    echo  Not     : Kurulumda "Add Python to PATH" secenegini isaretleyin.
+    echo.
+    echo  Cozum 1: https://python.org/downloads adresine git
+    echo           Kurulumda "Add Python to PATH" tikini MUTLAKA secin!
+    echo.
+    echo  Cozum 2: Microsoft Store'dan yuklediysen KALDIRIP python.org'dan kurun.
+    echo           Store versiyonu tkinter iceremeyebilir.
     echo.
     pause
     exit /b 1
@@ -29,8 +33,10 @@ echo  [OK]  %PY_VER% bulundu.
 python -c "import tkinter" >nul 2>nul
 if %errorlevel% neq 0 (
     echo  [HATA]  tkinter modulu bulunamadi!
+    echo.
     echo  Cozum   : Python'u python.org'dan yeniden yukleyin.
-    echo  Kurulum : "Customize installation" → "tcl/tk and IDLE" secin.
+    echo  Kurulum : Kurulumda "Customize installation" tiklayin
+    echo            Sonraki ekranda "tcl/tk and IDLE" tikli olsun.
     echo.
     pause
     exit /b 1
@@ -40,16 +46,29 @@ echo  [OK]  tkinter hazir.
 :: ── Docker kontrolü ─────────────────────────────────────────────────────────
 where docker >nul 2>nul
 if %errorlevel% neq 0 (
-    echo  [UYARI] Docker bulunamadi — GUI acilacak ama Docker islemleri calismazs.
+    echo  [UYARI] Docker bulunamadi!
+    echo          Cozum: https://www.docker.com/products/docker-desktop
+    echo          Docker Desktop'u kurun ve baslatin.
+    echo.
 ) else (
-    for /f "tokens=*" %%d in ('docker --version 2^>^&1') do set DOCKER_VER=%%d
-    echo  [OK]  %DOCKER_VER% bulundu.
+    :: Docker calisiyor mu kontrol et
+    docker info >nul 2>nul
+    if %errorlevel% neq 0 (
+        echo  [UYARI] Docker kurulu ama CALISMIYOR!
+        echo          Docker Desktop uygulamasini acin ve bekleme ikonu gecinceye kadar bekleyin.
+        echo.
+    ) else (
+        for /f "tokens=*" %%d in ('docker --version 2^>^&1') do set DOCKER_VER=%%d
+        echo  [OK]  %DOCKER_VER% - Calisıyor.
+    )
 )
 
 :: ── Git kontrolü ────────────────────────────────────────────────────────────
 where git >nul 2>nul
 if %errorlevel% neq 0 (
-    echo  [UYARI] Git bulunamadi — Güncelleme islemleri calismazs.
+    echo  [UYARI] Git bulunamadi!
+    echo          Cozum: https://git-scm.com/download/win adresinden kurun.
+    echo.
 ) else (
     for /f "tokens=*" %%g in ('git --version 2^>^&1') do set GIT_VER=%%g
     echo  [OK]  %GIT_VER% bulundu.
@@ -70,6 +89,16 @@ if %EXIT_CODE% equ 0 (
     echo  [OK]  Uygulama normal kapatildi.
 ) else (
     echo  [HATA]  Uygulama beklenmedik sekilde kapandi. ^(Kod: %EXIT_CODE%^)
-    echo  Hata ayiklamak icin: python updater.py
+    echo.
+    if exist "%~dp0updater_hata.log" (
+        echo  Hata detaylari: %~dp0updater_hata.log
+        echo.
+        echo  ─── Hata Ozeti ───────────────────────────────
+        type "%~dp0updater_hata.log"
+        echo  ──────────────────────────────────────────────
+    ) else (
+        echo  Hata ayiklamak icin terminalde calistirin: python updater.py
+    )
+    echo.
     pause
 )

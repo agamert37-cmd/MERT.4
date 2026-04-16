@@ -2721,6 +2721,45 @@ class MertUpdater(tk.Tk):
 
 
 if __name__ == "__main__":
-    app = MertUpdater()
-    app.protocol("WM_DELETE_WINDOW", lambda: (app._stop_auto_timer(), app.destroy()))
-    app.mainloop()
+    import traceback, sys
+
+    log_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "updater_hata.log")
+
+    try:
+        app = MertUpdater()
+        app.protocol("WM_DELETE_WINDOW", lambda: (app._stop_auto_timer(), app.destroy()))
+        app.mainloop()
+    except Exception as _exc:
+        # Hatayı dosyaya yaz ve MessageBox'ta göster (konsol açık olmasa bile görünür)
+        _tb = traceback.format_exc()
+        try:
+            with open(log_path, "w", encoding="utf-8") as _f:
+                _f.write(f"Tarih: {datetime.datetime.now()}\n")
+                _f.write(f"Python: {sys.version}\n")
+                _f.write(f"Platform: {sys.platform}\n\n")
+                _f.write(_tb)
+        except Exception:
+            pass
+
+        # tkinter yüklenemedi bile olsa fallback MessageBox (Windows ctypes)
+        try:
+            import tkinter.messagebox as _mb
+            _root = tk.Tk()
+            _root.withdraw()
+            _mb.showerror(
+                "MERT.4 — Başlatma Hatası",
+                f"Uygulama başlatılamadı!\n\nHata:\n{str(_exc)}\n\nDetaylar: {log_path}"
+            )
+            _root.destroy()
+        except Exception:
+            try:
+                import ctypes
+                ctypes.windll.user32.MessageBoxW(
+                    0,
+                    f"Uygulama başlatılamadı!\n\n{str(_exc)}\n\nDetaylı hata: {log_path}",
+                    "MERT.4 — Başlatma Hatası",
+                    0x10
+                )
+            except Exception:
+                print("HATA:", _tb)
+        sys.exit(1)

@@ -17,10 +17,10 @@
 import React, { useEffect, useContext, createContext, useState, useCallback, useRef } from 'react';
 import { useTableSync } from '../hooks/useTableSync';
 import type { SyncState } from '../hooks/useTableSync';
-import { cariFromDb, cariToDb } from '../pages/CariPage';
-import { productFromDb, productToDb } from '../pages/StokPage';
+import { cariFromDb, cariToDb, productFromDb, productToDb } from '../lib/db-transforms';
 import { StorageKey } from '../utils/storage';
-import { startAllSync, stopAllSync, autoSeedIfEmpty } from '../lib/pouchdb';
+import { startAllSync, stopAllSync, startPeerSync, stopPeerSync, autoSeedIfEmpty } from '../lib/pouchdb';
+import { getCouchDbConfig } from '../lib/db-config';
 import { toast } from 'sonner';
 
 // ─── Per-tablo sync durumu context ────────────────────────────────────────────
@@ -166,16 +166,19 @@ export function GlobalTableSyncProvider({ children }: GlobalTableSyncProviderPro
 
   useEffect(() => {
     function handleSyncEvent(e: Event) {
-      const { type, errorMsg } = (e as CustomEvent).detail as {
-        type: 'error' | 'connected' | 'paused';
-        dbName: string;
-        errorMsg?: string;
+      const state = (e as CustomEvent).detail as {
+        tableName: string;
+        status: 'active' | 'paused' | 'error' | 'stopped';
+        error?: string;
       };
 
       if (type === 'error') {
         couchdbConnectedRef.current = false;
         setCouchdbConnected(false);
         setCouchdbError(errorMsg || 'Bağlantı hatası');
+      if (state.status === 'error') {
+        setCouchdbConnected(false);
+        setCouchdbError(state.error || 'Bağlantı hatası');
         shownConnectedToastRef.current = false;
         if (!shownErrorToastRef.current) {
           shownErrorToastRef.current = true;
@@ -183,8 +186,8 @@ export function GlobalTableSyncProvider({ children }: GlobalTableSyncProviderPro
             '⚠️ CouchDB sunucusuna bağlanılamıyor — veriler yalnızca bu cihazda kaydedilir.',
             {
               duration: 6000,
-              description: errorMsg
-                ? `Hata: ${errorMsg.substring(0, 80)}`
+              description: state.error
+                ? `Hata: ${state.error.substring(0, 80)}`
                 : 'Sunucu sayfasından bağlantıyı kontrol edin.',
             }
           );
@@ -193,6 +196,9 @@ export function GlobalTableSyncProvider({ children }: GlobalTableSyncProviderPro
         // paused hatasız = catch-up tamamlandı, bağlantı sağlıklı
         const wasDisconnected = couchdbConnectedRef.current === false;
         couchdbConnectedRef.current = true;
+      } else if (state.status === 'active' || state.status === 'paused') {
+        // active veya hatasız paused = bağlantı sağlıklı
+        const wasDisconnected = couchdbConnected === false;
         setCouchdbConnected(true);
         setCouchdbError(null);
         shownErrorToastRef.current = false;
@@ -208,6 +214,9 @@ export function GlobalTableSyncProvider({ children }: GlobalTableSyncProviderPro
     window.addEventListener('pouchdb:sync_status', handleSyncEvent);
     return () => window.removeEventListener('pouchdb:sync_status', handleSyncEvent);
   }, []);  // Artık dependency yok — ref üzerinden güncel değer okunuyor
+    window.addEventListener('pouchdb_sync_status', handleSyncEvent);
+    return () => window.removeEventListener('pouchdb_sync_status', handleSyncEvent);
+  }, [couchdbConnected]);
 
   const registerTable = useCallback((status: TableSyncStatus) => {
     setTables(prev => {
@@ -224,15 +233,13 @@ export function GlobalTableSyncProvider({ children }: GlobalTableSyncProviderPro
     setTableVersions(prev => ({ ...prev, [name]: (prev[name] ?? 0) + 1 }));
   }, []);
 
-  // PouchDB ↔ CouchDB continuous sync başlat (kademeli — 200ms aralık)
-  // Ağ kurtarma: pouchdb.ts'deki online/visibilitychange listener'ları otomatik restartAllSync() çağırır.
-  // Ardından: PouchDB boşsa localStorage'dan otomatik doldur → sync CouchDB'ye iter.
+  // PouchDB ↔ CouchDB continuous sync başlat + peer sync + otomatik seed
   useEffect(() => {
     startAllSync();
+    const cfg = getCouchDbConfig();
+    if (cfg.peerUrl) startPeerSync();
 
     const seedTimer = setTimeout(() => {
-      // toDb dönüşümlerini geçir — localStorage'da camelCase duran veriyi
-      // PouchDB'ye snake_case olarak kaydet (productFromDb/cariFromDb ile uyumlu)
       autoSeedIfEmpty(
         (totalSeeded) => {
           if (totalSeeded > 0) {
@@ -251,6 +258,7 @@ export function GlobalTableSyncProvider({ children }: GlobalTableSyncProviderPro
 
     return () => {
       stopAllSync();
+      stopPeerSync();
       clearTimeout(seedTimer);
     };
   }, []);

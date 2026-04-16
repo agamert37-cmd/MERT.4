@@ -24,14 +24,12 @@ import {
 } from 'lucide-react';
 import { useSyncContext } from '../contexts/SyncContext';
 import { useGlobalSyncTables } from '../contexts/GlobalTableSyncContext';
+import { seedPouchDbFromLocalStorage } from '../lib/pouchdb';
 import { toast } from 'sonner';
 
 interface SyncStatusBarProps {
   tableName?: string;
 }
-
-
-import { seedPouchDbFromLocalStorage } from '../lib/pouchdb';
 
 export function SyncStatusBar({ tableName }: SyncStatusBarProps) {
   const {

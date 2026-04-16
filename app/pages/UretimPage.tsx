@@ -28,6 +28,7 @@ import {
 import { toast } from 'sonner';
 import { getFromStorage, setInStorage, StorageKey } from '../utils/storage';
 import { kvGet, kvSet } from '../lib/pouchdb-kv';
+import { getDb } from '../lib/pouchdb';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useEmployee } from '../contexts/EmployeeContext';
@@ -1536,6 +1537,7 @@ export function UretimPage() {
     setInStorage(StorageKey.URETIM_DEFAULTS, newDefaults);
     kvSet('uretim_defaults', newDefaults).catch(() => {});
 
+    // ─── POUCHDB SYNC: Değişen stok kalemlerini urunler tablosuna yaz ───
     // ─── SYNC: Değişen stok kalemlerini yaz (useTableSync → PouchDB → CouchDB) ───
     const changedItems: any[] = [];
     // Hammadde (stoktan düşülen)
@@ -1544,6 +1546,22 @@ export function UretimPage() {
     // Çıktı ürün (eklenen/güncellenen)
     const updatedCikti = updatedStok.find((s: any) => s.id === newKayit.ciktiStokId);
     if (updatedCikti && updatedCikti.id !== updatedHammadde?.id) changedItems.push(updatedCikti);
+    if (changedItems.length > 0) {
+      const urunlerDb = getDb('urunler');
+      for (const item of changedItems) {
+        try {
+          const dbRow = productToDb(item as Product);
+          const existing = await urunlerDb.get(item.id).catch(() => null);
+          if (existing) {
+            await urunlerDb.put({ ...dbRow, _id: item.id, _rev: (existing as any)._rev });
+          } else {
+            await urunlerDb.put({ ...dbRow, _id: item.id });
+          }
+        } catch (e) {
+          console.error('[UretimPage] urunler PouchDB yazma hatası:', e);
+        }
+      }
+    }
     // sync handled by useTableSync → PouchDB → CouchDB
 
     toast.success(

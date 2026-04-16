@@ -1,12 +1,16 @@
-// [AJAN-3 | claude/multi-db-sync-setup-3DmYn | 2026-03-27]
+// [AJAN-3 | claude/multi-db-sync-setup-3DmYn | 2026-04-11]
 /**
  * SyncContext - Global senkronizasyon durumu yönetimi
  * PouchDB + CouchDB bağlantı durumunu takip eder.
- * setupStatus.tables SyncStatusBar'ın beklediği formatla uyumludur.
+ * pouchdb_sync_status window olaylarından gerçek zamanlı durum alır.
  */
 
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { testCouchDbConnection, getAllDbStats } from '../lib/pouchdb';
+import type { TableSyncState } from '../lib/pouchdb';
+
+// Re-export for consumers
+export type { TableSyncState };
 
 // Tablo görüntü adları ve ikonları
 const TABLE_META: Record<string, { displayName: string; icon: string }> = {
@@ -59,6 +63,9 @@ interface SyncContextValue {
   lastSyncAt: number;
   isOnline: boolean;
   syncError: string | null;
+  // Gerçek zamanlı per-table sync durumları
+  tableSyncStatuses: Map<string, TableSyncState>;
+  activeSyncCount: number;
 }
 
 const SyncContext = createContext<SyncContextValue>({
@@ -72,6 +79,8 @@ const SyncContext = createContext<SyncContextValue>({
   lastSyncAt: 0,
   isOnline: true,
   syncError: null,
+  tableSyncStatuses: new Map(),
+  activeSyncCount: 0,
 });
 
 export function SyncProvider({ children }: { children: React.ReactNode }) {
@@ -80,7 +89,28 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
   const [lastChecked, setLastChecked] = useState<Date | null>(null);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [syncError, setSyncError] = useState<string | null>(null);
+  const [tableSyncStatuses, setTableSyncStatuses] = useState<Map<string, TableSyncState>>(new Map());
   const isCheckingRef = useRef(false);
+
+  // pouchdb_sync_status window event dinle — gerçek zamanlı per-table durum
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const state = (e as CustomEvent).detail as TableSyncState;
+      setTableSyncStatuses(prev => {
+        const next = new Map(prev);
+        next.set(state.tableName, state);
+        return next;
+      });
+    };
+    window.addEventListener('pouchdb_sync_status', handler);
+    return () => window.removeEventListener('pouchdb_sync_status', handler);
+  }, []);
+
+  // Aktif sync sayısı ve isSyncing — gerçek değerler (artık sahte değil)
+  const activeSyncCount = Array.from(tableSyncStatuses.values()).filter(
+    s => s.status === 'active'
+  ).length;
+  const isSyncing = activeSyncCount > 0;
 
   const recheckTables = useCallback(async () => {
     if (isCheckingRef.current) return;
@@ -158,11 +188,15 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
       lastChecked,
       recheckTables,
       isSupabaseConfigured: true,
-      pendingCount: 0,
-      isSyncing: false,
+      pendingCount: Array.from(tableSyncStatuses.values()).reduce(
+        (sum, s) => sum + (s.pending ?? 0), 0
+      ),
+      isSyncing,
       lastSyncAt: lastChecked?.getTime() || 0,
       isOnline,
       syncError,
+      tableSyncStatuses,
+      activeSyncCount,
     }}>
       {children}
     </SyncContext.Provider>

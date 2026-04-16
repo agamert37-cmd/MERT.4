@@ -29,6 +29,7 @@ import {
 } from 'recharts';
 import { PremiumTooltip, GlowBar, EmptyChartState } from '../components/ChartComponents';
 import { kvGet, kvSet } from '../lib/pouchdb-kv';
+import { BarcodeScanner } from '../components/BarcodeScanner';
 
 export type MovementType = 'ALIS' | 'SATIS' | 'MUSTERI_IADE' | 'TOPTANCI_IADE' | 'FIRE' | 'URETIM_CIKIS' | 'URETIM_GIRIS' | 'FATURA_ALIS' | 'FATURA_SATIS' | 'FATURA_IPTAL';
 export type ProductCategory = string;
@@ -461,6 +462,7 @@ export function StokPage() {
   // UI State
   const [activeTab, setActiveTab] = useState<TabKey>('urunler');
   const [searchTerm, setSearchTerm] = useState('');
+  const [isScannerOpen, setIsScannerOpen] = useState(false);
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<string>('Tumu');
   const [expandedProducts, setExpandedProducts] = useState<Set<string>>(new Set());
   const [sortKey, setSortKey] = useState<SortKey>('name');
@@ -908,13 +910,22 @@ export function StokPage() {
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-4">
           {/* Filter Bar */}
           <GlassCard className="p-3 sm:p-4 flex flex-col sm:flex-row gap-3">
-            <div className="flex-1 relative">
-              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
-              <input
-                type="text" value={searchTerm} onChange={e => setSearchTerm(e.target.value)}
-                placeholder="Urun adi ara..."
-                className="w-full pl-10 pr-4 py-2.5 bg-secondary/50 border border-border rounded-xl text-sm text-white placeholder-gray-600 focus:border-blue-500/50 transition-all outline-none"
-              />
+            <div className="flex-1 relative flex gap-2">
+              <div className="flex-1 relative">
+                <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
+                <input
+                  type="text" value={searchTerm} onChange={e => setSearchTerm(e.target.value)}
+                  placeholder="Urun adi veya barkod ara..."
+                  className="w-full pl-10 pr-4 py-2.5 bg-secondary/50 border border-border rounded-xl text-sm text-white placeholder-gray-600 focus:border-blue-500/50 transition-all outline-none"
+                />
+              </div>
+              <button
+                onClick={() => setIsScannerOpen(true)}
+                className="px-3 py-2.5 bg-secondary/50 border border-border hover:border-blue-500/50 rounded-xl transition-all text-gray-400 hover:text-blue-400"
+                title="Barkod / QR Tara"
+              >
+                <Camera className="w-4 h-4" />
+              </button>
             </div>
             <div className="flex gap-2 flex-wrap">
               <select
@@ -1723,6 +1734,18 @@ export function StokPage() {
           )}
         </Dialog.Content></Dialog.Portal>
       </Dialog.Root>
+
+      {/* Barkod / QR Tarayıcı */}
+      {isScannerOpen && (
+        <BarcodeScanner
+          onDetect={(value) => {
+            setSearchTerm(value);
+            setIsScannerOpen(false);
+            toast.success(`Barkod okundu: ${value}`, { duration: 2000 });
+          }}
+          onClose={() => setIsScannerOpen(false)}
+        />
+      )}
     </div>
   );
 }

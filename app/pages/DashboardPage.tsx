@@ -198,15 +198,24 @@ export function DashboardPage() {
 
   const todayNetProfit = realtimeRevenue - todayPurchaseTotal;
 
-  const criticalStockCount = useMemo(() => {
+  const criticalStockItems = useMemo(() => {
     return rawStok.filter(s => {
       const name = (s.name || '').trim();
       if (!name) return false;
       const stock = safeNum(s.currentStock ?? s.current_stock ?? s.stock);
       const min = safeNum(s.minStock ?? s.min_stock);
       return min > 0 && stock <= min;
-    }).length;
+    }).sort((a, b) => {
+      const aStock = safeNum(a.currentStock ?? a.current_stock ?? a.stock);
+      const aMin = safeNum(a.minStock ?? a.min_stock);
+      const bStock = safeNum(b.currentStock ?? b.current_stock ?? b.stock);
+      const bMin = safeNum(b.minStock ?? b.min_stock);
+      // En kritik (en düşük stok/min oranı) üste
+      return (aStock / Math.max(aMin, 1)) - (bStock / Math.max(bMin, 1));
+    });
   }, [rawStok]);
+
+  const criticalStockCount = criticalStockItems.length;
 
   const activeEmployeeCount = useMemo(() => {
     return rawPersonel.filter(p => p.active !== false && p.status !== 'inactive').length;
@@ -1826,6 +1835,55 @@ export function DashboardPage() {
               <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-emerald-500" /> Alacaklı</span>
             </div>
           </div>
+        </motion.div>
+      )}
+
+      {/* Kritik Stok Listesi */}
+      {criticalStockItems.length > 0 && (
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.87 }}
+          className="p-4 sm:p-5 lg:p-6 rounded-2xl lg:rounded-3xl bg-[#111] border border-red-500/20"
+        >
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4 sm:w-5 sm:h-5 text-red-400" />
+              <div>
+                <h2 className="text-sm sm:text-base font-bold text-white">Kritik Stok Uyarıları</h2>
+                <p className="text-[10px] sm:text-[11px] text-gray-500">{criticalStockItems.length} ürün minimum seviyede veya altında</p>
+              </div>
+            </div>
+            <button onClick={() => navigate('/stok')} className="text-xs font-bold text-red-400 hover:text-red-300 flex items-center gap-1 shrink-0">
+              Stok Yönetimi <ArrowRight className="w-3 h-3 sm:w-4 sm:h-4" />
+            </button>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+            {criticalStockItems.slice(0, 9).map(s => {
+              const stock = safeNum(s.currentStock ?? s.current_stock ?? s.stock);
+              const min = safeNum(s.minStock ?? s.min_stock);
+              const pct = min > 0 ? Math.min((stock / min) * 100, 100) : 0;
+              const isEmpty = stock <= 0;
+              return (
+                <div key={s.id} className={`flex items-center gap-3 p-3 rounded-xl border ${isEmpty ? 'bg-red-500/10 border-red-500/30' : 'bg-amber-500/10 border-amber-500/20'}`}>
+                  <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${isEmpty ? 'bg-red-500/20' : 'bg-amber-500/20'}`}>
+                    <Package className={`w-4 h-4 ${isEmpty ? 'text-red-400' : 'text-amber-400'}`} />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-bold text-white truncate">{s.name}</p>
+                    <div className="flex items-center gap-2 mt-1">
+                      <div className="flex-1 h-1.5 rounded-full bg-white/10 overflow-hidden">
+                        <div className={`h-full rounded-full ${isEmpty ? 'bg-red-500' : 'bg-amber-500'}`} style={{ width: `${pct}%` }} />
+                      </div>
+                      <span className={`text-[9px] font-mono font-bold shrink-0 ${isEmpty ? 'text-red-400' : 'text-amber-400'}`}>
+                        {stock}/{min} {s.unit || ''}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          {criticalStockItems.length > 9 && (
+            <p className="text-[10px] text-gray-600 text-center mt-3">+{criticalStockItems.length - 9} daha fazla ürün kritik seviyede</p>
+          )}
         </motion.div>
       )}
 

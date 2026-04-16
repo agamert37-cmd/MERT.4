@@ -31,6 +31,7 @@ import * as Dialog from '@radix-ui/react-dialog';
 import * as AlertDialog from '@radix-ui/react-alert-dialog';
 import { generateGunSonuPDF, type GunSonuPDFData } from '../utils/reportGenerator';
 import { kvGet, kvSet } from '../lib/pouchdb-kv';
+import { sendGunSonuNotification, requestNotifPermission } from '../utils/notifications';
 
 interface Transaction {
   id: string;
@@ -322,6 +323,12 @@ export function GunSonuPage() {
     logActivity('day_end', 'Gün sonu kapatıldı', { employeeName: user?.name || currentEmployee?.name, page: 'GunSonu', description: `Gün sonu ${currentEmployee?.name} tarafından kapatıldı.` });
     emit('gunsonu:closed', { date: todayISO, totalSales });
     toast.success(`Gün sonu kapatıldı! İşlemi yapan: ${currentEmployee?.name}`);
+    // Tarayıcı push bildirimi — izin mevcutsa gün özeti gönder
+    sendGunSonuNotification({
+      totalRevenue: totalSales,
+      totalOrders: transactions.filter(t => t.type === 'sale').length,
+      kasaBalance: netCash,
+    }).catch(() => {/* bildirim gönderilemedi, sessizce atla */});
   };
 
   const handleReopenDay = () => {
@@ -433,6 +440,20 @@ export function GunSonuPage() {
           )}
         </div>
       </div>
+
+      {/* Bildirim izni bannerı — bildirimler destekleniyorsa ve izin henüz verilmemişse */}
+      {typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'default' && (
+        <div className="flex items-center gap-3 p-3 rounded-xl bg-blue-500/10 border border-blue-500/20">
+          <ShieldCheck className="w-4 h-4 text-blue-400 shrink-0" />
+          <p className="text-xs text-blue-300 flex-1">Gün sonu kapandığında bildirim almak ister misiniz?</p>
+          <button
+            onClick={() => requestNotifPermission().then(p => p === 'granted' && toast.success('Bildirimler etkinleştirildi'))}
+            className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold rounded-lg transition-colors shrink-0"
+          >
+            İzin Ver
+          </button>
+        </div>
+      )}
 
       {/* Özet Kartları */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-4">
