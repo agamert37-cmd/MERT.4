@@ -328,6 +328,23 @@ export function CariDetailPage() {
   const totalBalance = cari.balance || 0;
   const totalFisler = allFisler.length;
 
+  // Son 30 günlük özet istatistikler
+  const last30Stats = useMemo(() => {
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - 30);
+    const recent = allFisler.filter(f => new Date(f.date) >= cutoff);
+    let satis = 0, iade = 0, odeme = 0;
+    recent.forEach(fis => {
+      (fis.items || []).forEach((item: any) => {
+        const tp = Math.abs(item.totalPrice || 0);
+        if (item.type === 'iade') iade += tp;
+        else satis += tp;
+      });
+      (fis.payments || []).forEach((p: any) => { odeme += Math.abs(p.amount || 0); });
+    });
+    return { fisCount: recent.length, satis, iade, odeme, netSatis: satis - iade };
+  }, [allFisler]);
+
   // ─── NOT SİSTEMİ ──────────────────────────────────────────────────
   interface CariNote {
     id: string;
@@ -594,6 +611,35 @@ export function CariDetailPage() {
           </div>
         </div>
       </div>
+
+      {/* ─── Son 30 Gün Özet Kartı ─── */}
+      {last30Stats.fisCount > 0 && (
+        <div className="p-4 sm:p-6 rounded-2xl bg-gradient-to-r from-indigo-950/40 to-purple-950/30 border border-indigo-500/20">
+          <div className="flex items-center gap-2 mb-4">
+            <Clock className="w-4 h-4 sm:w-5 sm:h-5 text-indigo-400" />
+            <h3 className="text-sm sm:text-base font-bold text-white">Son 30 Günlük Özet</h3>
+            <span className="ml-auto px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 text-[9px] font-bold border border-indigo-500/30">{last30Stats.fisCount} Fiş</span>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div className="p-3 rounded-xl bg-white/5 border border-white/10 text-center">
+              <p className="text-[9px] font-bold text-gray-500 uppercase tracking-widest mb-1">Satış</p>
+              <p className="text-base sm:text-xl font-black text-emerald-400">₺{last30Stats.satis.toLocaleString('tr-TR')}</p>
+            </div>
+            <div className="p-3 rounded-xl bg-white/5 border border-white/10 text-center">
+              <p className="text-[9px] font-bold text-gray-500 uppercase tracking-widest mb-1">İade</p>
+              <p className="text-base sm:text-xl font-black text-red-400">₺{last30Stats.iade.toLocaleString('tr-TR')}</p>
+            </div>
+            <div className="p-3 rounded-xl bg-white/5 border border-white/10 text-center">
+              <p className="text-[9px] font-bold text-gray-500 uppercase tracking-widest mb-1">Ödeme</p>
+              <p className="text-base sm:text-xl font-black text-blue-400">₺{last30Stats.odeme.toLocaleString('tr-TR')}</p>
+            </div>
+            <div className="p-3 rounded-xl bg-white/5 border border-white/10 text-center">
+              <p className="text-[9px] font-bold text-gray-500 uppercase tracking-widest mb-1">Net Satış</p>
+              <p className="text-base sm:text-xl font-black text-amber-400">₺{last30Stats.netSatis.toLocaleString('tr-TR')}</p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ─── Tabs / Sections ─── */}
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 sm:gap-8">

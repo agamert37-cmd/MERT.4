@@ -1148,16 +1148,21 @@ export function CariPage() {
 
                 {/* Balance */}
                 <div className={`flex items-center justify-between p-3 rounded-xl ${
-                  cari.balance > 0 ? 'bg-green-900/20 border border-green-700/30' : cari.balance < 0 ? 'bg-red-900/20 border border-red-700/30' : 'bg-secondary border border-border'
+                  cari.balance > 1000 ? 'bg-amber-900/20 border border-amber-600/40' : cari.balance > 0 ? 'bg-green-900/20 border border-green-700/30' : cari.balance < 0 ? 'bg-red-900/20 border border-red-700/30' : 'bg-secondary border border-border'
                 }`}>
-                  <span className="text-muted-foreground text-xs font-medium">{t('customers.balance')}</span>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-muted-foreground text-xs font-medium">{t('customers.balance')}</span>
+                    {cari.balance > 1000 && (
+                      <span className="px-1.5 py-0.5 rounded-md bg-amber-500/20 text-amber-400 text-[8px] font-bold border border-amber-500/30">⚠ Borçlu</span>
+                    )}
+                  </div>
                   <div className="flex items-center gap-1.5">
                     {cari.balance > 0 ? (
-                      <TrendingUp className="w-4 h-4 text-green-400" />
+                      <TrendingUp className={`w-4 h-4 ${cari.balance > 1000 ? 'text-amber-400' : 'text-green-400'}`} />
                     ) : cari.balance < 0 ? (
                       <TrendingDown className="w-4 h-4 text-red-400" />
                     ) : null}
-                    <span className={`font-bold ${cari.balance > 0 ? 'text-green-400' : cari.balance < 0 ? 'text-red-400' : 'text-muted-foreground'}`}>
+                    <span className={`font-bold ${cari.balance > 1000 ? 'text-amber-400' : cari.balance > 0 ? 'text-green-400' : cari.balance < 0 ? 'text-red-400' : 'text-muted-foreground'}`}>
                       {cari.balance > 0 ? '+' : ''}₺{Math.abs(cari.balance).toLocaleString()}
                     </span>
                   </div>
@@ -1246,9 +1251,16 @@ export function CariPage() {
                       </div>
                     </td>
                     <td className="px-5 py-4 text-right">
-                      <span className={`font-bold text-sm ${cari.balance > 0 ? 'text-green-400' : cari.balance < 0 ? 'text-red-400' : 'text-muted-foreground'}`}>
-                        {cari.balance > 0 ? '+' : ''}₺{Math.abs(cari.balance).toLocaleString()}
-                      </span>
+                      <div className="flex items-center justify-end gap-1.5">
+                        {cari.balance > 1000 && (
+                          <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md bg-amber-500/15 border border-amber-500/30 text-amber-400 text-[9px] font-bold" title="Yüksek borç uyarısı">
+                            ⚠ Borçlu
+                          </span>
+                        )}
+                        <span className={`font-bold text-sm ${cari.balance > 0 ? 'text-green-400' : cari.balance < 0 ? 'text-red-400' : 'text-muted-foreground'}`}>
+                          {cari.balance > 0 ? '+' : ''}₺{Math.abs(cari.balance).toLocaleString()}
+                        </span>
+                      </div>
                     </td>
                     <td className="px-5 py-4" onClick={(e) => e.stopPropagation()}>
                       <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">

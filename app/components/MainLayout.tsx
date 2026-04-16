@@ -413,7 +413,7 @@ export function MainLayout() {
 
   return (
     <Tooltip.Provider delayDuration={200}>
-      <div className="min-h-screen bg-background flex relative overflow-x-hidden text-foreground">
+      <div className="h-screen bg-background flex relative overflow-hidden text-foreground">
         {/* Subtle Background Ambient Glow */}
         <div className="fixed inset-0 pointer-events-none z-0">
           <div className="absolute top-[-15%] left-[15%] w-[40%] h-[45%] bg-blue-600/[0.04] rounded-full blur-[160px]" />
@@ -876,7 +876,7 @@ export function MainLayout() {
         </motion.aside>
 
         {/* Main Content */}
-        <div className="flex-1 flex flex-col min-w-0">
+        <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
           {/* Top Bar */}
           <header
             className="bg-sidebar/80 backdrop-blur-xl border-b border-sidebar-border flex items-center justify-between px-2 sm:px-6 z-10 relative"

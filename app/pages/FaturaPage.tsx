@@ -4,7 +4,7 @@ import {
   Building2, User, Calendar, Receipt, CheckCircle2, XCircle, Camera,
   Package, ArrowUpRight, ArrowDownRight, Percent, AlertTriangle,
   ChevronDown, Hash, Phone, MapPin, FileCheck, Sparkles, Image as ImageIcon,
-  Store, Truck, ToggleLeft, ToggleRight,
+  Store, Truck, ToggleLeft, ToggleRight, MessageCircle,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { staggerContainer, rowItem, hover, tap } from '../utils/animations';
@@ -125,6 +125,27 @@ const AnimatedCounter = ({ value, prefix = '', suffix = '' }: { value: number; p
   }, [value]);
   return <span>{prefix}{displayValue.toLocaleString('tr-TR')}{suffix}</span>;
 };
+
+// ─── WhatsApp Paylaşım ──────────────────────────────────────────
+function shareViaWhatsApp(fatura: Fatura) {
+  const tarih = new Date(fatura.date).toLocaleDateString('tr-TR');
+  const satirlar = (fatura.faturaItems || [])
+    .map((i: any) => `• ${i.name}: ${i.quantity} ${i.unit} × ₺${Number(i.unitPrice).toFixed(2)} = ₺${Number(i.totalPrice).toFixed(2)}`)
+    .join('\n');
+  const tip = fatura.type === 'satis' ? 'Satış Faturası' : 'Alış Faturası';
+  const text = [
+    `🧾 ${tip.toUpperCase()}`,
+    `No: ${fatura.faturaNo || fatura.id.slice(-8).toUpperCase()}`,
+    `Tarih: ${tarih}`,
+    `Müşteri: ${fatura.counterParty}`,
+    '',
+    satirlar,
+    '',
+    `KDV (%${fatura.kdvRate}): ₺${Number(fatura.kdvAmount).toFixed(2)}`,
+    `TOPLAM: ₺${Number(fatura.grossAmount).toLocaleString('tr-TR', { minimumFractionDigits: 2 })}`,
+  ].join('\n');
+  window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
+}
 
 // ─── Main Page ──────────────────────────────────────────────────
 export function FaturaPage() {
@@ -881,6 +902,9 @@ export function FaturaPage() {
 
                 {/* Actions */}
                 <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity" onClick={e => e.stopPropagation()}>
+                  <button onClick={() => shareViaWhatsApp(fatura)} className="p-2 hover:bg-green-500/10 rounded-lg transition-all" title="WhatsApp ile Paylaş">
+                    <MessageCircle className="w-4 h-4 text-green-400" />
+                  </button>
                   {fatura.status === 'aktif' && fatura.type === 'satis' && (
                     <button onClick={() => handleDownloadUBL(fatura)} className="p-2 hover:bg-blue-500/10 rounded-lg transition-all" title="e-Fatura XML İndir (LUCA)">
                       <Download className="w-4 h-4 text-blue-400" />
@@ -1473,6 +1497,9 @@ export function FaturaPage() {
                 )}
 
                 <div className="p-6 border-t border-white/10 flex gap-3">
+                  <button onClick={() => shareViaWhatsApp(selectedFatura)} className="py-3 px-4 bg-green-500/10 hover:bg-green-500/20 text-green-400 rounded-xl font-bold transition-all text-sm flex items-center gap-2" title="WhatsApp ile Paylaş">
+                    <MessageCircle className="w-4 h-4" /> WhatsApp
+                  </button>
                   {selectedFatura.status === 'aktif' && (
                     <button onClick={() => handleCancel(selectedFatura.id)} className="flex-1 py-3 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-xl font-bold transition-all text-sm flex items-center justify-center gap-2">
                       <XCircle className="w-4 h-4" /> İptal Et
