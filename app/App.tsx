@@ -6,6 +6,7 @@ import { router } from './routes';
 import { Toaster } from 'sonner';
 import { useEffect } from 'react';
 import { useUpdateCheck } from './hooks/useUpdateCheck';
+import { StorageQuotaBanner } from './components/StorageQuotaBanner';
 
 export default function App() {
   // Dark tema
@@ -22,6 +23,7 @@ export default function App() {
       <GlobalTableSyncProvider>
         <RouterProvider router={router} />
         <SyncStatusBanner />
+        <StorageQuotaBanner />
       </GlobalTableSyncProvider>
       <Toaster
         position="top-right"

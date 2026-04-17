@@ -84,10 +84,62 @@ export async function dualWrite(
   // no-op
 }
 
-// ─── WAL Replay (no-op) ─────────────────────────────────────────────────────
+// ─── WAL Replay ─────────────────────────────────────────────────────────────
 
-export async function replayWAL(_cloudClient: any): Promise<{ replayed: number; failed: number }> {
-  return { replayed: 0, failed: 0 };
+/**
+ * WAL'daki bekleyen yazmaları PouchDB'ye uygular.
+ * Uygulama açılışında veya CouchDB bağlantısı yeniden kurulduktan sonra çağrılır.
+ * _cloudClient artık kullanılmıyor — PouchDB direkt yazılır.
+ */
+export async function replayWAL(_cloudClient?: any): Promise<{ replayed: number; failed: number }> {
+  const entries = walLoad();
+  if (entries.length === 0) return { replayed: 0, failed: 0 };
+
+  // Dinamik import — circular dependency önlemek için
+  const { getDb } = await import('./pouchdb');
+
+  let replayed = 0;
+  let failed = 0;
+  const succeededIds: string[] = [];
+
+  for (const entry of entries) {
+    try {
+      const db = getDb(entry.tableName);
+      if (entry.operation === 'upsert') {
+        const row = { ...entry.row, _id: entry.rowId };
+        // Mevcut _rev alınmadan put yapılamaz — get dene
+        try {
+          const existing = await db.get(entry.rowId) as any;
+          await db.put({ ...row, _rev: existing._rev });
+        } catch (notFound: any) {
+          if (notFound.status === 404) {
+            await db.put(row); // yeni kayıt
+          } else {
+            throw notFound;
+          }
+        }
+      } else if (entry.operation === 'delete') {
+        try {
+          const doc = await db.get(entry.rowId) as any;
+          await db.remove(doc._id, doc._rev);
+        } catch (notFound: any) {
+          if (notFound.status !== 404) throw notFound;
+          // Zaten silindi — tamam
+        }
+      }
+      succeededIds.push(entry.id);
+      replayed++;
+    } catch (e: any) {
+      console.error(`[WAL replay] ${entry.tableName}/${entry.rowId}:`, e.message);
+      failed++;
+    }
+  }
+
+  if (succeededIds.length > 0) {
+    walRemove(succeededIds);
+  }
+
+  return { replayed, failed };
 }
 
 // ─── Auto Sync ──────────────────────────────────────────────────────────────
