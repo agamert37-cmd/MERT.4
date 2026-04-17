@@ -205,7 +205,7 @@ export function DynamicTable<T extends Record<string, any>>({
                         <td className="py-2.5 px-2">
                           <button
                             onClick={(e) => { e.stopPropagation(); toggleExpand(globalIdx); }}
-                            className="p-1 rounded hover:bg-white/5 transition-colors"
+                            className="p-2.5 sm:p-1 rounded hover:bg-white/5 transition-colors flex items-center justify-center"
                           >
                             <motion.div
                               animate={{ rotate: isExpanded ? 90 : 0 }}
@@ -219,10 +219,10 @@ export function DynamicTable<T extends Record<string, any>>({
                       {columns.map((col) => (
                         <td
                           key={col.key}
-                          className={`py-2.5 sm:py-3 px-3 sm:px-4 ${alignClass(col.align)}`}
+                          className={`py-2.5 sm:py-3 px-3 sm:px-4 max-w-0 overflow-hidden ${alignClass(col.align)}`}
                         >
                           {col.render ? col.render(item, globalIdx) : (
-                            <span className="text-foreground/70 text-xs sm:text-sm">
+                            <span className="block truncate text-foreground/70 text-xs sm:text-sm">
                               {String(item[col.key] ?? '-')}
                             </span>
                           )}
