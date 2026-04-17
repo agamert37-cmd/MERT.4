@@ -763,7 +763,7 @@ export function FaturaPage() {
 
       {/* ─── KDV & Bağlantı Özeti ─── */}
       {stats.aktif > 0 && (
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <div className="p-3 rounded-xl bg-white/[0.03] border border-white/5 flex items-center justify-between">
             <span className="text-xs text-gray-500">{t('fatura.totalKdv')}</span>
             <span className="text-sm font-bold text-blue-400">₺{stats.toplamKdv.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}</span>
@@ -1182,7 +1182,7 @@ export function FaturaPage() {
               </div>
 
               {/* Firmamız + Fatura No + Tarih */}
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div>
                   <label className="text-xs text-gray-500 font-bold uppercase tracking-wider mb-1.5 block">Kesildiği Firma</label>
                   <select value={form.issuedTo} onChange={e => setForm(f => ({ ...f, issuedTo: e.target.value }))}

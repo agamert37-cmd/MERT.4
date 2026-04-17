@@ -205,7 +205,7 @@ export function MobileBottomNav() {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[98]"
+              className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[45]"
               onClick={() => setIsMoreOpen(false)}
             />
             <motion.div
@@ -214,7 +214,7 @@ export function MobileBottomNav() {
               animate={{ y: 0 }}
               exit={{ y: '100%' }}
               transition={{ type: 'spring', stiffness: 320, damping: 32 }}
-              className="fixed bottom-0 left-0 right-0 z-[99] bg-[#0d1117]/98 backdrop-blur-2xl border-t border-white/[0.08] rounded-t-3xl max-h-[82vh] overflow-hidden flex flex-col"
+              className="fixed bottom-0 left-0 right-0 z-[46] bg-[#0d1117]/98 backdrop-blur-2xl border-t border-white/[0.08] rounded-t-3xl max-h-[82vh] overflow-hidden flex flex-col"
               onTouchStart={handleTouchStart}
               onTouchEnd={handleTouchEnd}
             >
@@ -310,7 +310,7 @@ export function MobileBottomNav() {
       </AnimatePresence>
 
       {/* Bottom Tab Bar */}
-      <nav className="fixed bottom-0 left-0 right-0 z-[97] lg:hidden">
+      <nav className="fixed bottom-0 left-0 right-0 z-40 lg:hidden">
         {/* Çevrimdışı uyarı şeridi */}
         <AnimatePresence>
           {!isOnline && (

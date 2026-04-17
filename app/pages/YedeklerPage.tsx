@@ -947,7 +947,7 @@ export function YedeklerPage() {
               className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50" onClick={() => !selectiveRestoring && setSelectiveModal(null)} />
             <motion.div initial={{ opacity: 0, scale: 0.95, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: 20 }}
               transition={{ type: 'spring', stiffness: 240, damping: 26 }}
-              className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[95vw] max-w-lg max-h-[90vh] overflow-y-auto z-50 card-premium rounded-2xl p-4 sm:p-5 border border-border/30">
+              className="fixed inset-2 sm:inset-auto sm:top-1/2 sm:left-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 sm:w-[95vw] sm:max-w-lg overflow-y-auto z-50 card-premium rounded-2xl p-4 sm:p-5 border border-border/30" style={{maxHeight:'calc(100dvh - 1rem)'}}>
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-base font-bold text-white flex items-center gap-2">
                   <RotateCcw className="w-5 h-5 text-amber-400" /> Seçici Geri Yükleme
@@ -1011,7 +1011,7 @@ export function YedeklerPage() {
       <Dialog.Root open={isFileModalOpen} onOpenChange={setIsFileModalOpen}>
         <Dialog.Portal>
           <Dialog.Overlay className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50" />
-          <Dialog.Content className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[95vw] max-w-lg z-50 card-premium rounded-2xl p-4 sm:p-5 border border-border/30 max-h-[90vh] overflow-y-auto" aria-describedby={undefined}>
+          <Dialog.Content className="fixed inset-2 sm:inset-auto sm:top-1/2 sm:left-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 sm:w-[95vw] sm:max-w-lg z-50 card-premium rounded-2xl p-4 sm:p-5 border border-border/30 overflow-y-auto" style={{maxHeight:'calc(100dvh - 1rem)'}} aria-describedby={undefined}>
             <Dialog.Title className="text-base font-bold text-white mb-4 flex items-center gap-2">
               <FileUp className="w-5 h-5 text-amber-400" /> Dosyadan Geri Yükle
             </Dialog.Title>

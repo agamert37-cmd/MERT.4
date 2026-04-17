@@ -111,7 +111,7 @@ export function RoleRequestModal({ isOpen, onClose }: RoleRequestModalProps) {
                 <Clock className="w-4 h-4" />
                 Süre
               </label>
-              <div className="grid grid-cols-5 gap-2">
+              <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
                 {DURATIONS.map(d => (
                   <button
                     key={d.id}

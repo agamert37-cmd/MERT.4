@@ -835,7 +835,7 @@ export function PersonelPage() {
 
       {/* Analytics Modal */}
       <Dialog.Root open={!!selectedEmployee} onOpenChange={(open) => !open && setSelectedEmployee(null)}>
-        <Dialog.Portal><Dialog.Overlay className="fixed inset-0 bg-black/80 z-50"/><Dialog.Content aria-describedby={undefined} className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-[#111] p-0 rounded-2xl sm:rounded-3xl border border-white/10 w-[95vw] max-w-4xl z-50 shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+        <Dialog.Portal><Dialog.Overlay className="fixed inset-0 bg-black/80 z-50"/><Dialog.Content aria-describedby={undefined} className="fixed inset-2 sm:inset-auto sm:top-1/2 sm:left-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 bg-[#111] p-0 rounded-2xl sm:rounded-3xl border border-white/10 sm:w-[95vw] sm:max-w-4xl z-50 shadow-2xl overflow-hidden flex flex-col" style={{maxHeight:'calc(100dvh - 1rem)'}}>
           {selectedEmployee && (
             <>
               <div className="p-4 sm:p-8 border-b border-white/5 bg-gradient-to-b from-blue-900/20 to-transparent flex flex-col sm:flex-row justify-between items-start gap-4">
@@ -902,7 +902,7 @@ export function PersonelPage() {
       <Dialog.Root open={isRequestsModalOpen} onOpenChange={setIsRequestsModalOpen}>
         <Dialog.Portal>
           <Dialog.Overlay className="fixed inset-0 bg-black/80 z-50" />
-          <Dialog.Content aria-describedby={undefined} className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-[#111] p-4 sm:p-8 rounded-2xl sm:rounded-3xl border border-white/10 w-[95vw] max-w-2xl z-50 shadow-2xl max-h-[90vh] overflow-y-auto">
+          <Dialog.Content aria-describedby={undefined} className="fixed inset-2 sm:inset-auto sm:top-1/2 sm:left-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 bg-[#111] p-4 sm:p-8 rounded-2xl sm:rounded-3xl border border-white/10 sm:w-[95vw] sm:max-w-2xl z-50 shadow-2xl overflow-y-auto" style={{maxHeight:'calc(100dvh - 1rem)'}}>
             <div className="flex justify-between items-center mb-6">
               <Dialog.Title className="text-xl font-bold flex items-center gap-2">
                 <Shield className="w-5 h-5 text-purple-400" /> Yetki Talep Onayları
