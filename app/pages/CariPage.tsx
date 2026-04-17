@@ -21,6 +21,7 @@ import { useModuleBus } from '../hooks/useModuleBus';
 import { getPagePermissions } from '../utils/permissions';
 import { usePageSecurity } from '../hooks/usePageSecurity';
 import { kvGet, kvSet } from '../lib/pouchdb-kv';
+import { SwipeToDelete } from '../components/MobileHelpers';
 
 // ─── Interfaces ─────────────────────────────────────────────────────────────
 interface Cari {
@@ -1286,8 +1287,8 @@ export function CariPage() {
           <div className="sm:hidden space-y-2">
             <AnimatePresence>
               {filteredCari.map((cari) => (
+                <SwipeToDelete key={cari.id} onDelete={() => handleDeleteCari(cari.id, cari.companyName)} className="rounded-xl">
                 <motion.div
-                  key={cari.id}
                   layout
                   variants={tableRow}
                   exit={{ opacity: 0, x: 12, filter: 'blur(6px)', transition: { duration: 0.18 } }}
@@ -1315,6 +1316,7 @@ export function CariPage() {
                     <Eye className="w-4 h-4 text-blue-400" />
                   </button>
                 </motion.div>
+                </SwipeToDelete>
               ))}
             </AnimatePresence>
             {filteredCari.length === 0 && (

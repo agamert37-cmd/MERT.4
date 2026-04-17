@@ -463,7 +463,9 @@ export function StokPage() {
   const [activeTab, setActiveTab] = useState<TabKey>('urunler');
   const [searchTerm, setSearchTerm] = useState('');
   const [isScannerOpen, setIsScannerOpen] = useState(false);
-  const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<string>('Tumu');
+  const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<string>(
+    () => sessionStorage.getItem('mert4_filter_stok_cat') ?? 'Tumu'
+  );
   const [expandedProducts, setExpandedProducts] = useState<Set<string>>(new Set());
   const [sortKey, setSortKey] = useState<SortKey>('name');
   const [sortDir, setSortDir] = useState<SortDir>('asc');
@@ -929,7 +931,7 @@ export function StokPage() {
             </div>
             <div className="flex gap-2 flex-wrap">
               <select
-                value={selectedCategoryFilter} onChange={e => setSelectedCategoryFilter(e.target.value)}
+                value={selectedCategoryFilter} onChange={e => { setSelectedCategoryFilter(e.target.value); sessionStorage.setItem('mert4_filter_stok_cat', e.target.value); }}
                 className="px-3 py-2.5 bg-secondary/50 border border-border rounded-xl text-sm text-white focus:border-blue-500/50 transition-all outline-none"
               >
                 <option value="Tumu">Tum Kategoriler</option>
