@@ -978,22 +978,24 @@ export function FaturaPage() {
             <h3 className="text-sm font-bold text-white mb-4 flex items-center gap-2">
               <Percent className="w-4 h-4 text-blue-400" /> KDV Oran Bazlı Kırılım
             </h3>
-            <div className="space-y-2">
-              <div className="grid grid-cols-5 gap-2 text-[10px] text-gray-500 uppercase tracking-widest font-bold px-3 pb-2 border-b border-white/5">
-                <span>Oran</span><span>Alış Net</span><span>Alış KDV</span><span>Satış Net</span><span>Satış KDV</span>
-              </div>
-              {(Object.entries(kdvRaporu.kdvByRate) as [string, { alisNet: number; alisKdv: number; satisNet: number; satisKdv: number; count: number }][]).sort(([a], [b]) => Number(a) - Number(b)).map(([rate, data]) => (
-                <div key={rate} className="grid grid-cols-5 gap-2 text-xs px-3 py-2 rounded-xl bg-white/[0.02] hover:bg-white/[0.04] transition-all">
-                  <span className="font-bold text-blue-400">%{rate}</span>
-                  <span className="text-orange-300">₺{data.alisNet.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}</span>
-                  <span className="text-orange-400 font-bold">₺{data.alisKdv.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}</span>
-                  <span className="text-emerald-300">₺{data.satisNet.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}</span>
-                  <span className="text-emerald-400 font-bold">₺{data.satisKdv.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}</span>
+            <div className="overflow-x-auto">
+              <div className="min-w-[380px] space-y-2">
+                <div className="grid grid-cols-5 gap-2 text-[10px] text-gray-500 uppercase tracking-widest font-bold px-3 pb-2 border-b border-white/5">
+                  <span>Oran</span><span>Alış Net</span><span>Alış KDV</span><span>Satış Net</span><span>Satış KDV</span>
                 </div>
-              ))}
-              {Object.keys(kdvRaporu.kdvByRate).length === 0 && (
-                <p className="text-center text-gray-600 text-xs py-6">Henüz fatura verisi yok</p>
-              )}
+                {(Object.entries(kdvRaporu.kdvByRate) as [string, { alisNet: number; alisKdv: number; satisNet: number; satisKdv: number; count: number }][]).sort(([a], [b]) => Number(a) - Number(b)).map(([rate, data]) => (
+                  <div key={rate} className="grid grid-cols-5 gap-2 text-xs px-3 py-2 rounded-xl bg-white/[0.02] hover:bg-white/[0.04] transition-all">
+                    <span className="font-bold text-blue-400">%{rate}</span>
+                    <span className="text-orange-300">₺{data.alisNet.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}</span>
+                    <span className="text-orange-400 font-bold">₺{data.alisKdv.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}</span>
+                    <span className="text-emerald-300">₺{data.satisNet.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}</span>
+                    <span className="text-emerald-400 font-bold">₺{data.satisKdv.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}</span>
+                  </div>
+                ))}
+                {Object.keys(kdvRaporu.kdvByRate).length === 0 && (
+                  <p className="text-center text-gray-600 text-xs py-6">Henüz fatura verisi yok</p>
+                )}
+              </div>
             </div>
           </div>
 
@@ -1001,22 +1003,24 @@ export function FaturaPage() {
             <h3 className="text-sm font-bold text-white mb-4 flex items-center gap-2">
               <Calendar className="w-4 h-4 text-indigo-400" /> Aylık KDV Özeti
             </h3>
-            <div className="space-y-2">
-              <div className="grid grid-cols-5 gap-2 text-[10px] text-gray-500 uppercase tracking-widest font-bold px-3 pb-2 border-b border-white/5">
-                <span>Dönem</span><span>Fatura</span><span>Alış KDV</span><span>Satış KDV</span><span>Fark</span>
-              </div>
-              {(Object.entries(kdvRaporu.monthlyKdv) as [string, { alisKdv: number; satisKdv: number; net: number; faturaCount: number }][]).sort(([a], [b]) => b.localeCompare(a)).map(([month, data]) => (
-                <div key={month} className="grid grid-cols-5 gap-2 text-xs px-3 py-2 rounded-xl bg-white/[0.02] hover:bg-white/[0.04] transition-all">
-                  <span className="font-bold text-white">{month}</span>
-                  <span className="text-gray-400">{data.faturaCount}</span>
-                  <span className="text-orange-400">₺{data.alisKdv.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}</span>
-                  <span className="text-emerald-400">₺{data.satisKdv.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}</span>
-                  <span className={`font-bold ${data.net >= 0 ? 'text-blue-400' : 'text-red-400'}`}>₺{data.net.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}</span>
+            <div className="overflow-x-auto">
+              <div className="min-w-[380px] space-y-2">
+                <div className="grid grid-cols-5 gap-2 text-[10px] text-gray-500 uppercase tracking-widest font-bold px-3 pb-2 border-b border-white/5">
+                  <span>Dönem</span><span>Fatura</span><span>Alış KDV</span><span>Satış KDV</span><span>Fark</span>
                 </div>
-              ))}
-              {Object.keys(kdvRaporu.monthlyKdv).length === 0 && (
-                <p className="text-center text-gray-600 text-xs py-6">Henüz aylık veri yok</p>
-              )}
+                {(Object.entries(kdvRaporu.monthlyKdv) as [string, { alisKdv: number; satisKdv: number; net: number; faturaCount: number }][]).sort(([a], [b]) => b.localeCompare(a)).map(([month, data]) => (
+                  <div key={month} className="grid grid-cols-5 gap-2 text-xs px-3 py-2 rounded-xl bg-white/[0.02] hover:bg-white/[0.04] transition-all">
+                    <span className="font-bold text-white">{month}</span>
+                    <span className="text-gray-400">{data.faturaCount}</span>
+                    <span className="text-orange-400">₺{data.alisKdv.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}</span>
+                    <span className="text-emerald-400">₺{data.satisKdv.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}</span>
+                    <span className={`font-bold ${data.net >= 0 ? 'text-blue-400' : 'text-red-400'}`}>₺{data.net.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}</span>
+                  </div>
+                ))}
+                {Object.keys(kdvRaporu.monthlyKdv).length === 0 && (
+                  <p className="text-center text-gray-600 text-xs py-6">Henüz aylık veri yok</p>
+                )}
+              </div>
             </div>
           </div>
         </motion.div>

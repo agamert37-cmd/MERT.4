@@ -653,7 +653,7 @@ export function KasaPage() {
               </div>
 
               {modalType === 'Gider' && selectedCategory === 'Personel' && (
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-bold text-gray-400 mb-2">İşlem Tipi</label>
                     <select name="subCategory" required className="w-full px-4 py-3 bg-black/50 border border-white/10 rounded-xl text-white outline-none">
@@ -671,7 +671,7 @@ export function KasaPage() {
               )}
 
               {modalType === 'Gider' && selectedCategory === 'Araç' && (
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-bold text-gray-400 mb-2">İşlem Tipi</label>
                     <select name="subCategory" required className="w-full px-4 py-3 bg-black/50 border border-white/10 rounded-xl text-white outline-none">

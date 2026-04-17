@@ -1182,35 +1182,133 @@ export function CariPage() {
         </div>
       ) : (
         /* List View */
-        <div className="card-premium rounded-2xl overflow-hidden">
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-border">
-                <th className="text-left px-5 py-3 text-xs text-muted-foreground uppercase">{t('cari.listHeaders.company')}</th>
-                <th className="text-left px-5 py-3 text-xs text-muted-foreground uppercase">{t('cari.listHeaders.contactPhone')}</th>
-                <th className="text-left px-5 py-3 text-xs text-muted-foreground uppercase">{t('cari.listHeaders.taxNo')}</th>
-                <th className="text-left px-5 py-3 text-xs text-muted-foreground uppercase">{t('cari.listHeaders.regionCategory')}</th>
-                <th className="text-right px-5 py-3 text-xs text-muted-foreground uppercase">{t('customers.balance')}</th>
-                <th className="px-5 py-3"></th>
-              </tr>
-            </thead>
-            <motion.tbody
-              className="divide-y divide-border"
-              variants={staggerContainer(0.04, 0.02)}
-              initial="initial"
-              animate="animate"
-            >
-              <AnimatePresence>
-                {filteredCari.map((cari) => (
-                  <motion.tr
-                    key={cari.id}
-                    layout
-                    variants={tableRow}
-                    exit={{ opacity: 0, x: 12, filter: 'blur(6px)', transition: { duration: 0.18 } }}
-                    className="hover:bg-accent/30 transition-colors cursor-pointer group data-row border-b border-border/40 last:border-0 relative"
-                    style={{ '--row-accent': cari.type === 'Müşteri' ? '#3b82f6' : '#a855f7' } as React.CSSProperties}
-                    whileHover={hover.row}
-                    onClick={() => { setSelectedCari(cari); setIsDetailModalOpen(true); }}
+        <>
+          {/* Masaüstü: HTML tablo */}
+          <div className="hidden sm:block card-premium rounded-2xl overflow-hidden">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-border">
+                  <th className="text-left px-5 py-3 text-xs text-muted-foreground uppercase">{t('cari.listHeaders.company')}</th>
+                  <th className="text-left px-5 py-3 text-xs text-muted-foreground uppercase">{t('cari.listHeaders.contactPhone')}</th>
+                  <th className="text-left px-5 py-3 text-xs text-muted-foreground uppercase">{t('cari.listHeaders.taxNo')}</th>
+                  <th className="text-left px-5 py-3 text-xs text-muted-foreground uppercase">{t('cari.listHeaders.regionCategory')}</th>
+                  <th className="text-right px-5 py-3 text-xs text-muted-foreground uppercase">{t('customers.balance')}</th>
+                  <th className="px-5 py-3"></th>
+                </tr>
+              </thead>
+              <motion.tbody
+                className="divide-y divide-border"
+                variants={staggerContainer(0.04, 0.02)}
+                initial="initial"
+                animate="animate"
+              >
+                <AnimatePresence>
+                  {filteredCari.map((cari) => (
+                    <motion.tr
+                      key={cari.id}
+                      layout
+                      variants={tableRow}
+                      exit={{ opacity: 0, x: 12, filter: 'blur(6px)', transition: { duration: 0.18 } }}
+                      className="hover:bg-accent/30 transition-colors cursor-pointer group data-row border-b border-border/40 last:border-0 relative"
+                      style={{ '--row-accent': cari.type === 'Müşteri' ? '#3b82f6' : '#a855f7' } as React.CSSProperties}
+                      whileHover={hover.row}
+                      onClick={() => { setSelectedCari(cari); setIsDetailModalOpen(true); }}
+                    >
+                      <td className="px-5 py-4">
+                        <p className="text-white font-medium group-hover:text-blue-400 transition-colors">{cari.companyName}</p>
+                        <p className="text-muted-foreground text-xs">{cari.transactions} {t('cari.transaction')}</p>
+                      </td>
+                      <td className="px-5 py-4">
+                        <p className="text-foreground text-sm">{cari.contactPerson}</p>
+                        <p className="text-muted-foreground text-xs">{cari.phone}</p>
+                      </td>
+                      <td className="px-5 py-4">
+                        <p className="text-muted-foreground text-sm font-mono">{cari.taxNumber || '—'}</p>
+                        <p className="text-muted-foreground/70 text-xs">{cari.taxOffice || ''}</p>
+                        {cari.type === 'Toptancı' && cari.approvedBusinessNo && (
+                          <p className="text-emerald-400 text-xs font-mono mt-0.5 flex items-center gap-1">
+                            <BadgeCheck className="w-3 h-3 inline" />
+                            OİN: {cari.approvedBusinessNo}
+                          </p>
+                        )}
+                      </td>
+                      <td className="px-5 py-4">
+                        <div className="flex flex-wrap gap-1">
+                          {cari.region && (
+                            <span className="px-2 py-0.5 rounded-full text-xs font-medium"
+                              style={{ backgroundColor: `${regionColor(cari.region)}25`, color: regionColor(cari.region), border: `1px solid ${regionColor(cari.region)}50` }}>
+                              {cari.region}
+                            </span>
+                          )}
+                          {cari.category && (
+                            <span className="px-2 py-0.5 rounded-full text-xs bg-accent text-foreground border border-border">
+                              {cari.category}
+                            </span>
+                          )}
+                          {cari.invoiceMode && cari.invoiceMode !== 'yok' && (
+                            <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${cari.invoiceMode === 'tam' ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30' : 'bg-amber-500/20 text-amber-400 border border-amber-500/30'}`}>
+                              F {cari.invoiceMode === 'tam' ? t('cari.invoiceFull') : t('cari.invoicePartial')}
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-5 py-4 text-right">
+                        <span className={`font-bold text-sm ${cari.balance > 0 ? 'text-green-400' : cari.balance < 0 ? 'text-red-400' : 'text-muted-foreground'}`}>
+                          {cari.balance > 0 ? '+' : ''}₺{Math.abs(cari.balance).toLocaleString()}
+                        </span>
+                      </td>
+                      <td className="px-5 py-4" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <button onClick={() => navigate(`/cari/${cari.id}`)} className="p-1.5 hover:bg-accent rounded-lg transition-colors">
+                            <Eye className="w-4 h-4 text-blue-400" />
+                          </button>
+                          <button onClick={() => handleDeleteCari(cari.id, cari.companyName)} className="p-1.5 hover:bg-red-900/40 rounded-lg transition-colors">
+                            <Trash2 className="w-4 h-4 text-red-400" />
+                          </button>
+                        </div>
+                      </td>
+                    </motion.tr>
+                  ))}
+                </AnimatePresence>
+              </motion.tbody>
+            </table>
+            {filteredCari.length === 0 && (
+              <div className="text-center py-16 text-muted-foreground">
+                <Filter className="w-8 h-8 mx-auto mb-3 opacity-40" />
+                <p>{t('cari.noFilterResults')}</p>
+              </div>
+            )}
+          </div>
+
+          {/* Mobil: kart listesi */}
+          <div className="sm:hidden space-y-2">
+            <AnimatePresence>
+              {filteredCari.map((cari) => (
+                <motion.div
+                  key={cari.id}
+                  layout
+                  variants={tableRow}
+                  exit={{ opacity: 0, x: 12, filter: 'blur(6px)', transition: { duration: 0.18 } }}
+                  onClick={() => { setSelectedCari(cari); setIsDetailModalOpen(true); }}
+                  className="card-premium rounded-xl p-3.5 flex items-center gap-3 cursor-pointer active:scale-[0.99] transition-transform"
+                >
+                  <div className={`w-2 h-8 rounded-full flex-shrink-0 ${cari.type === 'Müşteri' ? 'bg-blue-400' : 'bg-purple-400'}`} />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-white font-medium text-sm truncate">{cari.companyName}</p>
+                    <p className="text-white/40 text-xs truncate">
+                      {cari.phone || cari.contactPerson || '—'}
+                      {cari.region ? ` · ${cari.region}` : ''}
+                    </p>
+                  </div>
+                  <div className="text-right flex-shrink-0">
+                    <p className={`text-sm font-bold ${cari.balance > 0 ? 'text-emerald-400' : cari.balance < 0 ? 'text-rose-400' : 'text-white/40'}`}>
+                      {cari.balance > 0 ? '+' : ''}₺{Math.abs(cari.balance).toLocaleString()}
+                    </p>
+                    <p className="text-white/30 text-[10px]">{cari.transactions} {t('cari.transaction')}</p>
+                  </div>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); navigate(`/cari/${cari.id}`); }}
+                    className="p-2 hover:bg-accent rounded-lg transition-colors flex-shrink-0"
                   >
                     <td className="px-5 py-4">
                       <p className="text-white font-medium group-hover:text-blue-400 transition-colors">{cari.companyName}</p>
@@ -1284,6 +1382,50 @@ export function CariPage() {
             </div>
           )}
         </div>
+
+          {/* Mobil: kart listesi */}
+          <div className="sm:hidden space-y-2">
+            <AnimatePresence>
+              {filteredCari.map((cari) => (
+                <motion.div
+                  key={cari.id}
+                  layout
+                  variants={tableRow}
+                  exit={{ opacity: 0, x: 12, filter: 'blur(6px)', transition: { duration: 0.18 } }}
+                  onClick={() => { setSelectedCari(cari); setIsDetailModalOpen(true); }}
+                  className="card-premium rounded-xl p-3.5 flex items-center gap-3 cursor-pointer active:scale-[0.99] transition-transform"
+                >
+                  <div className={`w-2 h-8 rounded-full flex-shrink-0 ${cari.type === 'Müşteri' ? 'bg-blue-400' : 'bg-purple-400'}`} />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-white font-medium text-sm truncate">{cari.companyName}</p>
+                    <p className="text-white/40 text-xs truncate">
+                      {cari.phone || cari.contactPerson || '—'}
+                      {cari.region ? ` · ${cari.region}` : ''}
+                    </p>
+                  </div>
+                  <div className="text-right flex-shrink-0">
+                    <p className={`text-sm font-bold ${cari.balance > 0 ? 'text-emerald-400' : cari.balance < 0 ? 'text-rose-400' : 'text-white/40'}`}>
+                      {cari.balance > 0 ? '+' : ''}₺{Math.abs(cari.balance).toLocaleString()}
+                    </p>
+                    <p className="text-white/30 text-[10px]">{cari.transactions} {t('cari.transaction')}</p>
+                  </div>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); navigate(`/cari/${cari.id}`); }}
+                    className="p-2 hover:bg-accent rounded-lg transition-colors flex-shrink-0"
+                  >
+                    <Eye className="w-4 h-4 text-blue-400" />
+                  </button>
+                </motion.div>
+              ))}
+            </AnimatePresence>
+            {filteredCari.length === 0 && (
+              <div className="text-center py-16 text-muted-foreground">
+                <Filter className="w-8 h-8 mx-auto mb-3 opacity-40" />
+                <p>{t('cari.noFilterResults')}</p>
+              </div>
+            )}
+          </div>
+        </>
       )}
 
       {/* ─── Add Cari Modal — Premium Wizard ─────────────────────────────── */}

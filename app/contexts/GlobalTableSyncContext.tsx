@@ -19,8 +19,7 @@ import { useTableSync } from '../hooks/useTableSync';
 import type { SyncState } from '../hooks/useTableSync';
 import { cariFromDb, cariToDb, productFromDb, productToDb } from '../lib/db-transforms';
 import { StorageKey } from '../utils/storage';
-import { startAllSync, stopAllSync, startPeerSync, stopPeerSync, autoSeedIfEmpty } from '../lib/pouchdb';
-import { getCouchDbConfig } from '../lib/db-config';
+import { startAllSync, stopAllSync, autoSeedIfEmpty, startCouchDbHealthMonitor, stopCouchDbHealthMonitor } from '../lib/pouchdb';
 import { toast } from 'sonner';
 
 // ─── Per-tablo sync durumu context ────────────────────────────────────────────
@@ -236,8 +235,7 @@ export function GlobalTableSyncProvider({ children }: GlobalTableSyncProviderPro
   // PouchDB ↔ CouchDB continuous sync başlat + peer sync + otomatik seed
   useEffect(() => {
     startAllSync();
-    const cfg = getCouchDbConfig();
-    if (cfg.peerUrl) startPeerSync();
+    startCouchDbHealthMonitor();
 
     const seedTimer = setTimeout(() => {
       autoSeedIfEmpty(
@@ -258,9 +256,31 @@ export function GlobalTableSyncProvider({ children }: GlobalTableSyncProviderPro
 
     return () => {
       stopAllSync();
-      stopPeerSync();
+      stopCouchDbHealthMonitor();
       clearTimeout(seedTimer);
     };
+  }, []);
+
+  // Failover durumu bildirimi
+  useEffect(() => {
+    function handleFailover(e: Event) {
+      const { active, targetUrl } = (e as CustomEvent).detail as {
+        active: boolean; targetUrl: string;
+      };
+      if (active) {
+        toast.warning(
+          '⚠️ Birincil sunucu yanıt vermiyor — yedek sunucuya bağlanılıyor…',
+          { duration: 8000, description: `Yedek: ${targetUrl}` }
+        );
+      } else {
+        toast.success(
+          '✅ Birincil sunucu geri döndü — otomatik olarak bağlanıldı.',
+          { duration: 5000 }
+        );
+      }
+    }
+    window.addEventListener('pouchdb:failover_status', handleFailover);
+    return () => window.removeEventListener('pouchdb:failover_status', handleFailover);
   }, []);
 
   return (

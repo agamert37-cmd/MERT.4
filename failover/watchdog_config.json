@@ -1,0 +1,39 @@
+{
+  "_comment": "MERT.4 Watchdog Konfigürasyonu — IP ve şifreleri kendi ağınıza göre düzenleyin",
+
+  "primary": {
+    "_comment": "Birincil (ana) bilgisayarın CouchDB bağlantı bilgileri",
+    "host":     "192.168.1.100",
+    "port":     5984,
+    "user":     "adm1n",
+    "password": "135790"
+  },
+
+  "secondary": {
+    "_comment": "Bu bilgisayarın (ikincil/yedek) CouchDB bağlantı bilgileri",
+    "host":     "localhost",
+    "port":     5984,
+    "user":     "adm1n",
+    "password": "135790"
+  },
+
+  "docker": {
+    "_comment": "Bu bilgisayardaki MERT.4 docker-compose dosyasının yolu",
+    "compose_file":     "C:\\MERT.4\\docker-compose.yml",
+    "project_name":     "mert4",
+    "startup_wait_sec": 20
+  },
+
+  "failover": {
+    "_comment": "Failover tetikleme parametreleri",
+    "check_interval_sec":  15,
+    "failure_threshold":   3,
+    "recovery_threshold":  5,
+    "auto_failback":       false,
+    "failback_wait_sec":   60
+  },
+
+  "notification": {
+    "enabled": true
+  }
+}

@@ -1,7 +1,7 @@
 // [AJAN-3 | claude/multi-db-sync-setup-3DmYn | 2026-04-11]
 // PouchDB instance yöneticisi — tablo başına DB + CouchDB sync + gerçek zamanlı sync olayları
 import PouchDB from 'pouchdb-browser';
-import { DB_PREFIX, KV_DB_NAME, TABLE_NAMES, getCouchDbConfig } from './db-config';
+import { DB_PREFIX, KV_DB_NAME, TABLE_NAMES, getCouchDbConfig, getPeerCouchDbUrl, setCouchDbConfig } from './db-config';
 
 // ── Sync Durum Sistemi ─────────────────────────────────────────
 export type SyncStatus = 'active' | 'paused' | 'error' | 'stopped';
@@ -151,6 +151,14 @@ export function startAllSync(): void {
     const timer = setTimeout(() => startSync(table), index * 200);
     staggerTimers.push(timer);
   });
+
+  // peerUrl yapılandırılmışsa: birincil sync bittikten sonra peer sync de başlat
+  // Bu şekilde veriler hem birincil hem yedek CouchDB'ye eş zamanlı gider
+  const peerUrl = getPeerCouchDbUrl();
+  if (peerUrl) {
+    const peerDelay = (allTables.length + 1) * 200 + 1000;
+    setTimeout(() => startPeerSync(), peerDelay);
+  }
 }
 
 /** Tüm sync'leri durdur */
@@ -296,6 +304,126 @@ export function stopPeerSync(): void {
     sync.cancel();
   }
   peerSyncs.clear();
+}
+
+// ── CouchDB Sağlık Monitörü & Otomatik Failover ──────────────
+//
+// peerUrl yapılandırılmışsa:
+//   - Her 45 saniyede bir birincil CouchDB'yi kontrol eder
+//   - 3 ardışık başarısız kontrol → peer URL'ye otomatik geçiş
+//   - Birincil geri gelince otomatik dönüş (opsiyonel)
+//
+// Bu uygulama tarafı güvencedir; sunucu tarafı failover için
+// failover/watchdog.py (Python) kullanılır.
+
+let _healthTimer:          ReturnType<typeof setInterval> | null = null;
+let _failoverActive        = false;
+let _savedPrimaryUrl       = '';        // failover öncesi asıl birincil URL
+let _healthConsecFails     = 0;
+const HEALTH_INTERVAL_MS   = 45_000;   // 45 saniye
+const HEALTH_FAIL_THRESHOLD = 3;       // 3 ardışık hata → geçiş
+
+function _dispatchFailoverEvent(active: boolean, targetUrl: string): void {
+  if (typeof window === 'undefined') return;
+  window.dispatchEvent(new CustomEvent('pouchdb:failover_status', {
+    detail: { active, targetUrl },
+  }));
+}
+
+async function _pingUrl(url: string, user: string, password: string): Promise<boolean> {
+  try {
+    const headers: Record<string, string> = {};
+    if (user) headers['Authorization'] = 'Basic ' + btoa(`${user}:${password}`);
+    const res = await fetch(url, {
+      method: 'GET',
+      headers,
+      signal: AbortSignal.timeout(5000),
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+function _activateFailover(peerUrl: string, config: ReturnType<typeof getCouchDbConfig>): void {
+  if (_failoverActive) return;
+  _failoverActive    = true;
+  _savedPrimaryUrl   = config.url;
+  _healthConsecFails = 0;
+
+  console.warn('[PouchDB] Failover: birincil CouchDB yanıt vermiyor → peer URL devreye alınıyor…');
+
+  // Mevcut birincil sync'leri durdur, peer URL'yi birincil olarak ayarla
+  stopAllSync();
+  setCouchDbConfig({ url: peerUrl, peerUrl: config.url });
+
+  // Küçük gecikme sonra yeni URL ile başlat
+  setTimeout(() => startAllSync(), 800);
+  _dispatchFailoverEvent(true, peerUrl);
+}
+
+function _deactivateFailover(): void {
+  if (!_failoverActive || !_savedPrimaryUrl) return;
+  _failoverActive    = false;
+  _healthConsecFails = 0;
+
+  console.info('[PouchDB] Failover sona erdi: birincil CouchDB geri döndü.');
+
+  const currentConfig = getCouchDbConfig();
+  // URL'leri orijinal haline getir
+  setCouchDbConfig({ url: _savedPrimaryUrl, peerUrl: currentConfig.url });
+  _savedPrimaryUrl = '';
+
+  stopAllSync();
+  setTimeout(() => startAllSync(), 800);
+  _dispatchFailoverEvent(false, _savedPrimaryUrl);
+}
+
+/**
+ * CouchDB sağlık monitörünü başlat.
+ * peerUrl boşsa işlem yapmaz.
+ * Genellikle startAllSync() ile birlikte çağrılır — GlobalTableSyncContext bunu yapar.
+ */
+export function startCouchDbHealthMonitor(): void {
+  if (_healthTimer || typeof window === 'undefined') return;
+  const config = getCouchDbConfig();
+  if (!config.peerUrl) return;   // peer URL yoksa monitör gerekmiyor
+
+  _healthTimer = setInterval(async () => {
+    const cfg = getCouchDbConfig();
+
+    if (_failoverActive) {
+      // Peer'dayken birincili izle — geri döndüyse orijinale dön
+      if (!_savedPrimaryUrl) return;
+      const primaryBack = await _pingUrl(_savedPrimaryUrl, cfg.user, cfg.password);
+      if (primaryBack) _deactivateFailover();
+      return;
+    }
+
+    // Birincil URL sağlığını kontrol et
+    if (!cfg.url) return;
+    const ok = await _pingUrl(cfg.url, cfg.user, cfg.password);
+
+    if (ok) {
+      _healthConsecFails = 0;
+    } else {
+      _healthConsecFails++;
+      console.warn(`[PouchDB] Sağlık kontrolü başarısız (${_healthConsecFails}/${HEALTH_FAIL_THRESHOLD})…`);
+
+      if (_healthConsecFails >= HEALTH_FAIL_THRESHOLD && cfg.peerUrl) {
+        // Peer erişilebilir mi?
+        const peerOk = await _pingUrl(cfg.peerUrl, cfg.user, cfg.password);
+        if (peerOk) _activateFailover(cfg.peerUrl, cfg);
+      }
+    }
+  }, HEALTH_INTERVAL_MS);
+}
+
+export function stopCouchDbHealthMonitor(): void {
+  if (_healthTimer) {
+    clearInterval(_healthTimer);
+    _healthTimer = null;
+  }
 }
 
 // ── Bağlantı Testi ─────────────────────────────────────────────
