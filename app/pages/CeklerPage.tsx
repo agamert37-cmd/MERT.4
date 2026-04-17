@@ -527,7 +527,6 @@ export function CeklerPage() {
     setCekler(existing.filter(c => c.id !== id));
     // PouchDB cekler tablosundan sil (CouchDB ile senkronize olur)
     deleteCekFromPouchDB(id).catch(e => console.warn('[CeklerPage] PouchDB delete hatası:', e));
-    deleteCek(id).catch(e => console.warn('[CeklerPage] PouchDB delete hatası:', e));
     emit('cek:deleted', { cekId: id, bankName });
     setSelectedCek(null);
     sec.auditLog('cek_delete', id, bankName);
