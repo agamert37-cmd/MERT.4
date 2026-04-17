@@ -161,6 +161,29 @@ export function startAllSync(): void {
   }
 }
 
+// Mobilde önce sync edilecek kritik tablolar (satış, stok, müşteri, kasa)
+const MOBILE_PRIORITY_TABLES = [
+  'fisler', 'urunler', 'cari_hesaplar', 'kasa_islemleri', 'personeller',
+];
+
+/**
+ * Mobil optimizasyonlu sync: kritik tablolar hemen, geri kalanlar 2s sonra.
+ * Bant genişliği ve pil tasarrufu sağlar.
+ */
+export function startMobileSync(): void {
+  // Kritik tablolar — anında
+  MOBILE_PRIORITY_TABLES.forEach((table, i) => {
+    const timer = setTimeout(() => startSync(table), i * 150);
+    staggerTimers.push(timer);
+  });
+  // Diğer tablolar — 2 saniye sonra
+  const rest = [...TABLE_NAMES, KV_DB_NAME].filter(t => !MOBILE_PRIORITY_TABLES.includes(t));
+  rest.forEach((table, i) => {
+    const timer = setTimeout(() => startSync(table), 2000 + i * 300);
+    staggerTimers.push(timer);
+  });
+}
+
 /** Tüm sync'leri durdur */
 export function stopAllSync(): void {
   // Henüz başlamamış bekleyen zamanlayıcıları iptal et
