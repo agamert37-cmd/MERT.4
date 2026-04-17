@@ -1,0 +1,26 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    monitor: 'mert4-monitor'
+
+alerting:
+  alertmanagers: []
+
+rule_files:
+  - "alerts.yml"
+
+scrape_configs:
+  # CouchDB metrik toplama (exporter aracılığıyla)
+  - job_name: 'couchdb'
+    static_configs:
+      - targets: ['couchdb-exporter:9984']
+        labels:
+          instance: 'mert-couchdb'
+    scrape_interval: 15s
+    scrape_timeout: 10s
+
+  # Prometheus'un kendi metrikleri
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
