@@ -110,7 +110,9 @@ export function KasaPage() {
   const [selectedCategory, setSelectedCategory] = useState<string>('Satış');
   const [activeTab, setActiveTab] = useState<'transactions' | 'pos'>('transactions');
   const [searchTerm, setSearchTerm] = useState('');
-  const [filterType, setFilterType] = useState<'Tümü'|'Gelir'|'Gider'>('Tümü');
+  const [filterType, setFilterType] = useState<'Tümü'|'Gelir'|'Gider'>(
+    () => (sessionStorage.getItem('mert4_filter_kasa_type') as 'Tümü'|'Gelir'|'Gider') ?? 'Tümü'
+  );
   
   const [posDevices, setPosDevices] = useState<POSDevice[]>(() => {
     return getFromStorage<POSDevice[]>(StorageKey.POS_DATA) || [];
@@ -499,7 +501,7 @@ export function KasaPage() {
                   {['Tümü', 'Gelir', 'Gider'].map((type) => (
                     <button
                       key={type}
-                      onClick={() => setFilterType(type as any)}
+                      onClick={() => { setFilterType(type as any); sessionStorage.setItem('mert4_filter_kasa_type', type); }}
                       className={`flex-1 px-3 sm:px-6 py-2 rounded-lg text-xs sm:text-sm font-bold transition-all whitespace-nowrap ${
                         filterType === type ? 'bg-white/10 text-white' : 'text-gray-500 hover:text-gray-300'
                       }`}
@@ -623,7 +625,7 @@ export function KasaPage() {
       <Dialog.Root open={isModalOpen} onOpenChange={setIsModalOpen}>
         <Dialog.Portal>
           <Dialog.Overlay className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50" />
-          <Dialog.Content aria-describedby={undefined} className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-[#111] border border-white/10 rounded-2xl sm:rounded-3xl p-4 sm:p-8 w-[95vw] sm:w-full max-w-lg z-50 shadow-2xl max-h-[90vh] overflow-y-auto">
+          <Dialog.Content aria-describedby={undefined} className="fixed inset-2 sm:inset-auto sm:top-1/2 sm:left-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 bg-[#111] border border-white/10 rounded-2xl sm:rounded-3xl p-4 sm:p-8 sm:w-[95vw] sm:max-w-lg z-50 shadow-2xl overflow-y-auto" style={{maxHeight: 'calc(100dvh - 1rem)'}}>
             <div className="flex justify-between items-center mb-6">
               <Dialog.Title className={`text-2xl font-bold flex items-center gap-3 ${modalType === 'Gelir' ? 'text-green-400' : 'text-red-400'}`}>
                 {modalType === 'Gelir' ? <TrendingUp className="w-6 h-6" /> : <TrendingDown className="w-6 h-6" />}
@@ -653,7 +655,7 @@ export function KasaPage() {
               </div>
 
               {modalType === 'Gider' && selectedCategory === 'Personel' && (
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-bold text-gray-400 mb-2">İşlem Tipi</label>
                     <select name="subCategory" required className="w-full px-4 py-3 bg-black/50 border border-white/10 rounded-xl text-white outline-none">
@@ -671,7 +673,7 @@ export function KasaPage() {
               )}
 
               {modalType === 'Gider' && selectedCategory === 'Araç' && (
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-bold text-gray-400 mb-2">İşlem Tipi</label>
                     <select name="subCategory" required className="w-full px-4 py-3 bg-black/50 border border-white/10 rounded-xl text-white outline-none">
@@ -723,7 +725,7 @@ export function KasaPage() {
       <Dialog.Root open={isPosModalOpen} onOpenChange={setIsPosModalOpen}>
         <Dialog.Portal>
           <Dialog.Overlay className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50" />
-          <Dialog.Content aria-describedby={undefined} className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-[#111] border border-white/10 rounded-2xl sm:rounded-3xl p-4 sm:p-8 w-[95vw] sm:w-full max-w-lg z-50 shadow-2xl max-h-[90vh] overflow-y-auto">
+          <Dialog.Content aria-describedby={undefined} className="fixed inset-2 sm:inset-auto sm:top-1/2 sm:left-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 bg-[#111] border border-white/10 rounded-2xl sm:rounded-3xl p-4 sm:p-8 sm:w-[95vw] sm:max-w-lg z-50 shadow-2xl overflow-y-auto" style={{maxHeight: 'calc(100dvh - 1rem)'}}>
             <div className="flex justify-between items-center mb-6">
               <Dialog.Title className="text-2xl font-bold text-purple-400 flex items-center gap-3">
                 <CreditCard className="w-6 h-6" /> POS Cihazı Ekle

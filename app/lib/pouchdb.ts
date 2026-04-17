@@ -1,7 +1,7 @@
 // [AJAN-3 | claude/multi-db-sync-setup-3DmYn | 2026-04-11]
 // PouchDB instance yöneticisi — tablo başına DB + CouchDB sync + gerçek zamanlı sync olayları
 import PouchDB from 'pouchdb-browser';
-import { DB_PREFIX, KV_DB_NAME, TABLE_NAMES, getCouchDbConfig } from './db-config';
+import { DB_PREFIX, KV_DB_NAME, TABLE_NAMES, getCouchDbConfig, getPeerCouchDbUrl, setCouchDbConfig } from './db-config';
 
 // ── Sync Durum Sistemi ─────────────────────────────────────────
 export type SyncStatus = 'active' | 'paused' | 'error' | 'stopped';
@@ -151,6 +151,14 @@ export function startAllSync(): void {
     const timer = setTimeout(() => startSync(table), index * 200);
     staggerTimers.push(timer);
   });
+
+  // peerUrl yapılandırılmışsa: birincil sync bittikten sonra peer sync de başlat
+  // Bu şekilde veriler hem birincil hem yedek CouchDB'ye eş zamanlı gider
+  const peerUrl = getPeerCouchDbUrl();
+  if (peerUrl) {
+    const peerDelay = (allTables.length + 1) * 200 + 1000;
+    setTimeout(() => startPeerSync(), peerDelay);
+  }
 }
 
 /** Tüm sync'leri durdur */
@@ -183,50 +191,68 @@ export function restartAllSync(): void {
 
 // ── Ağ & Görünürlük Kurtarma ──────────────────────────────────
 // Tarayıcı çevrimiçi durumuna geçtiğinde veya sayfa arka plandan öne geldiğinde
-// tüm sync'leri yeniden başlat.
+// tüm sync'leri yeniden başlat + UI'ı taze veri ile güncelle.
 //
 // Neden gerekli?
 // - PouchDB retry:true çoğu durumu halleder; ancak Wi-Fi/4G geçişinde veya
 //   iOS/Android uygulama arka plana alındığında bağlantı nesnesi tamamen ölür.
 // - visibilitychange: Mobil kullanıcı ekranı kapattıktan sonra geri gelince
-//   sync otomatik olarak yeniden başlar.
+//   sync yeniden başlar VE UI tüm tabloları yeniden fetch eder.
+// - pouchdb:app_foregrounded: useTableSync bu olayı dinleyerek fetchData() çağırır,
+//   böylece arka planda başka cihazdan gelen değişiklikler anında UI'a yansır.
 
 let _recoveryListenersAttached = false;
+
+/** Ön plana geliş olayını yayınla — useTableSync dinleyerek fetchData() çağırır */
+function _dispatchForegrounded(): void {
+  if (typeof window === 'undefined') return;
+  window.dispatchEvent(new CustomEvent('pouchdb:app_foregrounded'));
+}
+
+// Çok sık restart'ı önlemek için debounce
+let _restartTimer: ReturnType<typeof setTimeout> | null = null;
+function _debouncedRestart(delayMs: number): void {
+  if (_restartTimer) clearTimeout(_restartTimer);
+  _restartTimer = setTimeout(() => {
+    _restartTimer = null;
+    // Eğer stagger timer'lar zaten çalışıyorsa (startAllSync devam ediyor) dokunma
+    if (staggerTimers.length > 0) {
+      _dispatchForegrounded(); // yine de UI refresh yap
+      return;
+    }
+    restartAllSync();
+    // Restart tamamlandıktan kısa süre sonra UI'ı güncelle
+    setTimeout(_dispatchForegrounded, 600);
+  }, delayMs);
+}
 
 function _attachRecoveryListeners(): void {
   if (_recoveryListenersAttached || typeof window === 'undefined') return;
   _recoveryListenersAttached = true;
 
-  // Ağ bağlantısı geri gelince
+  // Ağ bağlantısı geri gelince — kısa bekleme (ağ adaptörü stabilize olsun)
   window.addEventListener('online', () => {
     console.info('[PouchDB] Ağ bağlantısı yeniden kuruldu — sync yeniden başlatılıyor…');
-    setTimeout(() => restartAllSync(), 1000);
+    _debouncedRestart(800);
   });
 
   // Mobil: ekran kilidi açıldığında / sekmeye geri dönüldüğünde
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible') {
-      console.info('[PouchDB] Sayfa görünür oldu — sync kontrol ediliyor…');
-      // Kısa bir gecikme: ağ arayüzü stabilize olsun
-      setTimeout(() => {
-        // Aktif sync varsa dokunma; hiç sync yoksa yeniden başlat
-        if (syncs.size === 0) {
-          restartAllSync();
-        } else {
-          // Ölü sync'leri tespit et ve yeniden başlat
-          let hasDeadSync = false;
-          for (const [name, sync] of syncs) {
-            // PouchDB sync nesnesi 'cancelled' ise ölü demektir
-            if ((sync as any).cancelled) {
-              syncs.delete(name);
-              hasDeadSync = true;
-            }
-          }
-          if (hasDeadSync) restartAllSync();
-        }
-      }, 1500);
-    }
+    if (document.visibilityState !== 'visible') return;
+    console.info('[PouchDB] Sayfa görünür oldu — sync + UI yenileniyor…');
+
+    // Mobilde ağın hazır olması için biraz bekle
+    _debouncedRestart(1000);
   });
+
+  // Android: ağ tipi değişimi (Wi-Fi ↔ 5G geçişi)
+  const conn = (navigator as any).connection;
+  if (conn) {
+    conn.addEventListener('change', () => {
+      console.info('[PouchDB] Ağ tipi değişti — sync yeniden başlatılıyor…');
+      _debouncedRestart(1200);
+    });
+  }
 }
 
 _attachRecoveryListeners();
@@ -278,6 +304,126 @@ export function stopPeerSync(): void {
     sync.cancel();
   }
   peerSyncs.clear();
+}
+
+// ── CouchDB Sağlık Monitörü & Otomatik Failover ──────────────
+//
+// peerUrl yapılandırılmışsa:
+//   - Her 45 saniyede bir birincil CouchDB'yi kontrol eder
+//   - 3 ardışık başarısız kontrol → peer URL'ye otomatik geçiş
+//   - Birincil geri gelince otomatik dönüş (opsiyonel)
+//
+// Bu uygulama tarafı güvencedir; sunucu tarafı failover için
+// failover/watchdog.py (Python) kullanılır.
+
+let _healthTimer:          ReturnType<typeof setInterval> | null = null;
+let _failoverActive        = false;
+let _savedPrimaryUrl       = '';        // failover öncesi asıl birincil URL
+let _healthConsecFails     = 0;
+const HEALTH_INTERVAL_MS   = 45_000;   // 45 saniye
+const HEALTH_FAIL_THRESHOLD = 3;       // 3 ardışık hata → geçiş
+
+function _dispatchFailoverEvent(active: boolean, targetUrl: string): void {
+  if (typeof window === 'undefined') return;
+  window.dispatchEvent(new CustomEvent('pouchdb:failover_status', {
+    detail: { active, targetUrl },
+  }));
+}
+
+async function _pingUrl(url: string, user: string, password: string): Promise<boolean> {
+  try {
+    const headers: Record<string, string> = {};
+    if (user) headers['Authorization'] = 'Basic ' + btoa(`${user}:${password}`);
+    const res = await fetch(url, {
+      method: 'GET',
+      headers,
+      signal: AbortSignal.timeout(5000),
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+function _activateFailover(peerUrl: string, config: ReturnType<typeof getCouchDbConfig>): void {
+  if (_failoverActive) return;
+  _failoverActive    = true;
+  _savedPrimaryUrl   = config.url;
+  _healthConsecFails = 0;
+
+  console.warn('[PouchDB] Failover: birincil CouchDB yanıt vermiyor → peer URL devreye alınıyor…');
+
+  // Mevcut birincil sync'leri durdur, peer URL'yi birincil olarak ayarla
+  stopAllSync();
+  setCouchDbConfig({ url: peerUrl, peerUrl: config.url });
+
+  // Küçük gecikme sonra yeni URL ile başlat
+  setTimeout(() => startAllSync(), 800);
+  _dispatchFailoverEvent(true, peerUrl);
+}
+
+function _deactivateFailover(): void {
+  if (!_failoverActive || !_savedPrimaryUrl) return;
+  _failoverActive    = false;
+  _healthConsecFails = 0;
+
+  console.info('[PouchDB] Failover sona erdi: birincil CouchDB geri döndü.');
+
+  const currentConfig = getCouchDbConfig();
+  // URL'leri orijinal haline getir
+  setCouchDbConfig({ url: _savedPrimaryUrl, peerUrl: currentConfig.url });
+  _savedPrimaryUrl = '';
+
+  stopAllSync();
+  setTimeout(() => startAllSync(), 800);
+  _dispatchFailoverEvent(false, _savedPrimaryUrl);
+}
+
+/**
+ * CouchDB sağlık monitörünü başlat.
+ * peerUrl boşsa işlem yapmaz.
+ * Genellikle startAllSync() ile birlikte çağrılır — GlobalTableSyncContext bunu yapar.
+ */
+export function startCouchDbHealthMonitor(): void {
+  if (_healthTimer || typeof window === 'undefined') return;
+  const config = getCouchDbConfig();
+  if (!config.peerUrl) return;   // peer URL yoksa monitör gerekmiyor
+
+  _healthTimer = setInterval(async () => {
+    const cfg = getCouchDbConfig();
+
+    if (_failoverActive) {
+      // Peer'dayken birincili izle — geri döndüyse orijinale dön
+      if (!_savedPrimaryUrl) return;
+      const primaryBack = await _pingUrl(_savedPrimaryUrl, cfg.user, cfg.password);
+      if (primaryBack) _deactivateFailover();
+      return;
+    }
+
+    // Birincil URL sağlığını kontrol et
+    if (!cfg.url) return;
+    const ok = await _pingUrl(cfg.url, cfg.user, cfg.password);
+
+    if (ok) {
+      _healthConsecFails = 0;
+    } else {
+      _healthConsecFails++;
+      console.warn(`[PouchDB] Sağlık kontrolü başarısız (${_healthConsecFails}/${HEALTH_FAIL_THRESHOLD})…`);
+
+      if (_healthConsecFails >= HEALTH_FAIL_THRESHOLD && cfg.peerUrl) {
+        // Peer erişilebilir mi?
+        const peerOk = await _pingUrl(cfg.peerUrl, cfg.user, cfg.password);
+        if (peerOk) _activateFailover(cfg.peerUrl, cfg);
+      }
+    }
+  }, HEALTH_INTERVAL_MS);
+}
+
+export function stopCouchDbHealthMonitor(): void {
+  if (_healthTimer) {
+    clearInterval(_healthTimer);
+    _healthTimer = null;
+  }
 }
 
 // ── Bağlantı Testi ─────────────────────────────────────────────
