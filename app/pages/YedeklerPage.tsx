@@ -11,7 +11,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import * as Dialog from '@radix-ui/react-dialog';
-import { generateDetailedExcelBackup, generatePDFBackup } from '../utils/exportGenerator';
+import { generateDetailedExcelBackup, generatePDFBackup, generateFullPouchDbExcel } from '../utils/exportGenerator';
 import { useAuth } from '../contexts/AuthContext';
 import { useEmployee } from '../contexts/EmployeeContext';
 import { useLanguage } from '../contexts/LanguageContext';
@@ -408,6 +408,20 @@ export function YedeklerPage() {
   const handlePDFExport = () => {
     try { if (generatePDFBackup()) toast.success('PDF indirildi!'); else toast.error('PDF hatası'); } catch { toast.error('PDF hatası'); }
   };
+  const [fullExcelLoading, setFullExcelLoading] = React.useState(false);
+  const handleFullExcelExport = async () => {
+    if (fullExcelLoading) return;
+    setFullExcelLoading(true);
+    toast.loading('Tüm veriler okunuyor...', { id: 'full-excel' });
+    try {
+      const { ok, fail, totalRows } = await generateFullPouchDbExcel();
+      toast.success(`Excel indirildi — ${totalRows} kayıt, ${ok} tablo${fail > 0 ? `, ${fail} hata` : ''}`, { id: 'full-excel', duration: 4000 });
+    } catch (e: any) {
+      toast.error(`Excel hatası: ${e.message}`, { id: 'full-excel' });
+    } finally {
+      setFullExcelLoading(false);
+    }
+  };
 
   // ─── Computed ────────────────────────────────────────────────────────────
   const storageSizeKB = (() => {
@@ -453,6 +467,10 @@ export function YedeklerPage() {
           </button>
           <button onClick={handleExcelExport} className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium bg-secondary/50 hover:bg-secondary/80 text-muted-foreground hover:text-foreground border border-border/30 transition-all active:scale-[0.97]">
             <Table className="w-3.5 h-3.5 text-emerald-400" /> Excel
+          </button>
+          <button onClick={handleFullExcelExport} disabled={fullExcelLoading} className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/20 transition-all active:scale-[0.97] disabled:opacity-50">
+            {fullExcelLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Table className="w-3.5 h-3.5" />}
+            Tam Excel
           </button>
           <button onClick={() => fileInputRef.current?.click()} className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/20 transition-all active:scale-[0.97]">
             <FileUp className="w-3.5 h-3.5" /> Dosyadan Yükle
