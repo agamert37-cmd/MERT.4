@@ -158,8 +158,12 @@ export function FaturaPage() {
 
   // State
   const [searchTerm, setSearchTerm] = useState('');
-  const [filterType, setFilterType] = useState<'all' | 'alis' | 'satis'>('all');
-  const [filterStatus, setFilterStatus] = useState<'all' | 'aktif' | 'iptal'>('all');
+  const [filterType, setFilterType] = useState<'all' | 'alis' | 'satis'>(
+    () => (sessionStorage.getItem('mert4_filter_fatura_type') as 'all' | 'alis' | 'satis') ?? 'all'
+  );
+  const [filterStatus, setFilterStatus] = useState<'all' | 'aktif' | 'iptal'>(
+    () => (sessionStorage.getItem('mert4_filter_fatura_status') as 'all' | 'aktif' | 'iptal') ?? 'all'
+  );
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
   const [selectedFatura, setSelectedFatura] = useState<Fatura | null>(null);
@@ -813,13 +817,13 @@ export function FaturaPage() {
         </div>
         <div className="flex gap-2">
           {(['all', 'alis', 'satis'] as const).map(type => (
-            <button key={type} onClick={() => setFilterType(type)}
+            <button key={type} onClick={() => { setFilterType(type); sessionStorage.setItem('mert4_filter_fatura_type', type); }}
               className={`px-4 py-2.5 rounded-xl text-xs font-bold border transition-all ${filterType === type ? 'bg-blue-600/20 text-blue-400 border-blue-500/30' : 'bg-white/5 text-gray-500 border-white/5 hover:bg-white/10'}`}>
               {type === 'all' ? t('fatura.all') : type === 'alis' ? t('fatura.purchase') : t('fatura.sale')}
             </button>
           ))}
           {(['all', 'aktif', 'iptal'] as const).map(st => (
-            <button key={st} onClick={() => setFilterStatus(st)}
+            <button key={st} onClick={() => { setFilterStatus(st); sessionStorage.setItem('mert4_filter_fatura_status', st); }}
               className={`px-4 py-2.5 rounded-xl text-xs font-bold border transition-all ${filterStatus === st ? 'bg-emerald-600/20 text-emerald-400 border-emerald-500/30' : 'bg-white/5 text-gray-500 border-white/5 hover:bg-white/10'}`}>
               {st === 'all' ? t('fatura.statusFilter') : st === 'aktif' ? t('fatura.active') : t('fatura.cancelledStatus')}
             </button>

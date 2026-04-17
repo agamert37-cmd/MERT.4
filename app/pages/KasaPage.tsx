@@ -24,6 +24,7 @@ import * as Dialog from '@radix-ui/react-dialog';
 import { toast } from 'sonner';
 import { useTableSync } from '../hooks/useTableSync';
 import { SyncStatusBar, SyncBadge } from '../components/SyncStatusBar';
+import { SwipeToDelete } from '../components/MobileHelpers';
 import { getFromStorage, setInStorage, StorageKey } from '../utils/storage';
 import { logActivity } from '../utils/activityLogger';
 import { useLanguage } from '../contexts/LanguageContext';
@@ -527,8 +528,8 @@ export function KasaPage() {
                   </div>
                 ) : (
                   filteredTransactions.map((transaction) => (
+                    <SwipeToDelete key={transaction.id} onDelete={() => handleDeleteTransaction(transaction.id)} className="rounded-2xl sm:overflow-visible">
                     <motion.div
-                      key={transaction.id}
                       layout
                       variants={rowItem}
                       whileHover={{ x: 3, borderColor: 'rgba(255,255,255,0.12)', transition: { duration: 0.15 } }}
@@ -562,6 +563,7 @@ export function KasaPage() {
                         </button>
                       </div>
                     </motion.div>
+                    </SwipeToDelete>
                   ))
                 )}
               </motion.div>
