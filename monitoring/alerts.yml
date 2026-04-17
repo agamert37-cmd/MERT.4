@@ -1,0 +1,66 @@
+groups:
+  - name: couchdb_health
+    interval: 30s
+    rules:
+
+      # CouchDB erişilemiyor
+      - alert: CouchDBDown
+        expr: up{job="couchdb"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "CouchDB erişilemiyor"
+          description: "CouchDB Prometheus exporter'a ulaşılamıyor. Sunucu çökmüş olabilir."
+
+      # Toplam kayıt sayısı anormal düştü (son 1 saatte %10+ düşüş)
+      - alert: CouchDBDocCountDropped
+        expr: |
+          (
+            sum(couchdb_database_info_doc_count) -
+            sum(couchdb_database_info_doc_del_count)
+          ) < (
+            (
+              sum(couchdb_database_info_doc_count offset 1h) -
+              sum(couchdb_database_info_doc_del_count offset 1h)
+            ) * 0.9
+          )
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "CouchDB toplam kayıt sayısı düştü"
+          description: "Son 1 saatte kayıt sayısında %10'dan fazla düşüş tespit edildi. Büyük silme işlemi yapılmış olabilir."
+
+      # Herhangi bir DB boyutu 500MB'ı geçti
+      - alert: CouchDBDiskUsageHigh
+        expr: couchdb_database_info_sizes_file > 524288000
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "CouchDB disk kullanımı yüksek: {{ $labels.db }}"
+          description: "{{ $labels.db }} veritabanı boyutu {{ $value | humanize }}B'a ulaştı (eşik: 500MB). Compaction önerilir."
+
+      # Silinen doküman oranı çok yüksek (tombstone birikimi)
+      - alert: CouchDBHighTombstoneRatio
+        expr: |
+          (couchdb_database_info_doc_del_count /
+           (couchdb_database_info_doc_count + couchdb_database_info_doc_del_count + 1)) > 0.3
+        for: 10m
+        labels:
+          severity: info
+        annotations:
+          summary: "{{ $labels.db }} veritabanında silme oranı yüksek"
+          description: "{{ $labels.db }} veritabanının %{{ $value | humanizePercentage }} kaydı silinmiş (tombstone). Compaction yapılması önerilir."
+
+      # HTTP 5xx hata oranı
+      - alert: CouchDBHighErrorRate
+        expr: |
+          rate(couchdb_httpd_status_codes_total{code=~"5.."}[5m]) > 0.1
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "CouchDB HTTP 5xx hata oranı yüksek"
+          description: "Son 5 dakikada saniyede {{ $value | humanize }} adet 5xx hatası oluşuyor."
