@@ -1,6 +1,6 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { RefreshCw, ChevronUp, ArrowUp } from 'lucide-react';
+import { RefreshCw, ChevronUp, ArrowUp, Trash2 } from 'lucide-react';
 
 // ─── Pull to Refresh ────────────────────────────────────────────────
 interface PullToRefreshProps {
@@ -251,5 +251,48 @@ export function MobileStatCard({ label, value, icon, color = 'blue', trend, tren
       <p className="text-white font-bold text-lg leading-tight">{value}</p>
       <p className="text-gray-500 text-[11px] mt-0.5 truncate">{label}</p>
     </motion.div>
+  );
+}
+
+// ─── Swipe to Delete ────────────────────────────────────────────────
+interface SwipeToDeleteProps {
+  onDelete: () => void;
+  children: React.ReactNode;
+  className?: string;
+}
+
+export function SwipeToDelete({ onDelete, children, className = '' }: SwipeToDeleteProps) {
+  const [offsetX, setOffsetX] = useState(0);
+  const startX = useRef(0);
+  const dragging = useRef(false);
+  const THRESHOLD = 80;
+
+  return (
+    <div className={`relative overflow-hidden ${className}`}>
+      <div className="absolute inset-y-0 right-0 w-20 bg-rose-600/90 flex items-center justify-center rounded-r-xl">
+        <Trash2 className="w-4 h-4 text-white" />
+      </div>
+      <motion.div
+        style={{ x: offsetX }}
+        animate={{ x: offsetX }}
+        transition={{ type: 'spring', stiffness: 500, damping: 40 }}
+        onTouchStart={e => { startX.current = e.touches[0].clientX; dragging.current = true; }}
+        onTouchMove={e => {
+          if (!dragging.current) return;
+          const diff = e.touches[0].clientX - startX.current;
+          if (diff < 0) setOffsetX(Math.max(diff, -120));
+        }}
+        onTouchEnd={() => {
+          dragging.current = false;
+          if (offsetX <= -THRESHOLD) {
+            if ('vibrate' in navigator) navigator.vibrate(14);
+            onDelete();
+          }
+          setOffsetX(0);
+        }}
+      >
+        {children}
+      </motion.div>
+    </div>
   );
 }

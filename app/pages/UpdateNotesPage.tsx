@@ -6,13 +6,19 @@ import {
   Lock, ArrowLeft, Search, ChevronDown, ChevronRight,
   CheckCircle2, Package, TrendingUp, Hash, Star,
   X, Bell, GitCommit, Shield, Rocket, Clock, Filter,
-  Circle, ArrowUpRight,
+  Circle, ArrowUpRight, Plus, Pencil, Trash2,
 } from 'lucide-react';
 import { useNavigate } from 'react-router';
+import * as Dialog from '@radix-ui/react-dialog';
+import { toast } from 'sonner';
 import {
   UPDATE_NOTES, CURRENT_VERSION, SEEN_VERSION_KEY,
-  getVersionGroups, type UpdateCategory, type UpdateNote,
+  getVersionGroups, getAllVersions,
+  addUpdateNote, updateUpdateNote, deleteUpdateNote,
+  type UpdateCategory, type UpdateNote,
 } from '../utils/updateNotes';
+import { useGlobalTableData } from '../contexts/GlobalTableSyncContext';
+import { useAuth } from '../contexts/AuthContext';
 
 // ─── Kategori konfigürasyonu ──────────────────────────────────────────────────
 const CAT: Record<UpdateCategory, {
@@ -44,7 +50,17 @@ const ALL_CATS: { id: UpdateCategory | 'all'; label: string; icon: React.Element
 ];
 
 // ─── Kompakt Not Satırı ───────────────────────────────────────────────────────
-function NoteRow({ note, idx }: { note: UpdateNote; idx: number }) {
+interface NoteRowProps {
+  note: UpdateNote;
+  idx: number;
+  isAdmin?: boolean;
+  onEdit?: (note: UpdateNote) => void;
+  onDelete?: (id: string) => void;
+  deleteId?: string | null;
+  setDeleteId?: (id: string | null) => void;
+}
+
+function NoteRow({ note, idx, isAdmin, onEdit, onDelete, deleteId, setDeleteId }: NoteRowProps) {
   const [open, setOpen] = useState(false);
   const cat = CAT[note.category];
   const imp = IMPACT[note.impact];
@@ -94,6 +110,25 @@ function NoteRow({ note, idx }: { note: UpdateNote; idx: number }) {
             <span className={`text-[9px] font-bold ${imp.color} tabular-nums hidden xs:inline`}>
               {imp.label}
             </span>
+            {isAdmin && (
+              <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity" onClick={e => e.stopPropagation()}>
+                {deleteId === note.id ? (
+                  <div className="flex gap-1 items-center">
+                    <button onClick={() => { onDelete?.(note.id); setDeleteId?.(null); }} className="text-[9px] text-rose-300 font-bold px-1.5 py-0.5 rounded bg-rose-500/20 border border-rose-500/30">Sil</button>
+                    <button onClick={() => setDeleteId?.(null)} className="text-[9px] text-white/30 px-1 py-0.5">İptal</button>
+                  </div>
+                ) : (
+                  <>
+                    <button onClick={() => onEdit?.(note)} className="p-1 rounded hover:bg-white/10 text-white/30 hover:text-blue-300 transition-colors">
+                      <Pencil className="w-3 h-3" />
+                    </button>
+                    <button onClick={() => setDeleteId?.(note.id)} className="p-1 rounded hover:bg-white/10 text-white/30 hover:text-rose-300 transition-colors">
+                      <Trash2 className="w-3 h-3" />
+                    </button>
+                  </>
+                )}
+              </div>
+            )}
             <motion.div
               animate={{ rotate: open ? 180 : 0 }}
               transition={{ duration: 0.18 }}
@@ -139,9 +174,15 @@ function NoteRow({ note, idx }: { note: UpdateNote; idx: number }) {
 function VersionGroup({
   version, date, notes, isLatest,
   collapsed, onToggle,
+  isAdmin, onEdit, onDelete, deleteId, setDeleteId,
 }: {
   version: string; date: string; notes: UpdateNote[];
   isLatest: boolean; collapsed: boolean; onToggle: () => void;
+  isAdmin?: boolean;
+  onEdit?: (note: UpdateNote) => void;
+  onDelete?: (id: string) => void;
+  deleteId?: string | null;
+  setDeleteId?: (id: string | null) => void;
 }) {
   const newCount = notes.filter(n => n.isNew).length;
   const catCounts = useMemo(() => {
@@ -217,7 +258,10 @@ function VersionGroup({
           >
             <div className="ml-7 mb-4 mt-1 grid grid-cols-1 xl:grid-cols-2 gap-1.5">
               {notes.map((note, i) => (
-                <NoteRow key={note.id} note={note} idx={i} />
+                <NoteRow key={note.id} note={note} idx={i}
+                  isAdmin={isAdmin} onEdit={onEdit} onDelete={onDelete}
+                  deleteId={deleteId} setDeleteId={setDeleteId}
+                />
               ))}
             </div>
           </motion.div>
@@ -228,11 +272,11 @@ function VersionGroup({
 }
 
 // ─── Stats Bar ────────────────────────────────────────────────────────────────
-function StatsBar() {
-  const total     = UPDATE_NOTES.length;
-  const newCount  = UPDATE_NOTES.filter(n => n.isNew).length;
-  const versions  = [...new Set(UPDATE_NOTES.map(n => n.version))].length;
-  const highCount = UPDATE_NOTES.filter(n => n.impact === 'high').length;
+function StatsBar({ notes }: { notes: UpdateNote[] }) {
+  const total     = notes.length;
+  const newCount  = notes.filter(n => n.isNew).length;
+  const versions  = [...new Set(notes.map(n => n.version))].length;
+  const highCount = notes.filter(n => n.impact === 'high').length;
 
   const items = [
     { label: 'Güncelleme', value: total,     icon: Package,    color: 'text-blue-400',    glow: 'shadow-blue-500/20' },
@@ -285,7 +329,7 @@ function FilterBar({
       {ALL_CATS.map(cat => {
         const active = selected === cat.id;
         const Icon = cat.icon;
-        const count = cat.id === 'all' ? UPDATE_NOTES.length : (counts[cat.id] || 0);
+        const count = cat.id === 'all' ? (counts['all'] || 0) : (counts[cat.id] || 0);
         const cfg = cat.id !== 'all' ? CAT[cat.id as UpdateCategory] : null;
         return (
           <motion.button
@@ -368,9 +412,224 @@ function VersionSidebar({
   );
 }
 
+// ─── Not Ekle/Düzenle Modal ──────────────────────────────────────────────────
+interface NoteForm {
+  version: string; newVersion: string; category: UpdateCategory;
+  title: string; description: string; details: string[];
+  impact: 'high' | 'medium' | 'low'; isNew: boolean; emoji: string;
+}
+
+const DEFAULT_FORM: NoteForm = {
+  version: CURRENT_VERSION, newVersion: '', category: 'feature',
+  title: '', description: '', details: [''],
+  impact: 'medium', isNew: false, emoji: '',
+};
+
+function NoteModal({ open, onClose, editing, existingVersions }: {
+  open: boolean; onClose: () => void;
+  editing: UpdateNote | null;
+  existingVersions: string[];
+}) {
+  const [form, setForm] = useState<NoteForm>(DEFAULT_FORM);
+  const [saving, setSaving] = useState(false);
+  const [useNewVer, setUseNewVer] = useState(false);
+
+  useEffect(() => {
+    if (editing) {
+      setForm({
+        version: editing.version, newVersion: '',
+        category: editing.category, title: editing.title,
+        description: editing.description, details: editing.details?.length ? editing.details : [''],
+        impact: editing.impact, isNew: editing.isNew ?? false, emoji: editing.emoji ?? '',
+      });
+      setUseNewVer(!existingVersions.includes(editing.version));
+    } else {
+      setForm(DEFAULT_FORM);
+      setUseNewVer(false);
+    }
+  }, [editing, open]);
+
+  const finalVersion = useNewVer ? form.newVersion : form.version;
+
+  const handleSave = async () => {
+    if (!form.title.trim()) { toast.error('Başlık zorunlu'); return; }
+    if (!finalVersion.trim()) { toast.error('Sürüm zorunlu'); return; }
+    setSaving(true);
+    try {
+      const payload = {
+        version: finalVersion.trim(),
+        date: new Date().toISOString().slice(0, 10),
+        category: form.category,
+        title: form.title.trim(),
+        description: form.description.trim(),
+        details: form.details.filter(d => d.trim()),
+        impact: form.impact,
+        isNew: form.isNew,
+        emoji: form.emoji.trim() || undefined,
+      };
+      if (editing) {
+        await updateUpdateNote(editing.id, payload);
+        toast.success('Not güncellendi');
+      } else {
+        await addUpdateNote(payload);
+        toast.success('Not eklendi');
+      }
+      onClose();
+    } catch (e: any) {
+      toast.error(`Hata: ${e?.message || 'Bilinmeyen'}`);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const updateDetail = (i: number, val: string) => {
+    setForm(f => { const d = [...f.details]; d[i] = val; return { ...f, details: d }; });
+  };
+  const addDetail = () => setForm(f => ({ ...f, details: [...f.details, ''] }));
+  const removeDetail = (i: number) => setForm(f => ({ ...f, details: f.details.filter((_, j) => j !== i) }));
+
+  return (
+    <Dialog.Root open={open} onOpenChange={v => !v && onClose()}>
+      <Dialog.Portal>
+        <Dialog.Overlay className="fixed inset-0 bg-black/80 z-50 backdrop-blur-sm" />
+        <Dialog.Content className="fixed inset-2 sm:inset-auto sm:top-1/2 sm:left-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 bg-[#0c1220] border border-white/10 rounded-2xl z-50 shadow-2xl overflow-y-auto sm:w-[95vw] sm:max-w-xl" style={{ maxHeight: 'calc(100dvh - 1rem)' }}>
+          <div className="p-5">
+            <div className="flex items-center justify-between mb-5">
+              <Dialog.Title className="text-base font-black text-white">
+                {editing ? 'Notu Düzenle' : 'Yeni Not Ekle'}
+              </Dialog.Title>
+              <Dialog.Close className="p-1.5 hover:bg-white/10 rounded-lg text-white/40 hover:text-white transition-colors">
+                <X className="w-4 h-4" />
+              </Dialog.Close>
+            </div>
+
+            <div className="space-y-4">
+              {/* Versiyon */}
+              <div>
+                <label className="text-xs text-white/40 font-bold block mb-1.5">Sürüm</label>
+                <div className="flex gap-2 mb-1.5">
+                  <button onClick={() => setUseNewVer(false)} className={`px-3 py-1 rounded-lg text-xs font-bold border transition-colors ${!useNewVer ? 'bg-blue-500/20 border-blue-500/30 text-blue-300' : 'bg-white/5 border-white/10 text-white/40'}`}>Mevcut</button>
+                  <button onClick={() => setUseNewVer(true)} className={`px-3 py-1 rounded-lg text-xs font-bold border transition-colors ${useNewVer ? 'bg-blue-500/20 border-blue-500/30 text-blue-300' : 'bg-white/5 border-white/10 text-white/40'}`}>Yeni Sürüm</button>
+                </div>
+                {useNewVer ? (
+                  <input value={form.newVersion} onChange={e => setForm(f => ({ ...f, newVersion: e.target.value }))} placeholder="örn. v4.6.0" className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm text-white placeholder-white/25 outline-none focus:border-blue-500/40" />
+                ) : (
+                  <select value={form.version} onChange={e => setForm(f => ({ ...f, version: e.target.value }))} className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm text-white outline-none focus:border-blue-500/40">
+                    {existingVersions.map(v => <option key={v} value={v}>{v}</option>)}
+                  </select>
+                )}
+              </div>
+
+              {/* Kategori */}
+              <div>
+                <label className="text-xs text-white/40 font-bold block mb-1.5">Kategori</label>
+                <div className="grid grid-cols-3 gap-1.5">
+                  {(Object.keys(CAT) as UpdateCategory[]).map(k => {
+                    const c = CAT[k];
+                    const active = form.category === k;
+                    return (
+                      <button key={k} onClick={() => setForm(f => ({ ...f, category: k }))}
+                        className={`flex items-center gap-1.5 px-2.5 py-2 rounded-xl border text-xs font-bold transition-all ${active ? `${c.bg} ${c.border} ${c.color}` : 'bg-white/5 border-white/5 text-white/40 hover:bg-white/10'}`}>
+                        <c.icon className="w-3 h-3" />{c.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Başlık */}
+              <div>
+                <label className="text-xs text-white/40 font-bold block mb-1.5">Başlık</label>
+                <input value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))} placeholder="Not başlığı" className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm text-white placeholder-white/25 outline-none focus:border-blue-500/40" />
+              </div>
+
+              {/* Açıklama */}
+              <div>
+                <label className="text-xs text-white/40 font-bold block mb-1.5">Açıklama</label>
+                <textarea value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} rows={2} placeholder="Kısa açıklama" className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm text-white placeholder-white/25 outline-none focus:border-blue-500/40 resize-none" />
+              </div>
+
+              {/* Detaylar */}
+              <div>
+                <label className="text-xs text-white/40 font-bold block mb-1.5">Detaylar</label>
+                <div className="space-y-1.5">
+                  {form.details.map((d, i) => (
+                    <div key={i} className="flex gap-1.5">
+                      <input value={d} onChange={e => updateDetail(i, e.target.value)} placeholder={`Detay ${i + 1}`} className="flex-1 bg-white/5 border border-white/10 rounded-xl px-3 py-1.5 text-sm text-white placeholder-white/25 outline-none focus:border-blue-500/40" />
+                      <button onClick={() => removeDetail(i)} className="p-1.5 hover:bg-rose-500/20 text-white/30 hover:text-rose-300 rounded-lg transition-colors"><X className="w-3.5 h-3.5" /></button>
+                    </div>
+                  ))}
+                  <button onClick={addDetail} className="text-xs text-blue-400/60 hover:text-blue-300 flex items-center gap-1 transition-colors">
+                    <Plus className="w-3 h-3" /> Detay ekle
+                  </button>
+                </div>
+              </div>
+
+              {/* Etki + isNew + Emoji */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs text-white/40 font-bold block mb-1.5">Etki Seviyesi</label>
+                  <div className="flex gap-1.5">
+                    {(['high', 'medium', 'low'] as const).map(k => (
+                      <button key={k} onClick={() => setForm(f => ({ ...f, impact: k }))}
+                        className={`flex-1 py-1.5 rounded-xl text-xs font-bold border transition-all ${form.impact === k ? `${IMPACT[k].color} bg-white/10 border-white/20` : 'text-white/30 bg-white/5 border-white/5'}`}>
+                        {IMPACT[k].label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="flex items-end gap-3">
+                  <div className="flex-1">
+                    <label className="text-xs text-white/40 font-bold block mb-1.5">Emoji (opsiyonel)</label>
+                    <input value={form.emoji} onChange={e => setForm(f => ({ ...f, emoji: e.target.value.slice(0, 2) }))} placeholder="🚀" className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm text-white placeholder-white/25 outline-none focus:border-blue-500/40" />
+                  </div>
+                  <label className="flex items-center gap-2 cursor-pointer pb-2">
+                    <input type="checkbox" checked={form.isNew} onChange={e => setForm(f => ({ ...f, isNew: e.target.checked }))} className="w-4 h-4 accent-amber-400" />
+                    <span className="text-xs text-amber-400 font-bold">YENİ</span>
+                  </label>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex gap-2 mt-5 pt-4 border-t border-white/10">
+              <Dialog.Close className="flex-1 py-2.5 rounded-xl text-sm font-bold text-white/40 bg-white/5 border border-white/10 hover:bg-white/10 transition-colors">İptal</Dialog.Close>
+              <button onClick={handleSave} disabled={saving} className="flex-1 py-2.5 rounded-xl text-sm font-bold text-white bg-blue-600 hover:bg-blue-500 disabled:opacity-50 transition-colors">
+                {saving ? 'Kaydediliyor…' : editing ? 'Güncelle' : 'Ekle'}
+              </button>
+            </div>
+          </div>
+        </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog.Root>
+  );
+}
+
 // ─── Ana Sayfa ────────────────────────────────────────────────────────────────
 export function UpdateNotesPage() {
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const isAdmin = user?.role === 'Yönetici';
+
+  // Canlı PouchDB verisi — boşsa seed fallback
+  const liveNotes = useGlobalTableData<UpdateNote>('guncelleme_notlari');
+  const notes = liveNotes.length > 0 ? liveNotes : UPDATE_NOTES;
+
+  // Admin modal state
+  const [modalOpen, setModalOpen] = useState(false);
+  const [editingNote, setEditingNote] = useState<UpdateNote | null>(null);
+  const [deleteId, setDeleteId] = useState<string | null>(null);
+
+  const handleEdit = (note: UpdateNote) => { setEditingNote(note); setModalOpen(true); };
+  const handleOpenAdd = () => { setEditingNote(null); setModalOpen(true); };
+  const handleDelete = async (id: string) => {
+    try {
+      await deleteUpdateNote(id);
+      toast.success('Not silindi');
+    } catch (e: any) {
+      toast.error(`Silinemedi: ${e?.message}`);
+    }
+  };
+
   const [search, setSearch] = useState('');
   const [selCat, setSelCat] = useState<UpdateCategory | 'all'>('all');
   const [hasNew, setHasNew] = useState(false);
@@ -380,10 +639,11 @@ export function UpdateNotesPage() {
   const versionRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const [activeVersion, setActiveVersion] = useState<string | null>(null);
 
+  const existingVersions = useMemo(() => getAllVersions(notes), [notes]);
+
   // Tüm versiyonlar başlangıçta açık (latest) ya da kapalı
-  const allVersions = useMemo(() => [...new Set(UPDATE_NOTES.map(n => n.version))], []);
+  const allVersions = useMemo(() => [...new Set(notes.map(n => n.version))], [notes]);
   const [collapsed, setCollapsed] = useState<Set<string>>(() => {
-    // En son sürüm açık, diğerleri kapalı
     return new Set(allVersions.filter(v => v !== CURRENT_VERSION));
   });
 
@@ -404,7 +664,7 @@ export function UpdateNotesPage() {
   };
 
   const filtered = useMemo(() => {
-    return UPDATE_NOTES.filter(note => {
+    return notes.filter(note => {
       if (selCat !== 'all' && note.category !== selCat) return false;
       if (search) {
         const q = search.toLowerCase();
@@ -416,12 +676,12 @@ export function UpdateNotesPage() {
       }
       return true;
     });
-  }, [selCat, search]);
+  }, [notes, selCat, search]);
 
   const grouped = useMemo(() => getVersionGroups(filtered), [filtered]);
 
   const catCounts = useMemo(() => {
-    const c: Record<string, number> = {};
+    const c: Record<string, number> = { all: filtered.length };
     filtered.forEach(n => { c[n.category] = (c[n.category] || 0) + 1; });
     return c;
   }, [filtered]);
@@ -447,6 +707,15 @@ export function UpdateNotesPage() {
       versionRefs.current[version]?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }, 50);
   };
+
+  // Sync collapse state when new versions appear (live data)
+  useEffect(() => {
+    setCollapsed(prev => {
+      const newVersions = allVersions.filter(v => !prev.has(v) && v !== CURRENT_VERSION);
+      if (newVersions.length === 0) return prev;
+      return new Set([...prev, ...newVersions]);
+    });
+  }, [allVersions]);
 
   const expandAll = () => setCollapsed(new Set());
   const collapseAll = () => setCollapsed(new Set(allVersions.filter(v => v !== CURRENT_VERSION)));
@@ -542,11 +811,21 @@ export function UpdateNotesPage() {
           >
             <Search className="w-3.5 h-3.5" />
           </motion.button>
+          {isAdmin && (
+            <motion.button
+              whileTap={{ scale: 0.9 }}
+              onClick={handleOpenAdd}
+              className="flex items-center gap-1 px-2 py-1.5 rounded-lg bg-blue-600/20 border border-blue-500/30 text-blue-300 text-[11px] font-bold hover:bg-blue-600/30 transition-colors"
+            >
+              <Plus className="w-3 h-3" />
+              <span className="hidden sm:inline">Ekle</span>
+            </motion.button>
+          )}
         </div>
       </div>
 
       {/* Stats bar */}
-      <StatsBar />
+      <StatsBar notes={notes} />
 
       {/* Filter bar */}
       <FilterBar selected={selCat} onChange={setSelCat} counts={catCounts} />
@@ -597,18 +876,23 @@ export function UpdateNotesPage() {
         <div ref={mainRef} className="flex-1 overflow-y-auto">
           {grouped.length > 0 ? (
             <div className="max-w-4xl mx-auto px-4 py-3 space-y-0.5">
-              {grouped.map(([version, notes]) => (
+              {grouped.map(([version, versionNotes]) => (
                 <div
                   key={version}
                   ref={el => { versionRefs.current[version] = el; }}
                 >
                   <VersionGroup
                     version={version}
-                    date={notes[0].date}
-                    notes={notes}
+                    date={versionNotes[0].date}
+                    notes={versionNotes}
                     isLatest={version === CURRENT_VERSION}
                     collapsed={collapsed.has(version)}
                     onToggle={() => toggleVersion(version)}
+                    isAdmin={isAdmin}
+                    onEdit={handleEdit}
+                    onDelete={handleDelete}
+                    deleteId={deleteId}
+                    setDeleteId={setDeleteId}
                   />
                   {/* Thin separator */}
                   <div className="ml-7 border-b border-white/[0.04] mb-0.5" />
@@ -655,6 +939,14 @@ export function UpdateNotesPage() {
           )}
         </div>
       </div>
+
+      {/* Admin: Not Ekle/Düzenle Modal */}
+      <NoteModal
+        open={modalOpen}
+        onClose={() => setModalOpen(false)}
+        editing={editingNote}
+        existingVersions={existingVersions}
+      />
     </div>
   );
 }

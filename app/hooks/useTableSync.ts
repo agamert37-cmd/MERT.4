@@ -138,8 +138,9 @@ export function useTableSync<T extends { id: string }>(
   }, [data, storageKey]);
 
   // ─── PouchDB'den tüm veriyi oku ───────────────────────────────────────────
-  const fetchData = useCallback(async () => {
-    setSyncState('loading');
+  const fetchData = useCallback(async (silent = false) => {
+    // Arka plan yenileme (visibilitychange / foregrounded) için loading state gösterme
+    if (!silent) setSyncState('loading');
     setError(null);
 
     const start = performance.now();
@@ -185,6 +186,11 @@ export function useTableSync<T extends { id: string }>(
   useEffect(() => {
     fetchData();
 
+    // Mobil ön plana geliş — CouchDB sync yeniden başladığında UI'ı güncelle.
+    // pouchdb.ts 'pouchdb:app_foregrounded' yayınlar; silent=true → loading flash yok.
+    const handleForegrounded = () => fetchData(true);
+    window.addEventListener('pouchdb:app_foregrounded', handleForegrounded);
+
     // PouchDB changes feed — realtime güncellemeler (yerel + CouchDB'den gelen)
     const db = getDb(tableName);
     const changes = db.changes({
@@ -226,6 +232,7 @@ export function useTableSync<T extends { id: string }>(
 
     return () => {
       changes.cancel();
+      window.removeEventListener('pouchdb:app_foregrounded', handleForegrounded);
     };
   }, [tableName, fetchData, sortData]);
 

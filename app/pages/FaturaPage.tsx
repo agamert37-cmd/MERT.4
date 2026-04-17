@@ -158,8 +158,12 @@ export function FaturaPage() {
 
   // State
   const [searchTerm, setSearchTerm] = useState('');
-  const [filterType, setFilterType] = useState<'all' | 'alis' | 'satis'>('all');
-  const [filterStatus, setFilterStatus] = useState<'all' | 'aktif' | 'iptal'>('all');
+  const [filterType, setFilterType] = useState<'all' | 'alis' | 'satis'>(
+    () => (sessionStorage.getItem('mert4_filter_fatura_type') as 'all' | 'alis' | 'satis') ?? 'all'
+  );
+  const [filterStatus, setFilterStatus] = useState<'all' | 'aktif' | 'iptal'>(
+    () => (sessionStorage.getItem('mert4_filter_fatura_status') as 'all' | 'aktif' | 'iptal') ?? 'all'
+  );
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
   const [selectedFatura, setSelectedFatura] = useState<Fatura | null>(null);
@@ -813,13 +817,13 @@ export function FaturaPage() {
         </div>
         <div className="flex gap-2">
           {(['all', 'alis', 'satis'] as const).map(type => (
-            <button key={type} onClick={() => setFilterType(type)}
+            <button key={type} onClick={() => { setFilterType(type); sessionStorage.setItem('mert4_filter_fatura_type', type); }}
               className={`px-4 py-2.5 rounded-xl text-xs font-bold border transition-all ${filterType === type ? 'bg-blue-600/20 text-blue-400 border-blue-500/30' : 'bg-white/5 text-gray-500 border-white/5 hover:bg-white/10'}`}>
               {type === 'all' ? t('fatura.all') : type === 'alis' ? t('fatura.purchase') : t('fatura.sale')}
             </button>
           ))}
           {(['all', 'aktif', 'iptal'] as const).map(st => (
-            <button key={st} onClick={() => setFilterStatus(st)}
+            <button key={st} onClick={() => { setFilterStatus(st); sessionStorage.setItem('mert4_filter_fatura_status', st); }}
               className={`px-4 py-2.5 rounded-xl text-xs font-bold border transition-all ${filterStatus === st ? 'bg-emerald-600/20 text-emerald-400 border-emerald-500/30' : 'bg-white/5 text-gray-500 border-white/5 hover:bg-white/10'}`}>
               {st === 'all' ? t('fatura.statusFilter') : st === 'aktif' ? t('fatura.active') : t('fatura.cancelledStatus')}
             </button>
@@ -978,22 +982,24 @@ export function FaturaPage() {
             <h3 className="text-sm font-bold text-white mb-4 flex items-center gap-2">
               <Percent className="w-4 h-4 text-blue-400" /> KDV Oran Bazlı Kırılım
             </h3>
-            <div className="space-y-2">
-              <div className="grid grid-cols-5 gap-2 text-[10px] text-gray-500 uppercase tracking-widest font-bold px-3 pb-2 border-b border-white/5">
-                <span>Oran</span><span>Alış Net</span><span>Alış KDV</span><span>Satış Net</span><span>Satış KDV</span>
-              </div>
-              {(Object.entries(kdvRaporu.kdvByRate) as [string, { alisNet: number; alisKdv: number; satisNet: number; satisKdv: number; count: number }][]).sort(([a], [b]) => Number(a) - Number(b)).map(([rate, data]) => (
-                <div key={rate} className="grid grid-cols-5 gap-2 text-xs px-3 py-2 rounded-xl bg-white/[0.02] hover:bg-white/[0.04] transition-all">
-                  <span className="font-bold text-blue-400">%{rate}</span>
-                  <span className="text-orange-300">₺{data.alisNet.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}</span>
-                  <span className="text-orange-400 font-bold">₺{data.alisKdv.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}</span>
-                  <span className="text-emerald-300">₺{data.satisNet.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}</span>
-                  <span className="text-emerald-400 font-bold">₺{data.satisKdv.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}</span>
+            <div className="overflow-x-auto">
+              <div className="min-w-[380px] space-y-2">
+                <div className="grid grid-cols-5 gap-2 text-[10px] text-gray-500 uppercase tracking-widest font-bold px-3 pb-2 border-b border-white/5">
+                  <span>Oran</span><span>Alış Net</span><span>Alış KDV</span><span>Satış Net</span><span>Satış KDV</span>
                 </div>
-              ))}
-              {Object.keys(kdvRaporu.kdvByRate).length === 0 && (
-                <p className="text-center text-gray-600 text-xs py-6">Henüz fatura verisi yok</p>
-              )}
+                {(Object.entries(kdvRaporu.kdvByRate) as [string, { alisNet: number; alisKdv: number; satisNet: number; satisKdv: number; count: number }][]).sort(([a], [b]) => Number(a) - Number(b)).map(([rate, data]) => (
+                  <div key={rate} className="grid grid-cols-5 gap-2 text-xs px-3 py-2 rounded-xl bg-white/[0.02] hover:bg-white/[0.04] transition-all">
+                    <span className="font-bold text-blue-400">%{rate}</span>
+                    <span className="text-orange-300">₺{data.alisNet.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}</span>
+                    <span className="text-orange-400 font-bold">₺{data.alisKdv.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}</span>
+                    <span className="text-emerald-300">₺{data.satisNet.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}</span>
+                    <span className="text-emerald-400 font-bold">₺{data.satisKdv.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}</span>
+                  </div>
+                ))}
+                {Object.keys(kdvRaporu.kdvByRate).length === 0 && (
+                  <p className="text-center text-gray-600 text-xs py-6">Henüz fatura verisi yok</p>
+                )}
+              </div>
             </div>
           </div>
 
@@ -1001,22 +1007,24 @@ export function FaturaPage() {
             <h3 className="text-sm font-bold text-white mb-4 flex items-center gap-2">
               <Calendar className="w-4 h-4 text-indigo-400" /> Aylık KDV Özeti
             </h3>
-            <div className="space-y-2">
-              <div className="grid grid-cols-5 gap-2 text-[10px] text-gray-500 uppercase tracking-widest font-bold px-3 pb-2 border-b border-white/5">
-                <span>Dönem</span><span>Fatura</span><span>Alış KDV</span><span>Satış KDV</span><span>Fark</span>
-              </div>
-              {(Object.entries(kdvRaporu.monthlyKdv) as [string, { alisKdv: number; satisKdv: number; net: number; faturaCount: number }][]).sort(([a], [b]) => b.localeCompare(a)).map(([month, data]) => (
-                <div key={month} className="grid grid-cols-5 gap-2 text-xs px-3 py-2 rounded-xl bg-white/[0.02] hover:bg-white/[0.04] transition-all">
-                  <span className="font-bold text-white">{month}</span>
-                  <span className="text-gray-400">{data.faturaCount}</span>
-                  <span className="text-orange-400">₺{data.alisKdv.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}</span>
-                  <span className="text-emerald-400">₺{data.satisKdv.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}</span>
-                  <span className={`font-bold ${data.net >= 0 ? 'text-blue-400' : 'text-red-400'}`}>₺{data.net.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}</span>
+            <div className="overflow-x-auto">
+              <div className="min-w-[380px] space-y-2">
+                <div className="grid grid-cols-5 gap-2 text-[10px] text-gray-500 uppercase tracking-widest font-bold px-3 pb-2 border-b border-white/5">
+                  <span>Dönem</span><span>Fatura</span><span>Alış KDV</span><span>Satış KDV</span><span>Fark</span>
                 </div>
-              ))}
-              {Object.keys(kdvRaporu.monthlyKdv).length === 0 && (
-                <p className="text-center text-gray-600 text-xs py-6">Henüz aylık veri yok</p>
-              )}
+                {(Object.entries(kdvRaporu.monthlyKdv) as [string, { alisKdv: number; satisKdv: number; net: number; faturaCount: number }][]).sort(([a], [b]) => b.localeCompare(a)).map(([month, data]) => (
+                  <div key={month} className="grid grid-cols-5 gap-2 text-xs px-3 py-2 rounded-xl bg-white/[0.02] hover:bg-white/[0.04] transition-all">
+                    <span className="font-bold text-white">{month}</span>
+                    <span className="text-gray-400">{data.faturaCount}</span>
+                    <span className="text-orange-400">₺{data.alisKdv.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}</span>
+                    <span className="text-emerald-400">₺{data.satisKdv.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}</span>
+                    <span className={`font-bold ${data.net >= 0 ? 'text-blue-400' : 'text-red-400'}`}>₺{data.net.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}</span>
+                  </div>
+                ))}
+                {Object.keys(kdvRaporu.monthlyKdv).length === 0 && (
+                  <p className="text-center text-gray-600 text-xs py-6">Henüz aylık veri yok</p>
+                )}
+              </div>
             </div>
           </div>
         </motion.div>
@@ -1075,7 +1083,7 @@ export function FaturaPage() {
       <Dialog.Root open={isAddModalOpen} onOpenChange={setIsAddModalOpen}>
         <Dialog.Portal>
           <Dialog.Overlay className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50" />
-          <Dialog.Content className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[95vw] max-w-2xl max-h-[90vh] bg-[#0a0a0f] border border-white/10 rounded-3xl z-50 flex flex-col overflow-hidden shadow-2xl">
+          <Dialog.Content className="fixed inset-2 sm:inset-auto sm:top-1/2 sm:left-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 sm:w-[95vw] sm:max-w-2xl bg-[#0a0a0f] border border-white/10 rounded-3xl z-50 flex flex-col overflow-hidden shadow-2xl" style={{maxHeight: 'calc(100dvh - 1rem)'}}>
             <div className="p-6 border-b border-white/10 flex items-center justify-between">
               <div>
                 <h2 className="text-xl font-black text-white flex items-center gap-2">
@@ -1334,7 +1342,7 @@ export function FaturaPage() {
       <Dialog.Root open={isDetailOpen} onOpenChange={setIsDetailOpen}>
         <Dialog.Portal>
           <Dialog.Overlay className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50" />
-          <Dialog.Content className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[95vw] max-w-xl max-h-[90vh] bg-[#0a0a0f] border border-white/10 rounded-3xl z-50 flex flex-col overflow-hidden shadow-2xl">
+          <Dialog.Content className="fixed inset-2 sm:inset-auto sm:top-1/2 sm:left-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 sm:w-[95vw] sm:max-w-xl bg-[#0a0a0f] border border-white/10 rounded-3xl z-50 flex flex-col overflow-hidden shadow-2xl" style={{maxHeight: 'calc(100dvh - 1rem)'}}>
             {selectedFatura && (
               <>
                 <div className={`p-6 border-b border-white/10 ${selectedFatura.status === 'iptal' ? 'bg-red-500/5' : selectedFatura.type === 'alis' ? 'bg-orange-500/5' : 'bg-emerald-500/5'}`}>
@@ -1517,7 +1525,7 @@ export function FaturaPage() {
       <Dialog.Root open={isFaturaStokModalOpen} onOpenChange={setIsFaturaStokModalOpen}>
         <Dialog.Portal>
           <Dialog.Overlay className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50" />
-          <Dialog.Content className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[95vw] max-w-lg max-h-[80vh] bg-[#0a0a0f] border border-white/10 rounded-3xl z-50 flex flex-col overflow-hidden shadow-2xl">
+          <Dialog.Content className="fixed inset-2 sm:inset-auto sm:top-1/2 sm:left-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 sm:w-[95vw] sm:max-w-lg bg-[#0a0a0f] border border-white/10 rounded-3xl z-50 flex flex-col overflow-hidden shadow-2xl" style={{maxHeight: 'calc(100dvh - 1rem)'}}>
             <div className="p-6 border-b border-white/10">
               <h2 className="text-lg font-black text-white flex items-center gap-2">
                 <Package className="w-5 h-5 text-amber-400" /> Fatura Stok Kalemleri
