@@ -1700,7 +1700,7 @@ export function CariPage() {
                             Kategorileri Düzenle
                           </motion.button>
                         </div>
-                        <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
+                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
                           {(formData.type === 'Müşteri' ? musteriCategories : toptanciCategories).map(cat => {
                             const isSelected = formData.category === cat;
                             const catColor = CATEGORY_COLORS[cat] || '#64748b';
@@ -1885,7 +1885,7 @@ export function CariPage() {
                         <label className="flex items-center gap-1.5 text-xs text-gray-500 mb-3 font-medium uppercase tracking-wider">
                           {t('cari.billingType')}
                         </label>
-                        <div className="grid grid-cols-3 gap-3">
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                           {([
                             { key: 'tam', label: t('cari.invoiceFullLabel'), desc: t('cari.invoiceFullDesc'), icon: '📋', color: 'emerald' },
                             { key: 'kismi', label: t('cari.invoicePartialLabel'), desc: t('cari.invoicePartialDesc'), icon: '📄', color: 'amber' },
