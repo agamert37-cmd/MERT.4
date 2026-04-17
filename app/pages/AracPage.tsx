@@ -191,9 +191,9 @@ export function AracPage() {
                       <span className="text-[10px] uppercase text-blue-500/80 -mb-1">TR</span>
                       <span className="text-lg tracking-tighter">{(vehicle.plate.match(/^\d{2}/) || ['34'])[0]}</span>
                     </div>
-                    <div>
-                      <h3 className="text-xl font-black text-white tracking-tight">{vehicle.plate}</h3>
-                      <p className="text-sm text-gray-400 font-medium">{vehicle.model}</p>
+                    <div className="min-w-0">
+                      <h3 className="text-xl font-black text-white tracking-tight truncate">{vehicle.plate}</h3>
+                      <p className="text-sm text-gray-400 font-medium truncate">{vehicle.model}</p>
                     </div>
                   </div>
                   <div className="flex flex-col items-end gap-2">

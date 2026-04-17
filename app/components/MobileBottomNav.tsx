@@ -294,7 +294,7 @@ export function MobileBottomNav() {
               </div>
 
               {/* Scrollable content */}
-              <div className="flex-1 overflow-y-auto px-4 pb-6 space-y-4 overscroll-contain">
+              <div className="flex-1 overflow-y-auto px-4 pb-6 space-y-4 overscroll-contain" style={{ WebkitOverflowScrolling: 'touch' }}>
                 {filteredGroups.length === 0 && (
                   <div className="flex flex-col items-center justify-center py-10 text-gray-500">
                     <Search className="w-8 h-8 mb-2 opacity-40" />

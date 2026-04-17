@@ -540,12 +540,12 @@ export function KasaPage() {
                         <div className={`p-3 rounded-xl flex-shrink-0 ${transaction.type === 'Gelir' ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}>
                           {transaction.type === 'Gelir' ? <TrendingUp className="w-6 h-6" /> : <TrendingDown className="w-6 h-6" />}
                         </div>
-                        <div>
-                          <div className="flex items-center gap-2 mb-1">
-                            <span className={`px-2 py-0.5 text-[10px] font-bold rounded-md border ${transaction.type === 'Gelir' ? 'border-green-500/30 text-green-400 bg-green-500/10' : 'border-red-500/30 text-red-400 bg-red-500/10'}`}>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2 mb-1 flex-wrap">
+                            <span className={`flex-shrink-0 px-2 py-0.5 text-[10px] font-bold rounded-md border ${transaction.type === 'Gelir' ? 'border-green-500/30 text-green-400 bg-green-500/10' : 'border-red-500/30 text-red-400 bg-red-500/10'}`}>
                               {transaction.category}
                             </span>
-                            <span className="text-xs text-gray-500 font-medium">{transaction.date} &bull; {transaction.time}</span>
+                            <span className="text-xs text-gray-500 font-medium truncate">{transaction.date} &bull; {transaction.time}</span>
                           </div>
                           <p className="text-white font-medium line-clamp-1">{transaction.description || 'Açıklama girilmedi'}</p>
                         </div>
