@@ -5,6 +5,7 @@ import { SyncStatusBanner } from './components/SyncStatusBanner';
 import { router } from './routes';
 import { Toaster } from 'sonner';
 import { useEffect } from 'react';
+import { useUpdateCheck } from './hooks/useUpdateCheck';
 
 export default function App() {
   // Dark tema
@@ -12,6 +13,8 @@ export default function App() {
     document.documentElement.classList.add('dark');
     return () => document.documentElement.classList.remove('dark');
   }, []);
+
+  useUpdateCheck();
 
   return (
     <div className="dark min-h-screen bg-background">

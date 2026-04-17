@@ -2,6 +2,8 @@ import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 import { getFromStorage, StorageKey } from './storage';
+import { getDb } from '../lib/pouchdb';
+import { TABLE_NAMES } from '../lib/db-config';
 
 const sanitizeStr = (str: any) => {
   if (!str) return '-';
@@ -414,3 +416,98 @@ export const generatePDFBackup = () => {
     return false;
   }
 };
+
+// ─── Türkçe tablo adları ──────────────────────────────────────────────────────
+const TABLE_LABELS: Record<string, string> = {
+  fisler: 'Fisler',
+  urunler: 'Urunler (Stok)',
+  cari_hesaplar: 'Cari Hesaplar',
+  kasa_islemleri: 'Kasa Islemleri',
+  personeller: 'Personeller',
+  bankalar: 'Bankalar',
+  cekler: 'Cekler',
+  araclar: 'Araclar',
+  arac_shifts: 'Arac Vardiyeleri',
+  arac_km_logs: 'Km Loglari',
+  uretim_profilleri: 'Uretim Profilleri',
+  uretim_kayitlari: 'Uretim Kayitlari',
+  faturalar: 'Faturalar',
+  fatura_stok: 'Fatura Stok',
+  tahsilatlar: 'Tahsilatlar',
+  guncelleme_notlari: 'Guncelleme Notlari',
+  stok_giris: 'Stok Girisleri',
+};
+
+/** PouchDB'deki tüm tablolardan veri okur ve çok sayfalı Excel dosyası indirir */
+export async function generateFullPouchDbExcel(
+  onProgress?: (tableName: string, index: number, total: number) => void
+): Promise<{ ok: number; fail: number; totalRows: number }> {
+  const wb = XLSX.utils.book_new();
+  const dateStr = new Date().toISOString().split('T')[0];
+  let ok = 0;
+  let fail = 0;
+  let totalRows = 0;
+
+  // Özet sayfası için
+  const summaryRows: { Tablo: string; 'Kayit Sayisi': number; Durum: string }[] = [];
+
+  for (let i = 0; i < TABLE_NAMES.length; i++) {
+    const tableName = TABLE_NAMES[i];
+    const label = TABLE_LABELS[tableName] || tableName;
+
+    try {
+      onProgress?.(tableName, i, TABLE_NAMES.length);
+      const db = getDb(tableName);
+      const result = await db.allDocs({ include_docs: true });
+      const rows = result.rows
+        .filter((r: any) => r.doc && !r.doc._deleted)
+        .map((r: any) => {
+          const { _id, _rev, _deleted, _conflicts, _attachments, ...rest } = r.doc;
+          if (!rest.id) rest.id = _id;
+          // Tüm alanları düzleştir (nested objeleri JSON string'e çevir)
+          const flat: Record<string, any> = {};
+          for (const [k, v] of Object.entries(rest)) {
+            if (v !== null && typeof v === 'object' && !Array.isArray(v)) {
+              flat[k] = JSON.stringify(v);
+            } else if (Array.isArray(v)) {
+              flat[k] = JSON.stringify(v);
+            } else {
+              flat[k] = v;
+            }
+          }
+          return flat;
+        });
+
+      if (rows.length > 0) {
+        const ws = XLSX.utils.json_to_sheet(rows);
+        // Sütun genişliklerini ayarla
+        const colWidths = Object.keys(rows[0] || {}).map(k => ({ wch: Math.max(k.length + 2, 12) }));
+        ws['!cols'] = colWidths;
+        XLSX.utils.book_append_sheet(wb, ws, label.slice(0, 31)); // Excel max 31 char
+      }
+
+      summaryRows.push({ Tablo: label, 'Kayit Sayisi': rows.length, Durum: 'OK' });
+      totalRows += rows.length;
+      ok++;
+    } catch (e: any) {
+      console.error(`[Excel Export] ${tableName}:`, e.message);
+      summaryRows.push({ Tablo: label, 'Kayit Sayisi': 0, Durum: `Hata: ${e.message}` });
+      fail++;
+    }
+  }
+
+  // Özet sayfası en başa ekle
+  const summaryWs = XLSX.utils.json_to_sheet(summaryRows);
+  summaryWs['!cols'] = [{ wch: 22 }, { wch: 14 }, { wch: 30 }];
+  XLSX.utils.book_append_sheet(wb, summaryWs, 'Ozet');
+
+  // Ozet en başa al
+  wb.SheetNames = ['Ozet', ...wb.SheetNames.filter(n => n !== 'Ozet')];
+
+  if (wb.SheetNames.length === 0) {
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet([{ Bilgi: 'Veri bulunamadi.' }]), 'Bos');
+  }
+
+  XLSX.writeFile(wb, `IsleyenET_TamVeri_${dateStr}.xlsx`);
+  return { ok, fail, totalRows };
+}
