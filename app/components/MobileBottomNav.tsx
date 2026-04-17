@@ -15,6 +15,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useEmployee } from '../contexts/EmployeeContext';
 import { restartAllSync, testCouchDbConnection } from '../lib/pouchdb';
 import { useCouchDbStatus, useGlobalTableData } from '../contexts/GlobalTableSyncContext';
+import { walLoad } from '../lib/active-client';
 import { toast } from 'sonner';
 
 interface NavItem {
@@ -100,6 +101,7 @@ export function MobileBottomNav() {
   const [isSyncing, setIsSyncing] = useState(false);
   const [search, setSearch] = useState('');
   const [isOnline, setIsOnline] = useState(navigator.onLine);
+  const [pendingWrites, setPendingWrites] = useState(() => walLoad().length);
   const { couchdbConnected } = useCouchDbStatus();
   const urunler = useGlobalTableData<any>('urunler');
   const faturalar = useGlobalTableData<any>('faturalar');
@@ -112,11 +114,17 @@ export function MobileBottomNav() {
   const searchRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    const onOnline  = () => setIsOnline(true);
+    const onOnline  = () => { setIsOnline(true); setPendingWrites(walLoad().length); };
     const onOffline = () => setIsOnline(false);
     window.addEventListener('online',  onOnline);
     window.addEventListener('offline', onOffline);
-    return () => { window.removeEventListener('online', onOnline); window.removeEventListener('offline', onOffline); };
+    // WAL durumunu periyodik güncelle (çevrimdışı yazma sayısı)
+    const walTimer = setInterval(() => setPendingWrites(walLoad().length), 5000);
+    return () => {
+      window.removeEventListener('online', onOnline);
+      window.removeEventListener('offline', onOffline);
+      clearInterval(walTimer);
+    };
   }, []);
 
   // Close on route change
@@ -153,23 +161,19 @@ export function MobileBottomNav() {
     haptic('medium');
     try {
       restartAllSync();
-      setTimeout(() => {
-        window.dispatchEvent(new CustomEvent('pouchdb:app_foregrounded'));
-      }, 800);
-      toast.success('Veriler güncellendi', { id: 'mobile-sync', duration: 2000 });
-    } catch (e: any) {
       const result = await testCouchDbConnection();
-      if (!result.ok) {
-        toast.error(`Sunucuya ulaşılamıyor: ${result.error || 'Bağlantı hatası'}`, {
+      if (result.ok) {
+        toast.success('Senkronizasyon başlatıldı', { id: 'mobile-sync', duration: 2000 });
+      } else {
+        toast.error(`CouchDB bağlantı hatası: ${result.error || 'Sunucuya ulaşılamıyor'}`, {
           id: 'mobile-sync',
           duration: 3000,
         });
-      } else {
-        restartAllSync();
-        toast.success('Senkronizasyon başlatıldı', { id: 'mobile-sync', duration: 2000 });
       }
+    } catch {
+      toast.error('Senkronizasyon başarısız', { id: 'mobile-sync', duration: 2000 });
     } finally {
-      setTimeout(() => setIsSyncing(false), 1000);
+      setIsSyncing(false);
     }
   }, [isSyncing]);
 
@@ -232,10 +236,15 @@ export function MobileBottomNav() {
                       whileTap={{ scale: 0.9 }}
                       onClick={handleSync}
                       disabled={isSyncing || !isOnline}
-                      className="p-2 rounded-xl bg-blue-600/15 border border-blue-500/20 text-blue-400 disabled:opacity-40 transition-colors"
-                      title="Verileri Senkronize Et"
+                      className="relative p-2 rounded-xl bg-blue-600/15 border border-blue-500/20 text-blue-400 disabled:opacity-40 transition-colors"
+                      title={pendingWrites > 0 ? `${pendingWrites} bekleyen yazma` : 'Verileri Senkronize Et'}
                     >
                       <RefreshCw className={`w-4 h-4 ${isSyncing ? 'animate-spin' : ''}`} />
+                      {pendingWrites > 0 && !isSyncing && (
+                        <span className="absolute -top-1 -right-1 w-4 h-4 bg-amber-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center">
+                          {pendingWrites > 9 ? '9+' : pendingWrites}
+                        </span>
+                      )}
                     </motion.button>
                     <button
                       onClick={() => setIsMoreOpen(false)}

@@ -31,7 +31,7 @@ import { PremiumTooltip, GlowBar, EmptyChartState } from '../components/ChartCom
 import { kvGet, kvSet } from '../lib/pouchdb-kv';
 import { BarcodeScanner } from '../components/BarcodeScanner';
 
-export type MovementType = 'ALIS' | 'SATIS' | 'MUSTERI_IADE' | 'TOPTANCI_IADE' | 'FIRE' | 'URETIM_CIKIS' | 'URETIM_GIRIS' | 'FATURA_ALIS' | 'FATURA_SATIS' | 'FATURA_IPTAL';
+export type MovementType = 'ALIS' | 'SATIS' | 'MUSTERI_IADE' | 'TOPTANCI_IADE' | 'FIRE' | 'URETIM_CIKIS' | 'URETIM_GIRIS' | 'FATURA_ALIS' | 'FATURA_SATIS' | 'FATURA_IPTAL' | 'ONCEKI_BAKIYE';
 export type ProductCategory = string;
 
 export interface StockMovement {
@@ -259,6 +259,7 @@ function MovementBadge({ type }: { type: MovementType }) {
     'FATURA_ALIS': { label: 'Fat. Alış', cls: 'bg-indigo-500/15 text-indigo-400 border-indigo-500/20', icon: <ArrowDownRight className="w-3 h-3" /> },
     'FATURA_SATIS': { label: 'Fat. Satış', cls: 'bg-teal-500/15 text-teal-400 border-teal-500/20', icon: <ArrowUpRight className="w-3 h-3" /> },
     'FATURA_IPTAL': { label: 'Fat. İptal', cls: 'bg-rose-500/15 text-rose-400 border-rose-500/20', icon: <AlertTriangle className="w-3 h-3" /> },
+    'ONCEKI_BAKIYE': { label: 'Önceki Bakiye', cls: 'bg-violet-500/15 text-violet-400 border-violet-500/20', icon: <History className="w-3 h-3" /> },
   };
   const c = config[type] || { label: type, cls: 'bg-gray-500/15 text-gray-400 border-gray-500/20', icon: null };
   return (
@@ -492,6 +493,7 @@ export function StokPage() {
   // Form state for custom selects
   const [addFormCategory, setAddFormCategory] = useState<string>(categories[0] || 'Dana');
   const [addFormUnit, setAddFormUnit] = useState<string>('KG');
+  const [addFormOncekiStok, setAddFormOncekiStok] = useState<string>('');
   const [editFormCategory, setEditFormCategory] = useState<string>('');
   const [editFormUnit, setEditFormUnit] = useState<string>('');
 
@@ -585,24 +587,36 @@ export function StokPage() {
     const fd = new FormData(e.currentTarget);
     const name = fd.get('name') as string;
     if (!sec.preCheck('add', { name })) return;
+    const oncekiQty = parseFloat(addFormOncekiStok) || 0;
+    const oncekiMovement: StockMovement[] = oncekiQty > 0 ? [{
+      id: crypto.randomUUID(),
+      type: 'ONCEKI_BAKIYE',
+      partyName: 'Önceki Bakiye',
+      date: new Date().toISOString(),
+      quantity: oncekiQty,
+      price: 0,
+      totalAmount: 0,
+      description: 'Önceki Bakiye',
+    }] : [];
     const newProduct: Product = {
       id: crypto.randomUUID(),
       name: sec.sanitize(name),
       category: addFormCategory as ProductCategory,
       unit: addFormUnit as 'KG' | 'Adet' | 'Koli',
-      currentStock: 0,
+      currentStock: oncekiQty,
       minStock: Number(fd.get('minStock')),
       sellPrice: 0,
-      movements: [],
+      movements: oncekiMovement,
     };
     addItem(newProduct);
-    emit('stok:added', { productId: newProduct.id, productName: newProduct.name, quantity: 0 });
+    emit('stok:added', { productId: newProduct.id, productName: newProduct.name, quantity: oncekiQty });
     sec.auditLog('stok_add', newProduct.id, newProduct.name);
-    logActivity('employee_update', 'Yeni Urun Eklendi', { employeeName: user?.name, page: 'Stok', description: `${newProduct.name} urunu stoga eklendi.` });
+    logActivity('employee_update', 'Yeni Urun Eklendi', { employeeName: user?.name, page: 'Stok', description: `${newProduct.name} urunu stoga eklendi${oncekiQty > 0 ? ` (önceki bakiye: ${oncekiQty})` : ''}.` });
     toast.success('Urun tanimlandi');
     setIsAddModalOpen(false);
     setAddFormCategory(categories[0] || 'Dana');
     setAddFormUnit('KG');
+    setAddFormOncekiStok('');
   };
 
   const handleEditProduct = (e: React.FormEvent<HTMLFormElement>) => {
@@ -660,22 +674,25 @@ export function StokPage() {
     const qty = Number(fd.get('quantity'));
     const price = Number(fd.get('price'));
     const desc = (fd.get('description') as string) || '';
-    if (!partyName) { toast.error('Ilgili kisi/firma secilmeli!'); return; }
-    if (!sec.preCheck('add', { partyName, description: desc })) return;
+    const isOncekiBakiye = type === 'ONCEKI_BAKIYE';
+    if (!isOncekiBakiye && !partyName) { toast.error('Ilgili kisi/firma secilmeli!'); return; }
+    if (!sec.preCheck('add', { partyName: partyName || 'Önceki Bakiye', description: desc })) return;
     const newMv: StockMovement = {
-      id: crypto.randomUUID(), type, partyName: sec.sanitize(partyName),
-      date: new Date().toISOString(), quantity: qty, price, totalAmount: qty * price,
-      description: sec.sanitize(desc)
+      id: crypto.randomUUID(), type,
+      partyName: isOncekiBakiye ? 'Önceki Bakiye' : sec.sanitize(partyName),
+      date: new Date().toISOString(), quantity: qty, price: isOncekiBakiye ? 0 : price,
+      totalAmount: isOncekiBakiye ? 0 : qty * price,
+      description: sec.sanitize(desc || (isOncekiBakiye ? 'Önceki Bakiye' : ''))
     };
     let sc = 0;
-    if (['ALIS', 'MUSTERI_IADE', 'URETIM_GIRIS', 'FATURA_ALIS'].includes(type)) sc = qty;
+    if (['ALIS', 'MUSTERI_IADE', 'URETIM_GIRIS', 'FATURA_ALIS', 'ONCEKI_BAKIYE'].includes(type)) sc = qty;
     if (['SATIS', 'TOPTANCI_IADE', 'FIRE', 'URETIM_CIKIS', 'FATURA_SATIS'].includes(type)) sc = -qty;
     updateItem(selectedProduct.id, {
       ...selectedProduct,
       currentStock: selectedProduct.currentStock + sc,
       movements: [newMv, ...selectedProduct.movements]
     });
-    const mc = findCariByName(partyName);
+    const mc = !isOncekiBakiye && findCariByName(partyName);
     if (mc && ['ALIS', 'SATIS', 'MUSTERI_IADE', 'TOPTANCI_IADE', 'FATURA_ALIS', 'FATURA_SATIS'].includes(type)) {
       updateCariForMovement(partyName, newMv, selectedProduct.name);
     }
@@ -1618,6 +1635,22 @@ export function StokPage() {
               <label className="text-[10px] text-gray-500 font-bold uppercase block mb-1.5 ml-1">Kritik Stok Seviyesi</label>
               <input type="number" name="minStock" required placeholder="Orn: 10" className="w-full p-3 bg-secondary/60 border border-border rounded-xl text-white outline-none focus:border-blue-500/50 text-sm transition-all" />
             </div>
+            <div>
+              <label className="text-[10px] text-gray-500 font-bold uppercase block mb-1 ml-1 flex items-center gap-1">
+                <History className="w-3 h-3 text-violet-400" />
+                Başlangıç Stoku (Önceki Bakiye) — Opsiyonel
+              </label>
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                value={addFormOncekiStok}
+                onChange={e => setAddFormOncekiStok(e.target.value)}
+                placeholder="0 — Sistemden önce mevcut stok miktarı"
+                className="w-full p-3 bg-violet-500/5 border border-violet-500/20 rounded-xl text-white placeholder-gray-600 outline-none focus:border-violet-500/50 text-sm transition-all"
+              />
+              <p className="text-[10px] text-gray-600 mt-1 ml-1">Bu ürün sisteme girilmeden önce mevcut olan stok miktarı "Önceki Bakiye" olarak kaydedilir.</p>
+            </div>
             <button type="submit" className="w-full py-3 mt-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-bold rounded-xl transition-all active:scale-[0.98] shadow-lg shadow-blue-600/20">Urunu Kaydet</button>
           </form>
         </Dialog.Content></Dialog.Portal>
@@ -1648,6 +1681,7 @@ export function StokPage() {
                   value={movementTypeForFilter}
                   onChange={(v) => { setMovementTypeForFilter(v); setPartySearch(''); setSelectedCariId(null); }}
                   options={[
+                    { value: 'ONCEKI_BAKIYE', label: '⬛ Önceki Bakiye (+)' },
                     { value: 'ALIS', label: 'Toptancidan Alis (+)' },
                     { value: 'SATIS', label: 'Musteriye Satis (-)' },
                     { value: 'MUSTERI_IADE', label: 'Musteri Iadesi (+)' },
@@ -1661,38 +1695,56 @@ export function StokPage() {
                 />
               </div>
 
-              <div className="relative">
-                <label className="text-[10px] text-gray-500 font-bold uppercase block mb-1.5 ml-1">Ilgili Kisi / Firma</label>
-                <input
-                  type="text" ref={partyInputRef as any} name="partyName" value={partySearch}
-                  onChange={e => { setPartySearch(e.target.value); setShowCariSuggestions(true); setSelectedCariId(null); }}
-                  placeholder="Ilgili Kisi / Firma Ara..."
-                  className={`w-full p-3 bg-secondary/60 border rounded-xl text-white outline-none focus:border-indigo-500/50 text-sm transition-all ${selectedCariId ? 'border-emerald-500/40' : 'border-border'}`}
-                  autoComplete="off"
-                />
-                {showCariSuggestions && filteredCariSuggestions.length > 0 && (
-                  <div ref={suggestionsRef as any} className="absolute z-[200] top-full mt-1 left-0 right-0 bg-card border border-border rounded-xl shadow-2xl shadow-black/80 overflow-hidden" style={{ maxHeight: 'min(200px, 40vh)' }}>
-                    <div className="overflow-y-auto" style={{ maxHeight: 'min(200px, 40vh)' }}>
-                      {filteredCariSuggestions.map((c: any) => (
-                        <div key={c.id} onClick={() => { setPartySearch(c.companyName); setSelectedCariId(c.id); setShowCariSuggestions(false); }} className="p-3 hover:bg-white/10 cursor-pointer border-b border-white/5 flex justify-between">
-                          <span className="text-sm font-bold">{c.companyName}</span>
-                          <span className="text-xs text-gray-500">{c.type}</span>
-                        </div>
-                      ))}
+              {/* Önceki Bakiye seçiliyse firma/kişi alanı gizlenir */}
+              {movementTypeForFilter !== 'ONCEKI_BAKIYE' && (
+                <div className="relative">
+                  <label className="text-[10px] text-gray-500 font-bold uppercase block mb-1.5 ml-1">Ilgili Kisi / Firma</label>
+                  <input
+                    type="text" ref={partyInputRef as any} name="partyName" value={partySearch}
+                    onChange={e => { setPartySearch(e.target.value); setShowCariSuggestions(true); setSelectedCariId(null); }}
+                    placeholder="Ilgili Kisi / Firma Ara..."
+                    className={`w-full p-3 bg-secondary/60 border rounded-xl text-white outline-none focus:border-indigo-500/50 text-sm transition-all ${selectedCariId ? 'border-emerald-500/40' : 'border-border'}`}
+                    autoComplete="off"
+                  />
+                  {showCariSuggestions && filteredCariSuggestions.length > 0 && (
+                    <div ref={suggestionsRef as any} className="absolute z-[200] top-full mt-1 left-0 right-0 bg-card border border-border rounded-xl shadow-2xl shadow-black/80 overflow-hidden" style={{ maxHeight: 'min(200px, 40vh)' }}>
+                      <div className="overflow-y-auto" style={{ maxHeight: 'min(200px, 40vh)' }}>
+                        {filteredCariSuggestions.map((c: any) => (
+                          <div key={c.id} onClick={() => { setPartySearch(c.companyName); setSelectedCariId(c.id); setShowCariSuggestions(false); }} className="p-3 hover:bg-white/10 cursor-pointer border-b border-white/5 flex justify-between">
+                            <span className="text-sm font-bold">{c.companyName}</span>
+                            <span className="text-xs text-gray-500">{c.type}</span>
+                          </div>
+                        ))}
+                      </div>
                     </div>
+                  )}
+                </div>
+              )}
+
+              {movementTypeForFilter === 'ONCEKI_BAKIYE' && (
+                <div className="flex items-center gap-3 p-3 bg-violet-500/10 border border-violet-500/20 rounded-xl">
+                  <History className="w-4 h-4 text-violet-400 flex-shrink-0" />
+                  <div>
+                    <p className="text-xs font-bold text-violet-300">Önceki Bakiye Girişi</p>
+                    <p className="text-[10px] text-gray-500 mt-0.5">Sisteme girmeden önce mevcut olan stok miktarını girin. Firma/fiyat alanları uygulanmaz.</p>
                   </div>
-                )}
-              </div>
+                </div>
+              )}
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="text-[10px] text-gray-500 font-bold uppercase block mb-1 ml-1">Miktar ({getUnitLabel(selectedProduct.unit)})</label>
                   <input type="number" name="quantity" required step={selectedProduct.unit === 'KG' ? '0.01' : '1'} min={selectedProduct.unit === 'KG' ? '0.01' : '1'} placeholder={selectedProduct.unit === 'KG' ? '25.50' : '10'} className="w-full p-3 bg-secondary/60 border border-border rounded-xl text-white outline-none focus:border-indigo-500/50 text-sm transition-all" />
                 </div>
-                <div>
-                  <label className="text-[10px] text-gray-500 font-bold uppercase block mb-1 ml-1">B. Fiyat (₺/{selectedProduct.unit})</label>
-                  <input type="number" name="price" required step="0.01" min="0" placeholder="350.00" className="w-full p-3 bg-secondary/60 border border-border rounded-xl text-white outline-none focus:border-indigo-500/50 text-sm transition-all" />
-                </div>
+                {movementTypeForFilter !== 'ONCEKI_BAKIYE' && (
+                  <div>
+                    <label className="text-[10px] text-gray-500 font-bold uppercase block mb-1 ml-1">B. Fiyat (₺/{selectedProduct.unit})</label>
+                    <input type="number" name="price" required step="0.01" min="0" placeholder="350.00" className="w-full p-3 bg-secondary/60 border border-border rounded-xl text-white outline-none focus:border-indigo-500/50 text-sm transition-all" />
+                  </div>
+                )}
+                {movementTypeForFilter === 'ONCEKI_BAKIYE' && (
+                  <input type="hidden" name="price" value="0" />
+                )}
               </div>
               <input type="text" name="description" placeholder="Aciklama (Opsiyonel)" className="w-full p-3 bg-secondary/60 border border-border rounded-xl text-white outline-none focus:border-indigo-500/50 text-sm transition-all" />
               <button type="submit" className="w-full py-3 mt-2 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white font-bold rounded-xl transition-all active:scale-[0.98] shadow-lg shadow-indigo-600/20">Hareketi Kaydet</button>

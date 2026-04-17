@@ -1,0 +1,48 @@
+{
+  "name": "İŞLEYEN ET",
+  "short_name": "İşleyen ET",
+  "description": "Et işletmesi yönetim sistemi — satış, stok, cari, kasa",
+  "start_url": "/dashboard",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#06090f",
+  "theme_color": "#06090f",
+  "lang": "tr",
+  "scope": "/",
+  "categories": ["business", "finance", "productivity"],
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Satış Yap",
+      "short_name": "Satış",
+      "description": "Hızlı satış fişi oluştur",
+      "url": "/sales",
+      "icons": [{ "src": "/favicon.svg", "sizes": "any" }]
+    },
+    {
+      "name": "Stok Kontrol",
+      "short_name": "Stok",
+      "description": "Stok durumunu görüntüle",
+      "url": "/stok",
+      "icons": [{ "src": "/favicon.svg", "sizes": "any" }]
+    },
+    {
+      "name": "Kasa",
+      "short_name": "Kasa",
+      "description": "Kasa hareketleri",
+      "url": "/kasa",
+      "icons": [{ "src": "/favicon.svg", "sizes": "any" }]
+    }
+  ],
+  "display_override": ["window-controls-overlay", "standalone", "browser"],
+  "edge_side_panel": {
+    "preferred_width": 400
+  }
+}

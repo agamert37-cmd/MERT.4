@@ -22,6 +22,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { getDb } from '../lib/pouchdb';
 import { setInStorage } from '../utils/storage';
 import { toast } from 'sonner';
+import { broadcastTableChange, onBroadcastMessage } from '../lib/broadcast-sync';
 
 // ─── Tipler ───────────────────────────────────────────────────────────────────
 
@@ -33,6 +34,14 @@ export interface SyncHealthInfo {
   avgLatencyMs: number;
   pendingWrites: number;
   isHealthy: boolean;
+}
+
+export interface ConflictInfo {
+  id: string;
+  tableName: string;
+  localDoc: any;
+  conflictRevs: string[];
+  conflictDocs: any[];
 }
 
 export interface UseTableSyncResult<T> {
@@ -51,6 +60,13 @@ export interface UseTableSyncResult<T> {
   syncToSupabase: () => Promise<{ ok: number; fail: number }>; // eski uyumluluk — artık no-op
   syncHealth: SyncHealthInfo;
   forceResync: () => Promise<void>;
+  // Sayfalama
+  hasMore: boolean;
+  totalCount: number;
+  loadMore: () => void;
+  // Çakışma yönetimi
+  conflicts: ConflictInfo[];
+  resolveConflict: (id: string, winnerRev: string) => Promise<void>;
 }
 
 export interface TableSyncConfig<T> {
@@ -61,6 +77,12 @@ export interface TableSyncConfig<T> {
   orderAsc?: boolean;
   toDb?: (item: T) => any;
   fromDb?: (row: any) => T;
+  /** Mobil optimizasyon: sadece son N kaydı yükle (0 = hepsini yükle) */
+  mobileLimit?: number;
+  /** Tarih filtresi alanı — mobileLimit yerine son N gün yükle */
+  dateField?: string;
+  /** mobileLimit ile birlikte: sadece son kaç günü yükle */
+  mobileDays?: number;
 }
 
 // ─── Yardımcılar ──────────────────────────────────────────────────────────────
@@ -87,6 +109,9 @@ export function useTableSync<T extends { id: string }>(
     orderAsc = false,
     toDb,
     fromDb,
+    mobileLimit = 0,
+    dateField,
+    mobileDays = 0,
   } = config;
 
   const [data, setDataState] = useState<T[]>(initialData);
@@ -95,6 +120,9 @@ export function useTableSync<T extends { id: string }>(
   const [error, setError] = useState<string | null>(null);
   const [consecutiveFailures, setConsecutiveFailures] = useState(0);
   const [latencyMs, setLatencyMs] = useState(0);
+  const [hasMore, setHasMore] = useState(false);
+  const [totalCount, setTotalCount] = useState(0);
+  const [conflicts, setConflicts] = useState<ConflictInfo[]>([]);
 
   // Stabil ref'ler
   const toDbRef = useRef(toDb);
@@ -106,6 +134,10 @@ export function useTableSync<T extends { id: string }>(
   const dbRef = useRef<PouchDB.Database | null>(null);
   const changesRef = useRef<PouchDB.Core.Changes<{}> | null>(null);
   const initialLoadDone = useRef(false);
+  // Sayfalama — kaç limit-grubu yüklendi (1 = sadece ilk mobileLimit kayıt)
+  const pageMultRef = useRef(1);
+  // Tüm sıralanmış öğeleri saklar — loadMore sadece slice yapar, yeniden DB okumaz
+  const allItemsRef = useRef<T[]>([]);
 
   // ─── Sıralama ──────────────────────────────────────────────────────────────
   const sortData = useCallback((items: T[]): T[] => {
@@ -137,6 +169,20 @@ export function useTableSync<T extends { id: string }>(
     };
   }, [data, storageKey]);
 
+  // ─── Sayfalama uygula — allItemsRef.current'tan slice ────────────────────
+  const applyPagination = useCallback((sorted: T[]) => {
+    allItemsRef.current = sorted;
+    setTotalCount(sorted.length);
+    if (mobileLimit > 0) {
+      const visible = sorted.slice(0, pageMultRef.current * mobileLimit);
+      setDataState(visible);
+      setHasMore(sorted.length > pageMultRef.current * mobileLimit);
+    } else {
+      setDataState(sorted);
+      setHasMore(false);
+    }
+  }, [mobileLimit]);
+
   // ─── PouchDB'den tüm veriyi oku ───────────────────────────────────────────
   const fetchData = useCallback(async (silent = false) => {
     // Arka plan yenileme (visibilitychange / foregrounded) için loading state gösterme
@@ -148,16 +194,39 @@ export function useTableSync<T extends { id: string }>(
       const db = getDb(tableName);
       dbRef.current = db;
 
-      const result = await db.allDocs({ include_docs: true });
+      // _conflicts varsa tespit etmek için conflicts=true ekle
+      const result = await db.allDocs({ include_docs: true, conflicts: true });
       const elapsed = Math.round(performance.now() - start);
       setLatencyMs(elapsed);
 
-      const items = result.rows
+      const foundConflicts: ConflictInfo[] = [];
+
+      let items = result.rows
         .filter((row: any) => !row.doc?._deleted)
         .map((row: any) => {
+          // Çakışma tespiti
+          if (row.doc?._conflicts?.length) {
+            foundConflicts.push({
+              id: row.id,
+              tableName,
+              localDoc: row.doc,
+              conflictRevs: row.doc._conflicts,
+              conflictDocs: [], // resolveConflict çağrısında doldurulur
+            });
+          }
           const cleaned = cleanDoc(row.doc);
           return fromDbRef.current ? fromDbRef.current(cleaned) : cleaned as T;
         });
+
+      // Tarih filtresi — sadece son N gün
+      if (dateField && mobileDays > 0) {
+        const cutoff = Date.now() - mobileDays * 24 * 60 * 60 * 1000;
+        items = items.filter((item: any) => {
+          const val = item[dateField];
+          if (!val) return true;
+          return new Date(val).getTime() >= cutoff;
+        });
+      }
 
       const sorted = sortData(items);
 
@@ -169,7 +238,8 @@ export function useTableSync<T extends { id: string }>(
         initialLoadDone.current = true;
       }
 
-      setDataState(sorted);
+      applyPagination(sorted);
+      if (foundConflicts.length > 0) setConflicts(foundConflicts);
       setSyncState('synced');
       setLastSync(new Date());
       setConsecutiveFailures(0);
@@ -179,7 +249,7 @@ export function useTableSync<T extends { id: string }>(
       setError(e.message || 'Veri okuma hatası');
       setConsecutiveFailures(prev => prev + 1);
     }
-  }, [tableName, sortData]);
+  }, [tableName, sortData, applyPagination, dateField, mobileDays]);
 
   // ─── İlk yükleme + PouchDB changes feed ──────────────────────────────────
   // Not: CouchDB sync GlobalTableSyncProvider tarafından başlatılır (startAllSync)
@@ -230,9 +300,17 @@ export function useTableSync<T extends { id: string }>(
 
     changesRef.current = changes;
 
+    // BroadcastChannel — diğer sekmelerden gelen değişiklikleri yansıt
+    const unsubBroadcast = onBroadcastMessage((msg) => {
+      if (msg.type === 'TABLE_CHANGED' && msg.tableName === tableName) {
+        fetchData(true);
+      }
+    });
+
     return () => {
       changes.cancel();
       window.removeEventListener('pouchdb:app_foregrounded', handleForegrounded);
+      unsubBroadcast();
     };
   }, [tableName, fetchData, sortData]);
 
@@ -254,6 +332,7 @@ export function useTableSync<T extends { id: string }>(
           const existing = await db.get(item.id);
           await db.put({ ...dbRow, _id: item.id, _rev: (existing as any)._rev });
         }
+        broadcastTableChange(tableName, 'add');
         return item; // başarılı
       } catch (e: any) {
         if (e.status === 409 && attempt < MAX_RETRIES - 1) continue;
@@ -298,6 +377,7 @@ export function useTableSync<T extends { id: string }>(
         const merged = { ...currentItem, ...updates };
         const dbRow = toDbRef.current ? toDbRef.current(merged) : merged;
         await db.put({ ...dbRow, _id: id, _rev: existing._rev });
+        broadcastTableChange(tableName, 'update');
         return; // başarılı
       } catch (e: any) {
         if (e.status === 409 && attempt < MAX_RETRIES - 1) continue; // conflict retry
@@ -323,6 +403,7 @@ export function useTableSync<T extends { id: string }>(
       const db = getDb(tableName);
       const doc = await db.get(id);
       await db.remove(doc);
+      broadcastTableChange(tableName, 'delete');
     } catch (e: any) {
       if (e.status !== 404) {
         console.error(`[deleteItem] ${tableName}:`, e.message);
@@ -390,6 +471,7 @@ export function useTableSync<T extends { id: string }>(
             toast.warning(`${conflictCount} kayıtta çakışma tespit edildi (${tableName}) — en yeni sürüm korundu`, { duration: 4000 });
           }
         }
+        broadcastTableChange(tableName, 'batch');
       }
     } catch (e: any) {
       console.error(`[batchUpdate] ${tableName}:`, e.message);
@@ -399,6 +481,47 @@ export function useTableSync<T extends { id: string }>(
       );
     }
   }, [tableName]);
+
+  // ─── Sayfalama — daha fazla kayıt göster ─────────────────────────────────
+  const loadMore = useCallback(() => {
+    if (!hasMore || mobileLimit <= 0) return;
+    pageMultRef.current += 1;
+    const sorted = allItemsRef.current;
+    const visible = sorted.slice(0, pageMultRef.current * mobileLimit);
+    setDataState(visible);
+    setHasMore(sorted.length > pageMultRef.current * mobileLimit);
+  }, [hasMore, mobileLimit]);
+
+  // ─── Çakışma çözümü ────────────────────────────────────────────────────
+  const resolveConflict = useCallback(async (id: string, winnerRev: string) => {
+    try {
+      const db = getDb(tableName);
+      const conflict = conflicts.find(c => c.id === id);
+      if (!conflict) return;
+
+      const allRevs = [conflict.localDoc._rev, ...conflict.conflictRevs];
+      const loserRevs = allRevs.filter(r => r !== winnerRev);
+
+      // Kazananı elde et (belki conflict rev'den)
+      const winnerDoc = winnerRev === conflict.localDoc._rev
+        ? conflict.localDoc
+        : await db.get(id, { rev: winnerRev });
+
+      // Tüm kaybedenler silinir (tombstone)
+      for (const rev of loserRevs) {
+        try { await db.remove(id, rev); } catch {}
+      }
+
+      // Kazananı winner _rev ile yeniden yaz (çakışmasız)
+      const { _conflicts: _c, ...cleanWinner } = winnerDoc as any;
+      await db.put({ ...cleanWinner, _id: id, _rev: winnerDoc._rev });
+
+      setConflicts(prev => prev.filter(c => c.id !== id));
+      broadcastTableChange(tableName, 'update');
+    } catch (e: any) {
+      console.error(`[resolveConflict] ${tableName}:`, e.message);
+    }
+  }, [tableName, conflicts]);
 
   // ─── Eski uyumluluk fonksiyonları ──────────────────────────────────────────
 
@@ -440,5 +563,10 @@ export function useTableSync<T extends { id: string }>(
     syncToSupabase,
     syncHealth,
     forceResync,
+    hasMore,
+    totalCount,
+    loadMore,
+    conflicts,
+    resolveConflict,
   };
 }
