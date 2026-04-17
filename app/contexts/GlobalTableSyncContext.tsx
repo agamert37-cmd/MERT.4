@@ -171,10 +171,6 @@ export function GlobalTableSyncProvider({ children }: GlobalTableSyncProviderPro
         error?: string;
       };
 
-      if (type === 'error') {
-        couchdbConnectedRef.current = false;
-        setCouchdbConnected(false);
-        setCouchdbError(errorMsg || 'Bağlantı hatası');
       if (state.status === 'error') {
         setCouchdbConnected(false);
         setCouchdbError(state.error || 'Bağlantı hatası');
@@ -191,12 +187,7 @@ export function GlobalTableSyncProvider({ children }: GlobalTableSyncProviderPro
             }
           );
         }
-      } else if (type === 'connected' || type === 'paused') {
-        // paused hatasız = catch-up tamamlandı, bağlantı sağlıklı
-        const wasDisconnected = couchdbConnectedRef.current === false;
-        couchdbConnectedRef.current = true;
       } else if (state.status === 'active' || state.status === 'paused') {
-        // active veya hatasız paused = bağlantı sağlıklı
         const wasDisconnected = couchdbConnected === false;
         setCouchdbConnected(true);
         setCouchdbError(null);
@@ -212,9 +203,6 @@ export function GlobalTableSyncProvider({ children }: GlobalTableSyncProviderPro
 
     window.addEventListener('pouchdb:sync_status', handleSyncEvent);
     return () => window.removeEventListener('pouchdb:sync_status', handleSyncEvent);
-  }, []);  // Artık dependency yok — ref üzerinden güncel değer okunuyor
-    window.addEventListener('pouchdb_sync_status', handleSyncEvent);
-    return () => window.removeEventListener('pouchdb_sync_status', handleSyncEvent);
   }, [couchdbConnected]);
 
   const registerTable = useCallback((status: TableSyncStatus) => {

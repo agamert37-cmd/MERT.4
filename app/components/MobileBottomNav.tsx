@@ -14,7 +14,7 @@ import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useEmployee } from '../contexts/EmployeeContext';
 import { restartAllSync, testCouchDbConnection } from '../lib/pouchdb';
-import { useCouchDbStatus } from '../contexts/GlobalTableSyncContext';
+import { useCouchDbStatus, useGlobalTableData } from '../contexts/GlobalTableSyncContext';
 import { toast } from 'sonner';
 
 interface NavItem {
@@ -101,6 +101,12 @@ export function MobileBottomNav() {
   const [search, setSearch] = useState('');
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const { couchdbConnected } = useCouchDbStatus();
+  const urunler = useGlobalTableData<any>('urunler');
+  const faturalar = useGlobalTableData<any>('faturalar');
+  const tabBadges: Record<string, number> = {
+    '/stok': urunler.filter(u => u.minStock > 0 && (u.stock ?? u.miktar ?? 0) <= u.minStock).length,
+    '/faturalar': faturalar.filter(f => f.status === 'aktif' || f.durum === 'aktif').length,
+  };
   const sheetRef = useRef<HTMLDivElement>(null);
   const startY = useRef(0);
   const searchRef = useRef<HTMLInputElement>(null);
@@ -146,31 +152,22 @@ export function MobileBottomNav() {
     setIsSyncing(true);
     haptic('medium');
     try {
-      startAllSync();
-      // Sync başladıktan sonra tüm tabloları yeniden fetch et — UI taze veriyi görsün
+      restartAllSync();
       setTimeout(() => {
         window.dispatchEvent(new CustomEvent('pouchdb:app_foregrounded'));
       }, 800);
       toast.success('Veriler güncellendi', { id: 'mobile-sync', duration: 2000 });
-    } catch {
-      toast.error('Senkronizasyon başarısız', { id: 'mobile-sync', duration: 2000 });
-      // Önce bağlantı testi yap
+    } catch (e: any) {
       const result = await testCouchDbConnection();
       if (!result.ok) {
         toast.error(`Sunucuya ulaşılamıyor: ${result.error || 'Bağlantı hatası'}`, {
           id: 'mobile-sync',
           duration: 3000,
         });
-        return;
+      } else {
+        restartAllSync();
+        toast.success('Senkronizasyon başlatıldı', { id: 'mobile-sync', duration: 2000 });
       }
-      // Bağlantı tamam — tüm sync'leri yeniden başlat
-      restartAllSync();
-      toast.success('Senkronizasyon başlatıldı', { id: 'mobile-sync', duration: 2000 });
-    } catch (e: any) {
-      toast.error(`Senkronizasyon hatası: ${e?.message || 'Bilinmeyen hata'}`, {
-        id: 'mobile-sync',
-        duration: 3000,
-      });
     } finally {
       setTimeout(() => setIsSyncing(false), 1000);
     }
@@ -412,6 +409,11 @@ export function MobileBottomNav() {
                   className="relative z-10"
                 >
                   <Icon className={`w-[19px] h-[19px] ${active ? colors.text : 'text-gray-500'}`} />
+                  {(tabBadges[item.path] ?? 0) > 0 && (
+                    <span className="absolute -top-1 -right-1.5 min-w-[14px] h-[14px] px-[3px] rounded-full bg-rose-500 text-[9px] font-bold text-white flex items-center justify-center leading-none">
+                      {tabBadges[item.path] > 99 ? '99+' : tabBadges[item.path]}
+                    </span>
+                  )}
                 </motion.div>
                 <span className={`text-[10px] font-medium truncate max-w-full px-1 relative z-10 ${
                   active ? 'text-white' : 'text-gray-500'

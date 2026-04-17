@@ -1079,7 +1079,7 @@ export function FaturaPage() {
       <Dialog.Root open={isAddModalOpen} onOpenChange={setIsAddModalOpen}>
         <Dialog.Portal>
           <Dialog.Overlay className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50" />
-          <Dialog.Content className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[95vw] max-w-2xl max-h-[90vh] bg-[#0a0a0f] border border-white/10 rounded-3xl z-50 flex flex-col overflow-hidden shadow-2xl">
+          <Dialog.Content className="fixed inset-2 sm:inset-auto sm:top-1/2 sm:left-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 sm:w-[95vw] sm:max-w-2xl bg-[#0a0a0f] border border-white/10 rounded-3xl z-50 flex flex-col overflow-hidden shadow-2xl" style={{maxHeight: 'calc(100dvh - 1rem)'}}>
             <div className="p-6 border-b border-white/10 flex items-center justify-between">
               <div>
                 <h2 className="text-xl font-black text-white flex items-center gap-2">
@@ -1338,7 +1338,7 @@ export function FaturaPage() {
       <Dialog.Root open={isDetailOpen} onOpenChange={setIsDetailOpen}>
         <Dialog.Portal>
           <Dialog.Overlay className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50" />
-          <Dialog.Content className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[95vw] max-w-xl max-h-[90vh] bg-[#0a0a0f] border border-white/10 rounded-3xl z-50 flex flex-col overflow-hidden shadow-2xl">
+          <Dialog.Content className="fixed inset-2 sm:inset-auto sm:top-1/2 sm:left-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 sm:w-[95vw] sm:max-w-xl bg-[#0a0a0f] border border-white/10 rounded-3xl z-50 flex flex-col overflow-hidden shadow-2xl" style={{maxHeight: 'calc(100dvh - 1rem)'}}>
             {selectedFatura && (
               <>
                 <div className={`p-6 border-b border-white/10 ${selectedFatura.status === 'iptal' ? 'bg-red-500/5' : selectedFatura.type === 'alis' ? 'bg-orange-500/5' : 'bg-emerald-500/5'}`}>
@@ -1521,7 +1521,7 @@ export function FaturaPage() {
       <Dialog.Root open={isFaturaStokModalOpen} onOpenChange={setIsFaturaStokModalOpen}>
         <Dialog.Portal>
           <Dialog.Overlay className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50" />
-          <Dialog.Content className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[95vw] max-w-lg max-h-[80vh] bg-[#0a0a0f] border border-white/10 rounded-3xl z-50 flex flex-col overflow-hidden shadow-2xl">
+          <Dialog.Content className="fixed inset-2 sm:inset-auto sm:top-1/2 sm:left-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 sm:w-[95vw] sm:max-w-lg bg-[#0a0a0f] border border-white/10 rounded-3xl z-50 flex flex-col overflow-hidden shadow-2xl" style={{maxHeight: 'calc(100dvh - 1rem)'}}>
             <div className="p-6 border-b border-white/10">
               <h2 className="text-lg font-black text-white flex items-center gap-2">
                 <Package className="w-5 h-5 text-amber-400" /> Fatura Stok Kalemleri
