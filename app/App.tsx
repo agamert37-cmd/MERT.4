@@ -7,6 +7,7 @@ import { Toaster } from 'sonner';
 import { useEffect } from 'react';
 import { useUpdateCheck } from './hooks/useUpdateCheck';
 import { StorageQuotaBanner } from './components/StorageQuotaBanner';
+import { AppLockScreen } from './components/AppLockScreen';
 
 export default function App() {
   // Dark tema
@@ -21,7 +22,9 @@ export default function App() {
     <div className="dark min-h-screen bg-background">
       {/* Tüm tabloları PouchDB ↔ CouchDB ile senkronize et */}
       <GlobalTableSyncProvider>
-        <RouterProvider router={router} />
+        <AppLockScreen>
+          <RouterProvider router={router} />
+        </AppLockScreen>
         <SyncStatusBanner />
         <StorageQuotaBanner />
       </GlobalTableSyncProvider>

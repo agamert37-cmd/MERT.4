@@ -161,23 +161,19 @@ export function MobileBottomNav() {
     haptic('medium');
     try {
       restartAllSync();
-      setTimeout(() => {
-        window.dispatchEvent(new CustomEvent('pouchdb:app_foregrounded'));
-      }, 800);
-      toast.success('Veriler güncellendi', { id: 'mobile-sync', duration: 2000 });
-    } catch (e: any) {
       const result = await testCouchDbConnection();
-      if (!result.ok) {
-        toast.error(`Sunucuya ulaşılamıyor: ${result.error || 'Bağlantı hatası'}`, {
+      if (result.ok) {
+        toast.success('Senkronizasyon başlatıldı', { id: 'mobile-sync', duration: 2000 });
+      } else {
+        toast.error(`CouchDB bağlantı hatası: ${result.error || 'Sunucuya ulaşılamıyor'}`, {
           id: 'mobile-sync',
           duration: 3000,
         });
-      } else {
-        restartAllSync();
-        toast.success('Senkronizasyon başlatıldı', { id: 'mobile-sync', duration: 2000 });
       }
+    } catch {
+      toast.error('Senkronizasyon başarısız', { id: 'mobile-sync', duration: 2000 });
     } finally {
-      setTimeout(() => setIsSyncing(false), 1000);
+      setIsSyncing(false);
     }
   }, [isSyncing]);
 
