@@ -1016,7 +1016,7 @@ export function LocalRepoPanel() {
                           {step.command && (
                             <div className="mt-2 relative group">
                               <code className="block bg-black/60 text-green-400 text-xs p-3 rounded-xl font-mono border border-white/5 overflow-x-auto">{step.command}</code>
-                              <button onClick={() => copyToClipboard(step.command!)} className="absolute top-2 right-2 p-1.5 bg-white/10 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity hover:bg-white/20">
+                              <button onClick={() => copyToClipboard(step.command!)} className="absolute top-2 right-2 p-1.5 bg-white/10 rounded-lg sm:opacity-0 sm:group-hover:opacity-100 transition-opacity hover:bg-white/20">
                                 <Copy className="w-3 h-3 text-gray-400" />
                               </button>
                             </div>

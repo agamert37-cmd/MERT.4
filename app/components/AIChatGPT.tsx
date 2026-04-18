@@ -363,7 +363,7 @@ function ChartCard({ response }: { response: AIResponse }) {
 
   return (
     <div className="bg-gradient-to-br from-secondary to-card border border-border rounded-xl p-6 relative group">
-      <div className="absolute top-4 right-4 z-10 opacity-0 group-hover:opacity-100 transition-opacity">
+      <div className="absolute top-4 right-4 z-10 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
         <button
           onClick={handleDownloadPDF}
           disabled={isExporting}
