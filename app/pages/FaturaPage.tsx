@@ -1552,7 +1552,7 @@ export function FaturaPage() {
                       {item.description && <p className="text-[10px] text-gray-600 mt-0.5">{item.description}</p>}
                     </div>
                     <button onClick={() => removeFaturaStokItem(item.id)}
-                      className="p-1.5 hover:bg-red-500/10 rounded-lg transition-all opacity-0 group-hover:opacity-100">
+                      className="p-1.5 hover:bg-red-500/10 rounded-lg transition-all sm:opacity-0 sm:group-hover:opacity-100">
                       <Trash2 className="w-3.5 h-3.5 text-red-400" />
                     </button>
                   </div>
