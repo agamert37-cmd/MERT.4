@@ -824,7 +824,7 @@ export function CariDetailPage() {
                       <p className={`text-xs font-bold tracking-widest uppercase mb-1 ${isAlis ? 'text-orange-400' : 'text-blue-400'}`}>
                         {isAlis ? t('salesPage.purchaseReceipt') : t('salesPage.saleReceipt')}
                       </p>
-                      <h2 className="text-3xl font-black text-white">{selectedFis.id.split('-')[0].toUpperCase()}</h2>
+                      <h2 className="text-3xl font-black text-white">{(selectedFis.id?.split('-')[0] || 'ID').toUpperCase()}</h2>
                     </div>
                     <div className="text-right">
                       <p className="text-3xl font-black text-white">₺{(selectedFis.total || 0).toLocaleString()}</p>
