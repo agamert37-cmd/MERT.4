@@ -745,7 +745,7 @@ export function CeklerPage() {
           ))}
         </select>
 
-        <div className="flex items-center gap-1.5">
+        <div className="hidden sm:flex items-center gap-1.5">
           <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)}
             className={`px-2 py-2 bg-card border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 ${accentRing}`} />
           <span className="text-muted-foreground text-xs">-</span>
@@ -753,7 +753,7 @@ export function CeklerPage() {
             className={`px-2 py-2 bg-card border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 ${accentRing}`} />
         </div>
 
-        <div className="flex items-center gap-1">
+        <div className="hidden sm:flex items-center gap-1">
           <select value={sortBy} onChange={(e) => setSortBy(e.target.value as any)}
             className={`px-3 py-2 bg-card border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 ${accentRing}`}>
             <option value="dueDate">{t('checks.sortByDueDate')}</option>

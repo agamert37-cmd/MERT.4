@@ -12,6 +12,7 @@ import { staggerContainer, staggerItem, hover, tap, rowItem } from '../utils/ani
 import { toast } from 'sonner';
 import * as Dialog from '@radix-ui/react-dialog';
 import { SyncStatusBar, SyncBadge } from '../components/SyncStatusBar';
+import { SwipeToDelete } from '../components/MobileHelpers';
 import { useTableSync } from '../hooks/useTableSync';
 import { getFromStorage, setInStorage, StorageKey } from '../utils/storage';
 import { logActivity } from '../utils/activityLogger';
@@ -973,9 +974,12 @@ export function StokPage() {
                 const profitMargin = avgSell > 0 && avgCost > 0 ? ((avgSell - avgCost) / avgCost * 100) : 0;
 
                 return (
-                  <motion.div
+                  <SwipeToDelete
                     key={product.id}
-                    layout
+                    disabled={!canDelete}
+                    onDelete={() => handleDeleteProduct(product.id, product.name)}
+                  >
+                  <motion.div
                     variants={staggerItem}
                     exit={{ opacity: 0, y: -8, filter: 'blur(4px)', transition: { duration: 0.18 } }}
                     whileHover={{ y: -2, transition: { duration: 0.15 } }}
@@ -1087,6 +1091,7 @@ export function StokPage() {
                       )}
                     </AnimatePresence>
                   </motion.div>
+                  </SwipeToDelete>
                 );
               })}
             </AnimatePresence>
