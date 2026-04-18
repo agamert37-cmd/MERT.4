@@ -605,14 +605,14 @@ export function StokPage() {
     setAddFormUnit('KG');
   };
 
-  const handleEditProduct = (e: React.FormEvent<HTMLFormElement>) => {
+  const handleEditProduct = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!canEdit) { sec.logUnauthorized('stok_edit', `Kullanici ${selectedProduct?.name} urunu duzenlemeye calisti.`); return; }
     if (!selectedProduct) return;
     const fd = new FormData(e.currentTarget);
     const productName = fd.get('name') as string;
     if (!sec.preCheck('edit', { name: productName })) return;
-    updateItem(selectedProduct.id, {
+    await updateItem(selectedProduct.id, {
       ...selectedProduct,
       name: sec.sanitize(productName),
       category: (editFormCategory || selectedProduct.category) as ProductCategory,
@@ -626,7 +626,7 @@ export function StokPage() {
     setIsEditModalOpen(false);
   };
 
-  const handleDeleteProduct = (productId: string, productName: string) => {
+  const handleDeleteProduct = async (productId: string, productName: string) => {
     if (!canDelete) { sec.logUnauthorized('stok_delete', `Kullanici ${productName} urunu silmeye calisti.`); return; }
     if (!sec.checkRate('delete')) return;
     if (confirm(`"${productName}" urununu silmek istediginize emin misiniz?`)) {
@@ -643,7 +643,7 @@ export function StokPage() {
         setInStorage(StorageKey.SILINEN_STOKLAR, updated);
       }
 
-      deleteItem(productId);
+      await deleteItem(productId);
       emit('stok:deleted', { productId, productName });
       sec.auditLog('stok_delete', productId, productName);
       logActivity('employee_update', 'Urun Silindi', { employeeName: user?.name, page: 'Stok', description: `${productName} urunu sistemden silindi.` });
@@ -651,7 +651,7 @@ export function StokPage() {
     }
   };
 
-  const handleAddMovement = (e: React.FormEvent<HTMLFormElement>) => {
+  const handleAddMovement = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!selectedProduct) return;
     const fd = new FormData(e.currentTarget);
@@ -670,7 +670,7 @@ export function StokPage() {
     let sc = 0;
     if (['ALIS', 'MUSTERI_IADE', 'URETIM_GIRIS', 'FATURA_ALIS'].includes(type)) sc = qty;
     if (['SATIS', 'TOPTANCI_IADE', 'FIRE', 'URETIM_CIKIS', 'FATURA_SATIS'].includes(type)) sc = -qty;
-    updateItem(selectedProduct.id, {
+    await updateItem(selectedProduct.id, {
       ...selectedProduct,
       currentStock: selectedProduct.currentStock + sc,
       movements: [newMv, ...selectedProduct.movements]

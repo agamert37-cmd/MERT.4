@@ -716,7 +716,7 @@ export function CariDetailPage() {
                     </div>
                     <div>
                       <div className="flex items-center gap-2">
-                        <p className="font-bold text-white text-sm font-mono">{fis.id.split('-')[0].toUpperCase()}</p>
+                        <p className="font-bold text-white text-sm font-mono">{(fis.id?.split('-')[0] || 'ID').toUpperCase()}</p>
                         {fis.invoice?.status === 'kesildi' && (
                           <span className="w-5 h-5 rounded-full bg-blue-500 text-white text-[10px] font-black flex items-center justify-center shadow-lg shadow-blue-500/30" title="Fatura Kesildi">F</span>
                         )}
@@ -787,7 +787,7 @@ export function CariDetailPage() {
                 {selectedExtract.fisler.map(fis => (
                   <div key={fis.id} className="p-4 bg-black/50 border border-white/10 rounded-2xl">
                     <div className="flex justify-between items-center mb-3 pb-3 border-b border-white/5">
-                      <span className="font-bold text-white font-mono">{fis.id.split('-')[0].toUpperCase()}</span>
+                      <span className="font-bold text-white font-mono">{(fis.id?.split('-')[0] || 'ID').toUpperCase()}</span>
                       <span className={`text-[10px] font-bold px-2 py-1 rounded ${fis.mode === 'alis' ? 'bg-orange-500/20 text-orange-400' : 'bg-blue-500/20 text-blue-400'}`}>
                         {fis.mode === 'alis' ? 'ALIŞ' : 'SATIŞ'}
                       </span>
