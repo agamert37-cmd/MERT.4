@@ -1,9 +1,11 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
-  Database, Download, RefreshCw, Settings, Lock, Wifi, Clock, Trash2,
-  Shield, Activity, Server, BarChart3, Eye, EyeOff, LogOut, AlertTriangle, CheckCircle2,
+  Database, Download, RefreshCw, Clock, Trash2,
+  Shield, BarChart3, Eye, EyeOff, LogOut, AlertTriangle,
 } from 'lucide-react';
+import { TrashViewer } from '../components/TrashViewer';
+import { cleanupExpiredTrash } from '../lib/db-trash';
 import { toast } from 'sonner';
 import {
   startSync, stopSync, startAllSync, stopAllSync, testCouchDbConnection,
@@ -25,7 +27,7 @@ import { CURRENT_VERSION } from '../utils/updateNotes';
 import { StorageKey } from '../utils/storage';
 import { SYSTEM_TABLES } from '../lib/auto-setup';
 
-type ActiveTab = 'overview' | 'sync' | 'backup' | 'security' | 'system';
+type ActiveTab = 'overview' | 'sync' | 'backup' | 'security' | 'system' | 'trash';
 
 function formatBytes(bytes: number): string {
   if (bytes === 0) return '0 B';
@@ -373,12 +375,30 @@ export function YedeklerPage() {
     );
   };
 
+  const TabTrash = () => (
+    <div className="space-y-4">
+      <div className="bg-white/5 border border-white/10 rounded-xl p-4">
+        <TrashViewer />
+      </div>
+      <button
+        onClick={async () => {
+          const n = await cleanupExpiredTrash();
+          toast.info(n > 0 ? `${n} eski kayıt temizlendi` : 'Temizlenecek kayıt yok', { duration: 2000 });
+        }}
+        className="w-full px-4 py-2 bg-red-600/10 hover:bg-red-600/20 text-red-500 text-sm font-bold rounded-lg border border-red-500/20"
+      >
+        🧹 30+ Gün Eski Kayıtları Temizle
+      </button>
+    </div>
+  );
+
   const tabs = [
     { key: 'overview' as const, label: '📊 Genel' },
     { key: 'sync' as const, label: '🔄 Sync' },
     { key: 'backup' as const, label: '💾 Yedek' },
     { key: 'security' as const, label: '🔐 Güvenlik' },
     { key: 'system' as const, label: '⚙️ Sistem' },
+    { key: 'trash' as const, label: '🗑️ Çöp Kutusu' },
   ];
 
   return (
@@ -416,6 +436,7 @@ export function YedeklerPage() {
             {activeTab === 'backup' && <TabBackup />}
             {activeTab === 'security' && <TabSecurity />}
             {activeTab === 'system' && <TabSystem />}
+            {activeTab === 'trash' && <TabTrash />}
           </motion.div>
         </AnimatePresence>
       </div>
