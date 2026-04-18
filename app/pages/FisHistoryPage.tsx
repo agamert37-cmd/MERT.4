@@ -2362,7 +2362,7 @@ export function FisHistoryPage() {
                           <button
                             type="button"
                             onClick={(e) => { e.stopPropagation(); setPhotoPreview(null); }}
-                            className="absolute top-1 right-1 p-1 bg-red-600 text-white rounded-md opacity-0 group-hover:opacity-100 transition-opacity"
+                            className="absolute top-1 right-1 p-1 bg-red-600 text-white rounded-md sm:opacity-0 sm:group-hover:opacity-100 transition-opacity"
                           >
                             <X className="w-3 h-3" />
                           </button>

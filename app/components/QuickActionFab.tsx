@@ -60,14 +60,14 @@ export function QuickActionFab() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/30 backdrop-blur-[2px] z-[90]"
+            className="fixed inset-0 bg-black/30 backdrop-blur-[2px] z-[44]"
             onClick={() => setIsOpen(false)}
           />
         )}
       </AnimatePresence>
 
       {/* Actions */}
-      <div className="fixed bottom-[calc(4.5rem+env(safe-area-inset-bottom,0px))] lg:bottom-6 right-4 lg:right-6 z-[95] flex flex-col-reverse items-end gap-2">
+      <div className="fixed bottom-[calc(4.5rem+env(safe-area-inset-bottom,0px))] lg:bottom-6 right-4 lg:right-6 z-[48] flex flex-col-reverse items-end gap-2">
         {/* Quick action buttons */}
         <AnimatePresence>
           {isOpen && quickActions.map((action, index) => {
@@ -85,7 +85,7 @@ export function QuickActionFab() {
                 }}
                 className={`flex items-center gap-3 pl-4 pr-5 py-2.5 rounded-xl border ${action.bg} backdrop-blur-md shadow-lg hover:scale-105 transition-transform`}
               >
-                <Icon className={`w-4 h-4 ${action.color}`} />
+                <Icon className={`w-4 h-4 flex-shrink-0 ${action.color}`} />
                 <span className="text-sm font-medium text-white whitespace-nowrap">{action.label}</span>
               </motion.button>
             );

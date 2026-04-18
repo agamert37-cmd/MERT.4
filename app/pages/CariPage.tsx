@@ -216,7 +216,7 @@ function RegionManagerModal({
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[60]" />
         <Dialog.Content
-          className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-border/40 w-[95vw] max-w-lg shadow-2xl z-[60] modal-glass"
+          className="fixed inset-2 sm:inset-auto sm:top-1/2 sm:left-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 rounded-2xl border border-border/40 sm:w-[95vw] sm:max-w-lg shadow-2xl z-[60] modal-glass overflow-y-auto overscroll-contain" style={{maxHeight:'calc(100dvh - 1rem)'}}
           aria-describedby={undefined}
         >
           <div className="flex items-center justify-between p-6 border-b border-border">
@@ -392,8 +392,8 @@ function CategoryManagerModal({
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.92, y: 30 }}
             transition={{ type: 'spring', damping: 28, stiffness: 350 }}
-            className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[95vw] max-w-lg max-h-[85vh] overflow-y-auto z-[60] rounded-3xl border border-white/[0.08] shadow-[0_32px_100px_-20px_rgba(0,0,0,0.7),0_0_60px_-10px_rgba(59,130,246,0.15)]"
-            style={{ background: 'linear-gradient(145deg, rgba(12,18,32,0.97), rgba(6,9,15,0.98))', backdropFilter: 'blur(40px) saturate(180%)' }}
+            className="fixed inset-2 sm:inset-auto sm:top-1/2 sm:left-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 sm:w-[95vw] sm:max-w-lg overflow-y-auto z-[60] rounded-3xl border border-white/[0.08] shadow-[0_32px_100px_-20px_rgba(0,0,0,0.7),0_0_60px_-10px_rgba(59,130,246,0.15)]"
+            style={{ background: 'linear-gradient(145deg, rgba(12,18,32,0.97), rgba(6,9,15,0.98))', backdropFilter: 'blur(40px) saturate(180%)', maxHeight: 'calc(100dvh - 1rem)' }}
           >
             <div className="h-1 w-full bg-gradient-to-r from-amber-500 via-orange-500 to-red-500 rounded-t-3xl" />
 
@@ -1359,7 +1359,6 @@ export function CariPage() {
               {filteredCari.map((cari) => (
                 <SwipeToDelete key={cari.id} onDelete={() => handleDeleteCari(cari.id, cari.companyName)} className="rounded-xl">
                 <motion.div
-                  layout
                   variants={tableRow}
                   exit={{ opacity: 0, x: 12, filter: 'blur(6px)', transition: { duration: 0.18 } }}
                   onClick={() => { setSelectedCari(cari); setIsDetailModalOpen(true); }}
@@ -1419,8 +1418,8 @@ export function CariPage() {
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.92, y: 30 }}
               transition={{ type: 'spring', damping: 28, stiffness: 350 }}
-              className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[95vw] max-w-2xl max-h-[92vh] overflow-y-auto z-50 rounded-3xl border border-white/[0.08] shadow-[0_32px_100px_-20px_rgba(0,0,0,0.7),0_0_60px_-10px_rgba(59,130,246,0.15)]"
-              style={{ background: 'linear-gradient(145deg, rgba(12,18,32,0.97), rgba(6,9,15,0.98))', backdropFilter: 'blur(40px) saturate(180%)' }}
+              className="fixed inset-2 sm:inset-auto sm:top-1/2 sm:left-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 sm:w-[95vw] sm:max-w-2xl overflow-y-auto z-50 rounded-3xl border border-white/[0.08] shadow-[0_32px_100px_-20px_rgba(0,0,0,0.7),0_0_60px_-10px_rgba(59,130,246,0.15)]"
+              style={{ background: 'linear-gradient(145deg, rgba(12,18,32,0.97), rgba(6,9,15,0.98))', backdropFilter: 'blur(40px) saturate(180%)', maxHeight: 'calc(100dvh - 1rem)' }}
             >
               {/* ── Decorative top gradient bar ── */}
               <div className="h-1 w-full bg-gradient-to-r from-blue-600 via-indigo-500 to-purple-600 rounded-t-3xl" />
@@ -1770,7 +1769,7 @@ export function CariPage() {
                             Kategorileri Düzenle
                           </motion.button>
                         </div>
-                        <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
+                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
                           {(formData.type === 'Müşteri' ? musteriCategories : toptanciCategories).map(cat => {
                             const isSelected = formData.category === cat;
                             const catColor = CATEGORY_COLORS[cat] || '#64748b';
@@ -1955,7 +1954,7 @@ export function CariPage() {
                         <label className="flex items-center gap-1.5 text-xs text-gray-500 mb-3 font-medium uppercase tracking-wider">
                           {t('cari.billingType')}
                         </label>
-                        <div className="grid grid-cols-3 gap-3">
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                           {([
                             { key: 'tam', label: t('cari.invoiceFullLabel'), desc: t('cari.invoiceFullDesc'), icon: '📋', color: 'emerald' },
                             { key: 'kismi', label: t('cari.invoicePartialLabel'), desc: t('cari.invoicePartialDesc'), icon: '📄', color: 'amber' },
@@ -2111,7 +2110,7 @@ export function CariPage() {
         <Dialog.Portal>
           <Dialog.Overlay className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50" />
           <Dialog.Content
-            className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 card-premium border border-border/50 rounded-2xl w-[95vw] max-w-2xl max-h-[85vh] overflow-y-auto z-50 shadow-2xl"
+            className="fixed inset-2 sm:inset-auto sm:top-1/2 sm:left-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 card-premium border border-border/50 rounded-2xl sm:w-[95vw] sm:max-w-2xl overflow-y-auto z-50 shadow-2xl" style={{maxHeight:'calc(100dvh - 1rem)'}}
             aria-describedby={undefined}
           >
             {selectedCari && (

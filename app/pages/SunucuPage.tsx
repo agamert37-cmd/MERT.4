@@ -276,7 +276,8 @@ export function SunucuPage() {
           <p className="text-[10px] text-gray-600">Yerel / PouchDB / CouchDB / Canlı Sync</p>
         </div>
 
-        <div className="overflow-x-auto">
+        {/* Desktop table */}
+        <div className="hidden sm:block overflow-x-auto">
         <div className="divide-y divide-white/5 min-w-[480px]">
           {/* Header row */}
           <div className="grid grid-cols-6 px-5 py-2 text-[10px] font-bold uppercase tracking-wider text-gray-600">
@@ -339,6 +340,41 @@ export function SunucuPage() {
             </div>
           )}
         </div>
+        </div>
+
+        {/* Mobile card list */}
+        <div className="sm:hidden divide-y divide-white/5">
+          {syncTables.map(gt => {
+            const ts = tableStatus.find(s => s.name === gt.name || s.name === `mert_${gt.name}`);
+            const displayName = TABLE_DISPLAY_NAMES[gt.name] || gt.name;
+            const isOk = ts ? (ts.exists && ts.couchDocCount >= ts.localDocCount) : gt.syncState === 'synced';
+            const hasError = ts ? (!ts.exists || !!ts.error) : gt.syncState === 'error';
+            return (
+              <div key={gt.name} className={`px-4 py-3 ${hasError ? 'bg-red-950/10' : ''}`}>
+                <div className="flex items-center justify-between mb-1.5">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <SyncDot state={gt.syncState} />
+                    <span className="text-xs font-medium text-white truncate">{displayName}</span>
+                  </div>
+                  <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full flex-shrink-0 ml-2 ${
+                    isOk ? 'bg-emerald-500/10 text-emerald-400' : hasError ? 'bg-red-500/10 text-red-400' : 'bg-yellow-500/10 text-yellow-400'
+                  }`}>
+                    {syncLabel(gt.syncState)}
+                  </span>
+                </div>
+                <div className="flex gap-3 ml-5 text-[10px]">
+                  <span className="text-blue-300">Yerel: {ts ? ts.localStorageCount : '—'}</span>
+                  <span className="text-purple-300">PouchDB: {ts ? ts.localDocCount : gt.docCount}</span>
+                  <span className={ts?.couchDocCount && isOk ? 'text-emerald-300' : 'text-gray-500'}>
+                    CouchDB: {ts?.exists ? ts.couchDocCount : '—'}
+                  </span>
+                </div>
+              </div>
+            );
+          })}
+          {syncTables.length === 0 && (
+            <div className="px-4 py-8 text-center text-xs text-gray-600">Sync tabloları yükleniyor…</div>
+          )}
         </div>
       </div>
 

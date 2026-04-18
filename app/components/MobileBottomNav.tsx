@@ -106,7 +106,7 @@ export function MobileBottomNav() {
   const urunler = useGlobalTableData<any>('urunler');
   const faturalar = useGlobalTableData<any>('faturalar');
   const tabBadges: Record<string, number> = {
-    '/stok': urunler.filter(u => u.minStock > 0 && (u.stock ?? u.miktar ?? 0) <= u.minStock).length,
+    '/stok': urunler.filter(u => u.minStock > 0 && (u.currentStock ?? 0) <= u.minStock).length,
     '/faturalar': faturalar.filter(f => f.status === 'aktif' || f.durum === 'aktif').length,
   };
   const sheetRef = useRef<HTMLDivElement>(null);
@@ -209,7 +209,7 @@ export function MobileBottomNav() {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[98]"
+              className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[45]"
               onClick={() => setIsMoreOpen(false)}
             />
             <motion.div
@@ -218,7 +218,7 @@ export function MobileBottomNav() {
               animate={{ y: 0 }}
               exit={{ y: '100%' }}
               transition={{ type: 'spring', stiffness: 320, damping: 32 }}
-              className="fixed bottom-0 left-0 right-0 z-[99] bg-[#0d1117]/98 backdrop-blur-2xl border-t border-white/[0.08] rounded-t-3xl max-h-[82vh] overflow-hidden flex flex-col"
+              className="fixed bottom-0 left-0 right-0 z-[46] bg-[#0d1117]/98 backdrop-blur-2xl border-t border-white/[0.08] rounded-t-3xl max-h-[82vh] overflow-hidden flex flex-col"
               onTouchStart={handleTouchStart}
               onTouchEnd={handleTouchEnd}
             >
@@ -294,7 +294,7 @@ export function MobileBottomNav() {
               </div>
 
               {/* Scrollable content */}
-              <div className="flex-1 overflow-y-auto px-4 pb-6 space-y-4 overscroll-contain">
+              <div className="flex-1 overflow-y-auto px-4 pb-6 space-y-4 overscroll-contain" style={{ WebkitOverflowScrolling: 'touch' }}>
                 {filteredGroups.length === 0 && (
                   <div className="flex flex-col items-center justify-center py-10 text-gray-500">
                     <Search className="w-8 h-8 mb-2 opacity-40" />
@@ -319,7 +319,7 @@ export function MobileBottomNav() {
       </AnimatePresence>
 
       {/* Bottom Tab Bar */}
-      <nav className="fixed bottom-0 left-0 right-0 z-[97] lg:hidden">
+      <nav className="fixed bottom-0 left-0 right-0 z-40 lg:hidden">
         {/* Çevrimdışı uyarı şeridi */}
         <AnimatePresence>
           {!isOnline && (

@@ -111,7 +111,7 @@ function NoteRow({ note, idx, isAdmin, onEdit, onDelete, deleteId, setDeleteId }
               {imp.label}
             </span>
             {isAdmin && (
-              <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity" onClick={e => e.stopPropagation()}>
+              <div className="flex gap-0.5 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity" onClick={e => e.stopPropagation()}>
                 {deleteId === note.id ? (
                   <div className="flex gap-1 items-center">
                     <button onClick={() => { onDelete?.(note.id); setDeleteId?.(null); }} className="text-[9px] text-rose-300 font-bold px-1.5 py-0.5 rounded bg-rose-500/20 border border-rose-500/30">Sil</button>
@@ -721,7 +721,7 @@ export function UpdateNotesPage() {
   const collapseAll = () => setCollapsed(new Set(allVersions.filter(v => v !== CURRENT_VERSION)));
 
   return (
-    <div className="h-screen flex flex-col bg-[#06090e] text-white font-sans overflow-hidden">
+    <div className="h-dvh flex flex-col bg-[#06090e] text-white font-sans overflow-hidden">
 
       {/* ── Sticky Header ── */}
       <div className="shrink-0 flex items-center gap-2.5 px-4 py-2.5 border-b border-white/[0.07] bg-[#06090e]/95 backdrop-blur-xl z-20">

@@ -19,6 +19,7 @@ import { useModuleBus } from '../hooks/useModuleBus';
 import { getPagePermissions } from '../utils/permissions';
 import { usePageSecurity } from '../hooks/usePageSecurity';
 import { useTableSync } from '../hooks/useTableSync';
+import { SwipeToDelete } from '../components/MobileHelpers';
 import { productToDb, productFromDb } from './StokPage';
 import { cariToDb, cariFromDb } from './CariPage';
 import { useGlobalTableData } from '../contexts/GlobalTableSyncContext';
@@ -763,7 +764,7 @@ export function FaturaPage() {
 
       {/* ─── KDV & Bağlantı Özeti ─── */}
       {stats.aktif > 0 && (
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <div className="p-3 rounded-xl bg-white/[0.03] border border-white/5 flex items-center justify-between">
             <span className="text-xs text-gray-500">{t('fatura.totalKdv')}</span>
             <span className="text-sm font-bold text-blue-400">₺{stats.toplamKdv.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}</span>
@@ -815,7 +816,7 @@ export function FaturaPage() {
             className="w-full pl-10 pr-4 py-3 bg-white/5 border border-white/10 rounded-xl text-sm text-white placeholder-gray-600 outline-none focus:border-blue-500/50 transition-all"
           />
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           {(['all', 'alis', 'satis'] as const).map(type => (
             <button key={type} onClick={() => { setFilterType(type); sessionStorage.setItem('mert4_filter_fatura_type', type); }}
               className={`px-4 py-2.5 rounded-xl text-xs font-bold border transition-all ${filterType === type ? 'bg-blue-600/20 text-blue-400 border-blue-500/30' : 'bg-white/5 text-gray-500 border-white/5 hover:bg-white/10'}`}>
@@ -847,9 +848,12 @@ export function FaturaPage() {
         >
         <AnimatePresence>
           {filtered.map((fatura) => (
-            <motion.div
+            <SwipeToDelete
               key={fatura.id}
-              layout
+              disabled={fatura.status === 'aktif' || !canDelete}
+              onDelete={() => handleDelete(fatura.id)}
+            >
+            <motion.div
               variants={rowItem}
               exit={{ opacity: 0, y: -8, filter: 'blur(4px)', transition: { duration: 0.16 } }}
               whileHover={{ x: 3, transition: { duration: 0.15 } }}
@@ -905,7 +909,7 @@ export function FaturaPage() {
                 </div>
 
                 {/* Actions */}
-                <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity" onClick={e => e.stopPropagation()}>
+                <div className="flex gap-1 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity" onClick={e => e.stopPropagation()}>
                   <button onClick={() => shareViaWhatsApp(fatura)} className="p-2 hover:bg-green-500/10 rounded-lg transition-all" title="WhatsApp ile Paylaş">
                     <MessageCircle className="w-4 h-4 text-green-400" />
                   </button>
@@ -953,6 +957,7 @@ export function FaturaPage() {
                 </div>
               )}
             </motion.div>
+            </SwipeToDelete>
           ))}
         </AnimatePresence>
         </motion.div>
@@ -1182,7 +1187,7 @@ export function FaturaPage() {
               </div>
 
               {/* Firmamız + Fatura No + Tarih */}
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div>
                   <label className="text-xs text-gray-500 font-bold uppercase tracking-wider mb-1.5 block">Kesildiği Firma</label>
                   <select value={form.issuedTo} onChange={e => setForm(f => ({ ...f, issuedTo: e.target.value }))}
@@ -1241,8 +1246,8 @@ export function FaturaPage() {
                 <div className="space-y-2">
                   {formItems.map((item, idx) => (
                     <div key={item.id} className="p-3 bg-white/[0.03] border border-white/5 rounded-xl">
-                      <div className="flex gap-2 items-center">
-                        <span className="text-[10px] text-gray-600 font-bold w-5">{idx + 1}</span>
+                      <div className="flex flex-wrap gap-2 items-center">
+                        <span className="text-[10px] text-gray-600 font-bold w-5 flex-shrink-0">{idx + 1}</span>
                         <select value={item.name} onChange={e => {
                           const selected = faturaStok.find(fs => fs.name === e.target.value);
                           updateFormItem(item.id, 'name', e.target.value);
@@ -1250,18 +1255,18 @@ export function FaturaPage() {
                             setFormItems(prev => prev.map(fi => fi.id === item.id ? { ...fi, unit: selected.unit, linkedStockId: selected.linkedStockId, linkedStockName: selected.linkedStockName } : fi));
                           }
                         }}
-                          className="flex-1 px-3 py-2 bg-white/[0.04] border border-white/[0.08] rounded-lg text-white text-xs outline-none">
+                          className="flex-1 min-w-[160px] px-3 py-2 bg-white/[0.04] border border-white/[0.08] rounded-lg text-white text-xs outline-none">
                           <option value="" className="bg-[#111]">Fatura kalemi seçin...</option>
                           {faturaStok.map(fs => (
                             <option key={fs.id} value={fs.name} className="bg-[#111]">{fs.name} ({fs.unit}){fs.linkedStockName ? ` → ${fs.linkedStockName}` : ''}</option>
                           ))}
                         </select>
                         <input type="number" step="0.01" value={item.quantity || ''} onChange={e => updateFormItem(item.id, 'quantity', parseFloat(e.target.value) || 0)}
-                          placeholder="Miktar" className="w-20 px-3 py-2 bg-white/[0.04] border border-white/[0.08] rounded-lg text-white text-xs outline-none text-right" />
+                          placeholder="Miktar" className="w-20 flex-shrink-0 px-3 py-2 bg-white/[0.04] border border-white/[0.08] rounded-lg text-white text-xs outline-none text-right" />
                         <input type="number" step="0.01" value={item.unitPrice || ''} onChange={e => updateFormItem(item.id, 'unitPrice', parseFloat(e.target.value) || 0)}
-                          placeholder="B.Fiyat" className="w-24 px-3 py-2 bg-white/[0.04] border border-white/[0.08] rounded-lg text-white text-xs outline-none text-right" />
-                        <span className="text-xs font-bold text-white w-20 text-right">₺{item.totalPrice.toFixed(2)}</span>
-                        <button onClick={() => removeFormItem(item.id)} className="p-1 hover:bg-red-500/10 rounded-lg transition-all">
+                          placeholder="B.Fiyat" className="w-24 flex-shrink-0 px-3 py-2 bg-white/[0.04] border border-white/[0.08] rounded-lg text-white text-xs outline-none text-right" />
+                        <span className="text-xs font-bold text-white w-20 flex-shrink-0 text-right">₺{item.totalPrice.toFixed(2)}</span>
+                        <button onClick={() => removeFormItem(item.id)} className="p-2 hover:bg-red-500/10 rounded-lg transition-all flex-shrink-0">
                           <Trash2 className="w-3.5 h-3.5 text-red-400" />
                         </button>
                       </div>
@@ -1547,7 +1552,7 @@ export function FaturaPage() {
                       {item.description && <p className="text-[10px] text-gray-600 mt-0.5">{item.description}</p>}
                     </div>
                     <button onClick={() => removeFaturaStokItem(item.id)}
-                      className="p-1.5 hover:bg-red-500/10 rounded-lg transition-all opacity-0 group-hover:opacity-100">
+                      className="p-1.5 hover:bg-red-500/10 rounded-lg transition-all sm:opacity-0 sm:group-hover:opacity-100">
                       <Trash2 className="w-3.5 h-3.5 text-red-400" />
                     </button>
                   </div>

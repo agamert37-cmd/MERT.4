@@ -669,7 +669,7 @@ export function LocalRepoPanel() {
 
                   <div>
                     <label className={labelCls}>Çakışma Stratejisi</label>
-                    <div className="grid grid-cols-3 gap-2">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                       {[
                         { id: 'newest_wins' as const, label: 'En Yeni Kazanır', desc: 'Timestamp bazlı' },
                         { id: 'local_wins' as const, label: 'Yerel Kazanır', desc: 'Her zaman yerel' },

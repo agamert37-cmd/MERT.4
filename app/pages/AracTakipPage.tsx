@@ -297,8 +297,6 @@ export function AracTakipPage() {
     // Başlayan vardiyayı ve KM logunu PouchDB'ye yaz
     addShiftToPouchDB(newShift).catch(e => console.error('[AracTakip] shift PouchDB:', e));
     addKmLogToPouchDB(newLog).catch(e => console.error('[AracTakip] km log PouchDB:', e));
-    // KM logunu PouchDB'ye yaz (→ CouchDB sync)
-    addKmLog(newLog).catch(e => console.error('[AracTakip] km log PouchDB sync:', e));
 
     logActivity('vehicle_shift_start', `Vardiya baslatildi: ${vehicle.plate}`, {
       employeeId: currentEmployee?.id,
@@ -358,9 +356,6 @@ export function AracTakipPage() {
       addShiftToPouchDB(completedShift).catch(e => console.error('[AracTakip] shift PouchDB:', e))
     );
     addKmLogToPouchDB(newLog).catch(e => console.error('[AracTakip] km log PouchDB:', e));
-    // Vardiya ve KM logunu PouchDB'ye yaz (→ CouchDB sync)
-    addShift(completedShift).catch(e => console.error('[AracTakip] shift PouchDB sync:', e));
-    addKmLog(newLog).catch(e => console.error('[AracTakip] km log PouchDB sync:', e));
 
     logActivity('vehicle_shift_end', `Vardiya bitirildi: ${activeShift.vehiclePlate}`, {
       employeeId: currentEmployee?.id,
@@ -448,10 +443,6 @@ export function AracTakipPage() {
     addShiftToPouchDB(newShift).catch(e => console.error('[AracTakip] new shift PouchDB:', e));
     addKmLogToPouchDB(endLog).catch(e => console.error('[AracTakip] km log PouchDB:', e));
     addKmLogToPouchDB(startLog).catch(e => console.error('[AracTakip] km log PouchDB:', e));
-    // Vardiya ve KM loglarını PouchDB'ye yaz (→ CouchDB sync)
-    addShift(completedShift).catch(e => console.error('[AracTakip] shift PouchDB sync:', e));
-    addKmLog(endLog).catch(e => console.error('[AracTakip] km log PouchDB sync:', e));
-    addKmLog(startLog).catch(e => console.error('[AracTakip] km log PouchDB sync:', e));
 
     logActivity('vehicle_change', `Arac degistirildi: ${activeShift.vehiclePlate} -> ${vehicle.plate}`, {
       employeeId: currentEmployee?.id,
@@ -866,7 +857,7 @@ export function AracTakipPage() {
         <Dialog.Portal>
           <Dialog.Overlay className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50" />
           <Dialog.Content
-            className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-card border border-border rounded-2xl p-4 sm:p-6 w-[95vw] max-w-md z-50 shadow-2xl max-h-[90vh] overflow-y-auto"
+            className="fixed inset-2 sm:inset-auto sm:top-1/2 sm:left-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 bg-card border border-border rounded-2xl p-4 sm:p-6 sm:w-[95vw] sm:max-w-md z-50 shadow-2xl overflow-y-auto overscroll-contain" style={{maxHeight:'calc(100dvh - 1rem)'}}
             aria-describedby={undefined}
           >
             <Dialog.Title className="text-xl font-bold text-white mb-5 flex items-center gap-3">
@@ -961,7 +952,7 @@ export function AracTakipPage() {
         <Dialog.Portal>
           <Dialog.Overlay className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50" />
           <Dialog.Content
-            className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-card border border-border rounded-2xl p-4 sm:p-6 w-[95vw] max-w-md z-50 shadow-2xl max-h-[90vh] overflow-y-auto"
+            className="fixed inset-2 sm:inset-auto sm:top-1/2 sm:left-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 bg-card border border-border rounded-2xl p-4 sm:p-6 sm:w-[95vw] sm:max-w-md z-50 shadow-2xl overflow-y-auto overscroll-contain" style={{maxHeight:'calc(100dvh - 1rem)'}}
             aria-describedby={undefined}
           >
             <Dialog.Title className="text-xl font-bold text-white mb-5 flex items-center gap-3">
@@ -1043,7 +1034,7 @@ export function AracTakipPage() {
         <Dialog.Portal>
           <Dialog.Overlay className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50" />
           <Dialog.Content
-            className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-card border border-border rounded-2xl p-4 sm:p-6 w-[95vw] max-w-md z-50 shadow-2xl max-h-[90vh] overflow-y-auto"
+            className="fixed inset-2 sm:inset-auto sm:top-1/2 sm:left-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 bg-card border border-border rounded-2xl p-4 sm:p-6 sm:w-[95vw] sm:max-w-md z-50 shadow-2xl overflow-y-auto overscroll-contain" style={{maxHeight:'calc(100dvh - 1rem)'}}
             aria-describedby={undefined}
           >
             <Dialog.Title className="text-xl font-bold text-white mb-5 flex items-center gap-3">

@@ -191,16 +191,16 @@ export function AracPage() {
                       <span className="text-[10px] uppercase text-blue-500/80 -mb-1">TR</span>
                       <span className="text-lg tracking-tighter">{(vehicle.plate.match(/^\d{2}/) || ['34'])[0]}</span>
                     </div>
-                    <div>
-                      <h3 className="text-xl font-black text-white tracking-tight">{vehicle.plate}</h3>
-                      <p className="text-sm text-gray-400 font-medium">{vehicle.model}</p>
+                    <div className="min-w-0">
+                      <h3 className="text-xl font-black text-white tracking-tight truncate">{vehicle.plate}</h3>
+                      <p className="text-sm text-gray-400 font-medium truncate">{vehicle.model}</p>
                     </div>
                   </div>
                   <div className="flex flex-col items-end gap-2">
                     <span className={`px-3 py-1 rounded-lg text-xs font-bold flex items-center gap-1.5 bg-${statusInfo.color}-500/10 text-${statusInfo.color}-400 border border-${statusInfo.color}-500/20`}>
                       <StatusIcon className="w-3.5 h-3.5" /> {statusInfo.label}
                     </span>
-                    <button onClick={(e) => handleDelete(e, vehicle.id, vehicle.plate)} className="opacity-0 group-hover:opacity-100 p-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-xl transition-all"><Trash2 className="w-4 h-4"/></button>
+                    <button onClick={(e) => handleDelete(e, vehicle.id, vehicle.plate)} className="sm:opacity-0 sm:group-hover:opacity-100 p-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-xl transition-all"><Trash2 className="w-4 h-4"/></button>
                   </div>
                 </div>
 
@@ -248,7 +248,7 @@ export function AracPage() {
 
       {/* Add Modal */}
       <Dialog.Root open={isAddModalOpen} onOpenChange={setIsAddModalOpen}>
-        <Dialog.Portal><Dialog.Overlay className="fixed inset-0 bg-black/80 z-50 backdrop-blur-sm"/><Dialog.Content aria-describedby={undefined} className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-[#111] p-4 sm:p-8 rounded-2xl sm:rounded-3xl border border-white/10 w-[95vw] max-w-2xl z-50 shadow-2xl overflow-y-auto max-h-[90vh]">
+        <Dialog.Portal><Dialog.Overlay className="fixed inset-0 bg-black/80 z-50 backdrop-blur-sm"/><Dialog.Content aria-describedby={undefined} className="fixed inset-2 sm:inset-auto sm:top-1/2 sm:left-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 bg-[#111] p-4 sm:p-8 rounded-2xl sm:rounded-3xl border border-white/10 sm:w-[95vw] sm:max-w-2xl z-50 shadow-2xl overflow-y-auto overscroll-contain" style={{maxHeight:'calc(100dvh - 1rem)'}}>
           <div className="flex items-center justify-between mb-6">
             <div>
               <Dialog.Title className="text-2xl font-bold">Yeni Araç Kaydı</Dialog.Title>

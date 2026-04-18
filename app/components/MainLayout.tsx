@@ -413,7 +413,7 @@ export function MainLayout() {
 
   return (
     <Tooltip.Provider delayDuration={200}>
-      <div className="h-screen bg-background flex relative overflow-hidden text-foreground">
+      <div className="h-dvh bg-background flex relative overflow-hidden text-foreground">
         {/* Subtle Background Ambient Glow */}
         <div className="fixed inset-0 pointer-events-none z-0">
           <div className="absolute top-[-15%] left-[15%] w-[40%] h-[45%] bg-blue-600/[0.04] rounded-full blur-[160px]" />

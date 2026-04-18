@@ -330,6 +330,25 @@ export function YedeklerPage() {
             <div className="flex justify-between"><span className="text-gray-400">Toplam Kayıt:</span> <span className="text-white font-semibold">{dbStats.reduce((s, d) => s + d.docCount, 0)}</span></div>
           </div>
         </div>
+      {/* ═══════════════════════════════════════════════════════ */}
+      {/* MODAL: Seçici Geri Yükleme                             */}
+      {/* ═══════════════════════════════════════════════════════ */}
+      <AnimatePresence>
+        {selectiveModal && (
+          <>
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50" onClick={() => !selectiveRestoring && setSelectiveModal(null)} />
+            <motion.div initial={{ opacity: 0, scale: 0.95, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              transition={{ type: 'spring', stiffness: 240, damping: 26 }}
+              className="fixed inset-2 sm:inset-auto sm:top-1/2 sm:left-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 sm:w-[95vw] sm:max-w-lg overflow-y-auto z-50 card-premium rounded-2xl p-4 sm:p-5 border border-border/30" style={{maxHeight:'calc(100dvh - 1rem)'}}>
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-base font-bold text-white flex items-center gap-2">
+                  <RotateCcw className="w-5 h-5 text-amber-400" /> Seçici Geri Yükleme
+                </h3>
+                <button onClick={() => !selectiveRestoring && setSelectiveModal(null)} className="p-1 rounded-lg hover:bg-secondary/60 text-muted-foreground transition-all">
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
 
         <div className="bg-white/5 border border-white/10 rounded-xl p-4">
           <h3 className="font-semibold text-white mb-4">localStorage</h3>
@@ -400,6 +419,43 @@ export function YedeklerPage() {
           </motion.div>
         </AnimatePresence>
       </div>
+      {/* ═══════════════════════════════════════════════════════ */}
+      {/* MODAL: Dosyadan Geri Yükle                             */}
+      {/* ═══════════════════════════════════════════════════════ */}
+      <Dialog.Root open={isFileModalOpen} onOpenChange={setIsFileModalOpen}>
+        <Dialog.Portal>
+          <Dialog.Overlay className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50" />
+          <Dialog.Content className="fixed inset-2 sm:inset-auto sm:top-1/2 sm:left-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 sm:w-[95vw] sm:max-w-lg z-50 card-premium rounded-2xl p-4 sm:p-5 border border-border/30 overflow-y-auto overscroll-contain" style={{maxHeight:'calc(100dvh - 1rem)'}} aria-describedby={undefined}>
+            <Dialog.Title className="text-base font-bold text-white mb-4 flex items-center gap-2">
+              <FileUp className="w-5 h-5 text-amber-400" /> Dosyadan Geri Yükle
+            </Dialog.Title>
+            <div className="space-y-3">
+              <div className="bg-secondary/30 rounded-xl p-3 space-y-1.5 text-xs">
+                <div className="flex justify-between"><span className="text-muted-foreground/60">Dosya:</span><span className="text-white font-medium">{restoreFileName}</span></div>
+                {restoreFileContent && (
+                  <>
+                    <div className="flex justify-between"><span className="text-muted-foreground/60">Uygulama:</span><span className="text-white">{restoreFileContent.appName || 'Bilinmiyor'}</span></div>
+                    <div className="flex justify-between"><span className="text-muted-foreground/60">Tarih:</span><span className="text-white">{restoreFileContent.createdAt ? new Date(restoreFileContent.createdAt).toLocaleString('tr-TR') : '-'}</span></div>
+                    <div className="flex justify-between"><span className="text-muted-foreground/60">Kayıt:</span><span className="text-white">{restoreFileContent.meta?.totalDocs ?? Object.values(restoreFileContent.tables || {}).reduce((s: number, a: any) => s + (a?.length ?? 0), 0)}</span></div>
+                    <div className="flex justify-between"><span className="text-muted-foreground/60">Kayıt:</span><span className="text-white">{restoreFileContent.meta?.totalDocs ?? Object.keys(restoreFileContent.tables || {}).length}</span></div>
+                    <div className="flex justify-between"><span className="text-muted-foreground/60">Kayıt:</span><span className="text-white">{restoreFileContent.meta?.totalDocs || Object.keys(restoreFileContent.tables || {}).length}</span></div>
+                  </>
+                )}
+              </div>
+              <div className="bg-red-500/5 border border-red-500/15 rounded-xl p-3 flex items-start gap-2">
+                <AlertTriangle className="w-4 h-4 text-red-400 flex-shrink-0 mt-0.5" />
+                <p className="text-[10px] text-red-400/80">Mevcut veriler üzerine yazılacak. Bu işlem geri alınamaz!</p>
+              </div>
+              <div className="flex gap-2">
+                <button onClick={() => setIsFileModalOpen(false)} className="flex-1 py-3 bg-secondary/50 hover:bg-secondary/70 text-muted-foreground font-medium rounded-xl text-sm transition-all">İptal</button>
+                <button onClick={handleRestoreFromFile} className="flex-1 py-3 bg-gradient-to-r from-amber-600 to-orange-600 text-white font-bold rounded-xl text-sm transition-all flex items-center justify-center gap-2">
+                  <UploadCloud className="w-4 h-4" /> Geri Yükle
+                </button>
+              </div>
+            </div>
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
     </div>
   );
 }
