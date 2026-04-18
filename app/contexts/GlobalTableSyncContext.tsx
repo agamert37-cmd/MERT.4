@@ -22,6 +22,7 @@ import { StorageKey } from '../utils/storage';
 import { startAllSync, startMobileSync, stopAllSync, startPeerSync, stopPeerSync, autoSeedIfEmpty, compactAllDbs, startCouchDbHealthMonitor, stopCouchDbHealthMonitor } from '../lib/pouchdb';
 import { replayWAL, walLoad } from '../lib/active-client';
 import { getCouchDbConfig } from '../lib/db-config';
+import { startAutoBackupScheduler, stopAutoBackupScheduler, getAutoBackupConfig } from '../lib/pouchdb-backup';
 import { toast } from 'sonner';
 
 // ─── Per-tablo sync durumu context ────────────────────────────────────────────
@@ -239,6 +240,10 @@ export function GlobalTableSyncProvider({ children }: GlobalTableSyncProviderPro
     const cfg = getCouchDbConfig();
     if (cfg.peerUrl) startPeerSync();
 
+    // Otomatik yedek zamanlaması
+    const autoCfg = getAutoBackupConfig();
+    if (autoCfg.enabled) startAutoBackupScheduler();
+
     const seedTimer = setTimeout(() => {
       autoSeedIfEmpty(
         (totalSeeded) => {
@@ -282,6 +287,7 @@ export function GlobalTableSyncProvider({ children }: GlobalTableSyncProviderPro
       clearTimeout(walTimer);
       clearTimeout(compactTimer);
       stopPeerSync();
+      stopAutoBackupScheduler();
     };
   }, []);
 
