@@ -601,7 +601,7 @@ export function KasaPage() {
                             toast.success('POS Cihazı silindi.');
                           }
                         }}
-                        className="p-2 bg-red-500/10 text-red-400 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity"
+                        className="p-2 bg-red-500/10 text-red-400 rounded-lg sm:opacity-0 sm:group-hover:opacity-100 transition-opacity"
                       >
                         <Trash2 className="w-4 h-4" />
                       </button>
