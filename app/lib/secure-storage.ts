@@ -136,7 +136,13 @@ export function unlockApp(): void {
 
 /** Kilit zamanlayıcısını başlat */
 export function startLockTimer(timeoutMs = DEFAULT_LOCK_TIMEOUT_MS): void {
-  const last = Number(localStorage.getItem(LAST_ACTIVITY_KEY) || 0);
+  const raw = localStorage.getItem(LAST_ACTIVITY_KEY);
+  if (!raw) {
+    // İlk ziyaret — hemen kilitleme, aktiviteyi şimdi kaydet ve timer başlat
+    updateActivity();
+    return;
+  }
+  const last = Number(raw);
   const elapsed = Date.now() - last;
   if (elapsed >= timeoutMs) {
     _fireLock();
