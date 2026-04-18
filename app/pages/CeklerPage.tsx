@@ -224,6 +224,7 @@ export function CeklerPage() {
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [viewTab, setViewTab] = useState<'list' | 'bank'>('list');
+  const [showMobileFilters, setShowMobileFilters] = useState(false);
 
   // Modal states
   const [modalType, setModalType] = useState<ModalType>('none');
@@ -729,53 +730,108 @@ export function CeklerPage() {
       </div>
 
       {/* FİLTRE BAR */}
-      <div className="px-4 sm:px-6 py-3 border-b border-border flex-shrink-0 flex items-center gap-2 sm:gap-3 overflow-x-auto no-scrollbar">
-        <div className="relative flex-1 min-w-[200px] max-w-md">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <input type="text" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder={isVerilen ? 'Alıcı, banka, çek no ara...' : t('checks.searchPlaceholder')}
-            className={`w-full pl-10 pr-4 py-2 bg-card border border-border rounded-lg text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 ${accentRing}`} />
-        </div>
+      <div className="flex-shrink-0 border-b border-border">
+        <div className="px-4 sm:px-6 py-3 flex items-center gap-2 sm:gap-3">
+          <div className="relative flex-1 min-w-0">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <input type="text" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder={isVerilen ? 'Alıcı, banka, çek no ara...' : t('checks.searchPlaceholder')}
+              className={`w-full pl-10 pr-4 py-2 bg-card border border-border rounded-lg text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 ${accentRing}`} />
+          </div>
 
-        <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as any)}
-          className={`px-3 py-2 bg-card border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 ${accentRing}`}>
-          <option value="all">{t('checks.allStatuses')}</option>
-          {Object.entries(currentStatusLabels).map(([key, label]) => (
-            <option key={key} value={key}>{label}</option>
-          ))}
-        </select>
-
-        <div className="hidden sm:flex items-center gap-1.5">
-          <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)}
-            className={`px-2 py-2 bg-card border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 ${accentRing}`} />
-          <span className="text-muted-foreground text-xs">-</span>
-          <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)}
-            className={`px-2 py-2 bg-card border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 ${accentRing}`} />
-        </div>
-
-        <div className="hidden sm:flex items-center gap-1">
-          <select value={sortBy} onChange={(e) => setSortBy(e.target.value as any)}
-            className={`px-3 py-2 bg-card border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 ${accentRing}`}>
-            <option value="dueDate">{t('checks.sortByDueDate')}</option>
-            <option value="amount">{t('checks.sortByAmount')}</option>
-            <option value="createdAt">{t('checks.sortByDate')}</option>
+          <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as any)}
+            className={`px-3 py-2 bg-card border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 ${accentRing} flex-shrink-0`}>
+            <option value="all">{t('checks.allStatuses')}</option>
+            {Object.entries(currentStatusLabels).map(([key, label]) => (
+              <option key={key} value={key}>{label}</option>
+            ))}
           </select>
-          <button onClick={() => setSortDir(d => d === 'asc' ? 'desc' : 'asc')}
-            className="p-2 bg-card border border-border rounded-lg text-muted-foreground hover:text-foreground transition-colors">
-            {sortDir === 'asc' ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+
+          {/* Mobile: filter toggle button */}
+          <button
+            onClick={() => setShowMobileFilters(v => !v)}
+            className={`sm:hidden p-2 rounded-lg border transition-colors flex-shrink-0 ${
+              showMobileFilters || dateFrom || dateTo
+                ? `${accentBg} border-transparent text-white`
+                : 'bg-card border-border text-muted-foreground'
+            }`}
+          >
+            <Filter className="w-4 h-4" />
           </button>
+
+          {/* Desktop: date + sort */}
+          <div className="hidden sm:flex items-center gap-1.5 flex-shrink-0">
+            <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)}
+              className={`px-2 py-2 bg-card border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 ${accentRing}`} />
+            <span className="text-muted-foreground text-xs">-</span>
+            <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)}
+              className={`px-2 py-2 bg-card border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 ${accentRing}`} />
+          </div>
+
+          <div className="hidden sm:flex items-center gap-1 flex-shrink-0">
+            <select value={sortBy} onChange={(e) => setSortBy(e.target.value as any)}
+              className={`px-3 py-2 bg-card border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 ${accentRing}`}>
+              <option value="dueDate">{t('checks.sortByDueDate')}</option>
+              <option value="amount">{t('checks.sortByAmount')}</option>
+              <option value="createdAt">{t('checks.sortByDate')}</option>
+            </select>
+            <button onClick={() => setSortDir(d => d === 'asc' ? 'desc' : 'asc')}
+              className="p-2 bg-card border border-border rounded-lg text-muted-foreground hover:text-foreground transition-colors">
+              {sortDir === 'asc' ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+            </button>
+          </div>
+
+          <div className="flex bg-card border border-border rounded-lg overflow-hidden ml-auto flex-shrink-0">
+            <button onClick={() => setViewTab('list')}
+              className={`px-3 py-2 text-sm transition-colors ${viewTab === 'list' ? `${accentBg} text-white` : 'text-muted-foreground hover:text-foreground'}`}>
+              Liste
+            </button>
+            <button onClick={() => setViewTab('bank')}
+              className={`px-3 py-2 text-sm transition-colors ${viewTab === 'bank' ? `${accentBg} text-white` : 'text-muted-foreground hover:text-foreground'}`}>
+              <PieChart className="w-4 h-4" />
+            </button>
+          </div>
         </div>
 
-        <div className="flex bg-card border border-border rounded-lg overflow-hidden ml-auto">
-          <button onClick={() => setViewTab('list')}
-            className={`px-3 py-2 text-sm transition-colors ${viewTab === 'list' ? `${accentBg} text-white` : 'text-muted-foreground hover:text-foreground'}`}>
-            Liste
-          </button>
-          <button onClick={() => setViewTab('bank')}
-            className={`px-3 py-2 text-sm transition-colors ${viewTab === 'bank' ? `${accentBg} text-white` : 'text-muted-foreground hover:text-foreground'}`}>
-            <PieChart className="w-4 h-4" />
-          </button>
-        </div>
+        {/* Mobile: expanded filter row */}
+        <AnimatePresence>
+        {showMobileFilters && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.2, ease: 'easeInOut' }}
+            className="sm:hidden overflow-hidden"
+          >
+          <div className="px-4 pb-3 flex flex-col gap-2">
+            <div className="flex gap-2">
+              <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)}
+                className={`flex-1 px-2 py-2 bg-card border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 ${accentRing}`} />
+              <span className="text-muted-foreground text-xs self-center">-</span>
+              <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)}
+                className={`flex-1 px-2 py-2 bg-card border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 ${accentRing}`} />
+              {(dateFrom || dateTo) && (
+                <button onClick={() => { setDateFrom(''); setDateTo(''); }} className="p-2 bg-card border border-border rounded-lg text-muted-foreground">
+                  <X className="w-4 h-4" />
+                </button>
+              )}
+            </div>
+            <div className="flex gap-2">
+              <select value={sortBy} onChange={(e) => setSortBy(e.target.value as any)}
+                className={`flex-1 px-3 py-2 bg-card border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 ${accentRing}`}>
+                <option value="dueDate">{t('checks.sortByDueDate')}</option>
+                <option value="amount">{t('checks.sortByAmount')}</option>
+                <option value="createdAt">{t('checks.sortByDate')}</option>
+              </select>
+              <button onClick={() => setSortDir(d => d === 'asc' ? 'desc' : 'asc')}
+                className="p-2 bg-card border border-border rounded-lg text-muted-foreground">
+                {sortDir === 'asc' ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+              </button>
+            </div>
+          </div>
+          </motion.div>
+        )}
+        </AnimatePresence>
       </div>
 
       {/* İÇERİK */}

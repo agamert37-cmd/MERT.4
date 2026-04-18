@@ -111,7 +111,7 @@ function NoteRow({ note, idx, isAdmin, onEdit, onDelete, deleteId, setDeleteId }
               {imp.label}
             </span>
             {isAdmin && (
-              <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity" onClick={e => e.stopPropagation()}>
+              <div className="flex gap-0.5 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity" onClick={e => e.stopPropagation()}>
                 {deleteId === note.id ? (
                   <div className="flex gap-1 items-center">
                     <button onClick={() => { onDelete?.(note.id); setDeleteId?.(null); }} className="text-[9px] text-rose-300 font-bold px-1.5 py-0.5 rounded bg-rose-500/20 border border-rose-500/30">Sil</button>

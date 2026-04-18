@@ -161,7 +161,7 @@ export function NotificationPanel() {
                                 e.stopPropagation();
                                 removeNotification(notification.id);
                               }}
-                              className="opacity-0 group-hover:opacity-100 transition-opacity p-1 hover:bg-accent rounded"
+                              className="sm:opacity-0 sm:group-hover:opacity-100 transition-opacity p-1 hover:bg-accent rounded"
                             >
                               <X className="w-4 h-4 text-muted-foreground" />
                             </button>

@@ -201,7 +201,7 @@ export function BankWidget({ canEdit = true }: { canEdit?: boolean }) {
                       whileHover={{ scale: 1.1 }}
                       whileTap={{ scale: 0.9 }}
                       onClick={() => removeBank(bank.id, bank.name)}
-                      className="opacity-0 group-hover:opacity-100 w-6 h-6 rounded-lg bg-red-500/20 hover:bg-red-500/40 flex items-center justify-center flex-shrink-0 transition-all border border-red-500/20"
+                      className="sm:opacity-0 sm:group-hover:opacity-100 w-6 h-6 rounded-lg bg-red-500/20 hover:bg-red-500/40 flex items-center justify-center flex-shrink-0 transition-all border border-red-500/20"
                       title="Bankayı kaldır"
                     >
                       <X className="w-3 h-3 text-red-400" />

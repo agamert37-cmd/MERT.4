@@ -200,7 +200,7 @@ export function AracPage() {
                     <span className={`px-3 py-1 rounded-lg text-xs font-bold flex items-center gap-1.5 bg-${statusInfo.color}-500/10 text-${statusInfo.color}-400 border border-${statusInfo.color}-500/20`}>
                       <StatusIcon className="w-3.5 h-3.5" /> {statusInfo.label}
                     </span>
-                    <button onClick={(e) => handleDelete(e, vehicle.id, vehicle.plate)} className="opacity-0 group-hover:opacity-100 p-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-xl transition-all"><Trash2 className="w-4 h-4"/></button>
+                    <button onClick={(e) => handleDelete(e, vehicle.id, vehicle.plate)} className="sm:opacity-0 sm:group-hover:opacity-100 p-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-xl transition-all"><Trash2 className="w-4 h-4"/></button>
                   </div>
                 </div>
 

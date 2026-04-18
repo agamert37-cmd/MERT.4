@@ -263,11 +263,12 @@ interface SwipeToDeleteProps {
 }
 
 export function SwipeToDelete({ onDelete, children, className = '', disabled = false }: SwipeToDeleteProps) {
-  if (disabled) return <div className={`relative ${className}`}>{children}</div>;
   const [offsetX, setOffsetX] = useState(0);
   const startX = useRef(0);
   const dragging = useRef(false);
   const THRESHOLD = 80;
+
+  if (disabled) return <div className={`relative ${className}`}>{children}</div>;
 
   return (
     <div className={`relative overflow-hidden ${className}`}>

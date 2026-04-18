@@ -4191,7 +4191,7 @@ export function UretimPage() {
                           <p className="text-lg font-bold text-emerald-400 tech-number">₺{kayit.toplamMaliyet.toLocaleString('tr-TR', { maximumFractionDigits: 0 })}</p>
                           <p className="text-[10px] text-muted-foreground/60 tech-number">₺{kayit.kgBasinaMaliyet.toFixed(2)}/kg · Verim %{verim.toFixed(0)}</p>
                           <motion.button whileTap={{ scale: 0.9 }} onClick={() => handleDeleteKayit(kayit.id)}
-                            className="p-1.5 rounded-lg bg-red-500/8 hover:bg-red-500/20 text-red-400/60 hover:text-red-400 transition-all duration-200 mt-1 opacity-0 group-hover:opacity-100" title="Sil">
+                            className="p-1.5 rounded-lg bg-red-500/8 hover:bg-red-500/20 text-red-400/60 hover:text-red-400 transition-all duration-200 mt-1 sm:opacity-0 sm:group-hover:opacity-100" title="Sil">
                             <Trash2 className="w-3.5 h-3.5" />
                           </motion.button>
                         </div>
@@ -5089,7 +5089,7 @@ export function UretimPage() {
                             {r.kalemler.length} malzeme &bull; {totKg.toFixed(1)} kg
                           </p>
                         </div>
-                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all">
+                        <div className="flex items-center gap-1 sm:opacity-0 sm:group-hover:opacity-100 transition-all">
                           <button
                             onClick={() => {
                               const yeniKalemler = r.kalemler.map(k => ({ ...k, id: crypto.randomUUID() }));

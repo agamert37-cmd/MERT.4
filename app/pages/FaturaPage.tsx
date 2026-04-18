@@ -19,6 +19,7 @@ import { useModuleBus } from '../hooks/useModuleBus';
 import { getPagePermissions } from '../utils/permissions';
 import { usePageSecurity } from '../hooks/usePageSecurity';
 import { useTableSync } from '../hooks/useTableSync';
+import { SwipeToDelete } from '../components/MobileHelpers';
 import { productToDb, productFromDb } from './StokPage';
 import { cariToDb, cariFromDb } from './CariPage';
 import { useGlobalTableData } from '../contexts/GlobalTableSyncContext';
@@ -815,7 +816,7 @@ export function FaturaPage() {
             className="w-full pl-10 pr-4 py-3 bg-white/5 border border-white/10 rounded-xl text-sm text-white placeholder-gray-600 outline-none focus:border-blue-500/50 transition-all"
           />
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           {(['all', 'alis', 'satis'] as const).map(type => (
             <button key={type} onClick={() => { setFilterType(type); sessionStorage.setItem('mert4_filter_fatura_type', type); }}
               className={`px-4 py-2.5 rounded-xl text-xs font-bold border transition-all ${filterType === type ? 'bg-blue-600/20 text-blue-400 border-blue-500/30' : 'bg-white/5 text-gray-500 border-white/5 hover:bg-white/10'}`}>
@@ -847,9 +848,12 @@ export function FaturaPage() {
         >
         <AnimatePresence>
           {filtered.map((fatura) => (
-            <motion.div
+            <SwipeToDelete
               key={fatura.id}
-              layout
+              disabled={fatura.status === 'aktif' || !canDelete}
+              onDelete={() => handleDelete(fatura.id)}
+            >
+            <motion.div
               variants={rowItem}
               exit={{ opacity: 0, y: -8, filter: 'blur(4px)', transition: { duration: 0.16 } }}
               whileHover={{ x: 3, transition: { duration: 0.15 } }}
@@ -905,7 +909,7 @@ export function FaturaPage() {
                 </div>
 
                 {/* Actions */}
-                <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity" onClick={e => e.stopPropagation()}>
+                <div className="flex gap-1 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity" onClick={e => e.stopPropagation()}>
                   <button onClick={() => shareViaWhatsApp(fatura)} className="p-2 hover:bg-green-500/10 rounded-lg transition-all" title="WhatsApp ile Paylaş">
                     <MessageCircle className="w-4 h-4 text-green-400" />
                   </button>
@@ -953,6 +957,7 @@ export function FaturaPage() {
                 </div>
               )}
             </motion.div>
+            </SwipeToDelete>
           ))}
         </AnimatePresence>
         </motion.div>
@@ -1547,7 +1552,7 @@ export function FaturaPage() {
                       {item.description && <p className="text-[10px] text-gray-600 mt-0.5">{item.description}</p>}
                     </div>
                     <button onClick={() => removeFaturaStokItem(item.id)}
-                      className="p-1.5 hover:bg-red-500/10 rounded-lg transition-all opacity-0 group-hover:opacity-100">
+                      className="p-1.5 hover:bg-red-500/10 rounded-lg transition-all sm:opacity-0 sm:group-hover:opacity-100">
                       <Trash2 className="w-3.5 h-3.5 text-red-400" />
                     </button>
                   </div>
