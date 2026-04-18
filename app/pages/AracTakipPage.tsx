@@ -857,7 +857,7 @@ export function AracTakipPage() {
         <Dialog.Portal>
           <Dialog.Overlay className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50" />
           <Dialog.Content
-            className="fixed inset-2 sm:inset-auto sm:top-1/2 sm:left-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 bg-card border border-border rounded-2xl p-4 sm:p-6 sm:w-[95vw] sm:max-w-md z-50 shadow-2xl overflow-y-auto" style={{maxHeight:'calc(100dvh - 1rem)'}}
+            className="fixed inset-2 sm:inset-auto sm:top-1/2 sm:left-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 bg-card border border-border rounded-2xl p-4 sm:p-6 sm:w-[95vw] sm:max-w-md z-50 shadow-2xl overflow-y-auto overscroll-contain" style={{maxHeight:'calc(100dvh - 1rem)'}}
             aria-describedby={undefined}
           >
             <Dialog.Title className="text-xl font-bold text-white mb-5 flex items-center gap-3">
@@ -952,7 +952,7 @@ export function AracTakipPage() {
         <Dialog.Portal>
           <Dialog.Overlay className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50" />
           <Dialog.Content
-            className="fixed inset-2 sm:inset-auto sm:top-1/2 sm:left-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 bg-card border border-border rounded-2xl p-4 sm:p-6 sm:w-[95vw] sm:max-w-md z-50 shadow-2xl overflow-y-auto" style={{maxHeight:'calc(100dvh - 1rem)'}}
+            className="fixed inset-2 sm:inset-auto sm:top-1/2 sm:left-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 bg-card border border-border rounded-2xl p-4 sm:p-6 sm:w-[95vw] sm:max-w-md z-50 shadow-2xl overflow-y-auto overscroll-contain" style={{maxHeight:'calc(100dvh - 1rem)'}}
             aria-describedby={undefined}
           >
             <Dialog.Title className="text-xl font-bold text-white mb-5 flex items-center gap-3">
@@ -1034,7 +1034,7 @@ export function AracTakipPage() {
         <Dialog.Portal>
           <Dialog.Overlay className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50" />
           <Dialog.Content
-            className="fixed inset-2 sm:inset-auto sm:top-1/2 sm:left-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 bg-card border border-border rounded-2xl p-4 sm:p-6 sm:w-[95vw] sm:max-w-md z-50 shadow-2xl overflow-y-auto" style={{maxHeight:'calc(100dvh - 1rem)'}}
+            className="fixed inset-2 sm:inset-auto sm:top-1/2 sm:left-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 bg-card border border-border rounded-2xl p-4 sm:p-6 sm:w-[95vw] sm:max-w-md z-50 shadow-2xl overflow-y-auto overscroll-contain" style={{maxHeight:'calc(100dvh - 1rem)'}}
             aria-describedby={undefined}
           >
             <Dialog.Title className="text-xl font-bold text-white mb-5 flex items-center gap-3">

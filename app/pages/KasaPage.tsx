@@ -530,7 +530,6 @@ export function KasaPage() {
                   filteredTransactions.map((transaction) => (
                     <SwipeToDelete key={transaction.id} onDelete={() => handleDeleteTransaction(transaction.id)} className="rounded-2xl sm:overflow-visible">
                     <motion.div
-                      layout
                       variants={rowItem}
                       whileHover={{ x: 3, borderColor: 'rgba(255,255,255,0.12)', transition: { duration: 0.15 } }}
                       whileTap={tap.card}
@@ -556,7 +555,7 @@ export function KasaPage() {
                           {transaction.type === 'Gelir' ? '+' : '-'}₺{transaction.amount.toLocaleString('tr-TR')}
                         </p>
                         <button
-                          onClick={() => handleDeleteTransaction(transaction.id)}
+                          onClick={(e) => { e.stopPropagation(); handleDeleteTransaction(transaction.id); }}
                           className="p-2.5 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-xl transition-colors opacity-60 md:opacity-0 group-hover:opacity-100"
                         >
                           <Trash2 className="w-5 h-5" />
@@ -627,7 +626,7 @@ export function KasaPage() {
       <Dialog.Root open={isModalOpen} onOpenChange={setIsModalOpen}>
         <Dialog.Portal>
           <Dialog.Overlay className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50" />
-          <Dialog.Content aria-describedby={undefined} className="fixed inset-2 sm:inset-auto sm:top-1/2 sm:left-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 bg-[#111] border border-white/10 rounded-2xl sm:rounded-3xl p-4 sm:p-8 sm:w-[95vw] sm:max-w-lg z-50 shadow-2xl overflow-y-auto" style={{maxHeight: 'calc(100dvh - 1rem)'}}>
+          <Dialog.Content aria-describedby={undefined} className="fixed inset-2 sm:inset-auto sm:top-1/2 sm:left-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 bg-[#111] border border-white/10 rounded-2xl sm:rounded-3xl p-4 sm:p-8 sm:w-[95vw] sm:max-w-lg z-50 shadow-2xl overflow-y-auto overscroll-contain" style={{maxHeight: 'calc(100dvh - 1rem)'}}>
             <div className="flex justify-between items-center mb-6">
               <Dialog.Title className={`text-2xl font-bold flex items-center gap-3 ${modalType === 'Gelir' ? 'text-green-400' : 'text-red-400'}`}>
                 {modalType === 'Gelir' ? <TrendingUp className="w-6 h-6" /> : <TrendingDown className="w-6 h-6" />}
@@ -727,7 +726,7 @@ export function KasaPage() {
       <Dialog.Root open={isPosModalOpen} onOpenChange={setIsPosModalOpen}>
         <Dialog.Portal>
           <Dialog.Overlay className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50" />
-          <Dialog.Content aria-describedby={undefined} className="fixed inset-2 sm:inset-auto sm:top-1/2 sm:left-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 bg-[#111] border border-white/10 rounded-2xl sm:rounded-3xl p-4 sm:p-8 sm:w-[95vw] sm:max-w-lg z-50 shadow-2xl overflow-y-auto" style={{maxHeight: 'calc(100dvh - 1rem)'}}>
+          <Dialog.Content aria-describedby={undefined} className="fixed inset-2 sm:inset-auto sm:top-1/2 sm:left-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 bg-[#111] border border-white/10 rounded-2xl sm:rounded-3xl p-4 sm:p-8 sm:w-[95vw] sm:max-w-lg z-50 shadow-2xl overflow-y-auto overscroll-contain" style={{maxHeight: 'calc(100dvh - 1rem)'}}>
             <div className="flex justify-between items-center mb-6">
               <Dialog.Title className="text-2xl font-bold text-purple-400 flex items-center gap-3">
                 <CreditCard className="w-6 h-6" /> POS Cihazı Ekle

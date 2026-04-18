@@ -597,7 +597,7 @@ export function CeklerPage() {
   // ═══════════════════════════════════════════════════════════════
 
   return (
-    <div className="h-[calc(100vh-3.5rem)] flex flex-col bg-background overflow-hidden pb-20 lg:pb-0">
+    <div className="h-[calc(100dvh-3.5rem)] flex flex-col bg-background overflow-hidden pb-20 lg:pb-0">
       {/* HEADER */}
       <div className="p-4 sm:p-6 border-b border-border flex-shrink-0">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">

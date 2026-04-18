@@ -745,7 +745,7 @@ export function PersonelPage() {
 
       {/* Add Modal */}
       <Dialog.Root open={isAddModalOpen} onOpenChange={setIsAddModalOpen}>
-        <Dialog.Portal><Dialog.Overlay className="fixed inset-0 bg-black/80 z-50"/><Dialog.Content aria-describedby={undefined} className="fixed inset-2 sm:inset-auto sm:top-1/2 sm:left-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 bg-[#111] p-4 sm:p-8 rounded-2xl sm:rounded-3xl border border-white/10 sm:w-[95vw] sm:max-w-3xl z-50 shadow-2xl overflow-y-auto" style={{maxHeight: 'calc(100dvh - 1rem)'}}>
+        <Dialog.Portal><Dialog.Overlay className="fixed inset-0 bg-black/80 z-50"/><Dialog.Content aria-describedby={undefined} className="fixed inset-2 sm:inset-auto sm:top-1/2 sm:left-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 bg-[#111] p-4 sm:p-8 rounded-2xl sm:rounded-3xl border border-white/10 sm:w-[95vw] sm:max-w-3xl z-50 shadow-2xl overflow-y-auto overscroll-contain" style={{maxHeight: 'calc(100dvh - 1rem)'}}>
 
           <Dialog.Title className="text-2xl font-bold mb-6">Yeni Kullanıcı Oluştur</Dialog.Title>
           <form onSubmit={handleAddPersonnel} className="space-y-8">
@@ -789,7 +789,7 @@ export function PersonelPage() {
 
       {/* Edit Modal */}
       <Dialog.Root open={isEditModalOpen} onOpenChange={setIsEditModalOpen}>
-        <Dialog.Portal><Dialog.Overlay className="fixed inset-0 bg-black/80 z-50"/><Dialog.Content aria-describedby={undefined} className="fixed inset-2 sm:inset-auto sm:top-1/2 sm:left-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 bg-[#111] p-4 sm:p-8 rounded-2xl sm:rounded-3xl border border-white/10 sm:w-[95vw] sm:max-w-3xl z-50 shadow-2xl overflow-y-auto" style={{maxHeight: 'calc(100dvh - 1rem)'}}>
+        <Dialog.Portal><Dialog.Overlay className="fixed inset-0 bg-black/80 z-50"/><Dialog.Content aria-describedby={undefined} className="fixed inset-2 sm:inset-auto sm:top-1/2 sm:left-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 bg-[#111] p-4 sm:p-8 rounded-2xl sm:rounded-3xl border border-white/10 sm:w-[95vw] sm:max-w-3xl z-50 shadow-2xl overflow-y-auto overscroll-contain" style={{maxHeight: 'calc(100dvh - 1rem)'}}>
 
           <Dialog.Title className="text-2xl font-bold mb-6">Kullanıcıyı Düzenle</Dialog.Title>
           <form onSubmit={handleUpdatePersonnel} className="space-y-8">
@@ -902,7 +902,7 @@ export function PersonelPage() {
       <Dialog.Root open={isRequestsModalOpen} onOpenChange={setIsRequestsModalOpen}>
         <Dialog.Portal>
           <Dialog.Overlay className="fixed inset-0 bg-black/80 z-50" />
-          <Dialog.Content aria-describedby={undefined} className="fixed inset-2 sm:inset-auto sm:top-1/2 sm:left-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 bg-[#111] p-4 sm:p-8 rounded-2xl sm:rounded-3xl border border-white/10 sm:w-[95vw] sm:max-w-2xl z-50 shadow-2xl overflow-y-auto" style={{maxHeight:'calc(100dvh - 1rem)'}}>
+          <Dialog.Content aria-describedby={undefined} className="fixed inset-2 sm:inset-auto sm:top-1/2 sm:left-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 bg-[#111] p-4 sm:p-8 rounded-2xl sm:rounded-3xl border border-white/10 sm:w-[95vw] sm:max-w-2xl z-50 shadow-2xl overflow-y-auto overscroll-contain" style={{maxHeight:'calc(100dvh - 1rem)'}}>
             <div className="flex justify-between items-center mb-6">
               <Dialog.Title className="text-xl font-bold flex items-center gap-2">
                 <Shield className="w-5 h-5 text-purple-400" /> Yetki Talep Onayları

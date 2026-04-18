@@ -721,7 +721,7 @@ export function UpdateNotesPage() {
   const collapseAll = () => setCollapsed(new Set(allVersions.filter(v => v !== CURRENT_VERSION)));
 
   return (
-    <div className="h-screen flex flex-col bg-[#06090e] text-white font-sans overflow-hidden">
+    <div className="h-dvh flex flex-col bg-[#06090e] text-white font-sans overflow-hidden">
 
       {/* ── Sticky Header ── */}
       <div className="shrink-0 flex items-center gap-2.5 px-4 py-2.5 border-b border-white/[0.07] bg-[#06090e]/95 backdrop-blur-xl z-20">

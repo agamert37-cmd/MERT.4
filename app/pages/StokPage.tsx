@@ -1591,7 +1591,7 @@ export function StokPage() {
 
       {/* Add Product Modal */}
       <Dialog.Root open={isAddModalOpen} onOpenChange={(open) => { setIsAddModalOpen(open); if (!open) { setAddFormCategory(categories[0] || 'Dana'); setAddFormUnit('KG'); } }}>
-        <Dialog.Portal><Dialog.Overlay className="fixed inset-0 bg-black/80 backdrop-blur-md z-50" /><Dialog.Content aria-describedby={undefined} className="fixed inset-2 sm:inset-auto sm:top-1/2 sm:left-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 modal-glass p-5 sm:p-7 rounded-2xl sm:rounded-3xl border border-white/10 sm:w-[95vw] sm:max-w-md z-50 shadow-2xl overflow-y-auto" style={{maxHeight:'calc(100dvh - 1rem)'}}>
+        <Dialog.Portal><Dialog.Overlay className="fixed inset-0 bg-black/80 backdrop-blur-md z-50" /><Dialog.Content aria-describedby={undefined} className="fixed inset-2 sm:inset-auto sm:top-1/2 sm:left-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 modal-glass p-5 sm:p-7 rounded-2xl sm:rounded-3xl border border-white/10 sm:w-[95vw] sm:max-w-md z-50 shadow-2xl overflow-y-auto overscroll-contain" style={{maxHeight:'calc(100dvh - 1rem)'}}>
           <div className="flex justify-between items-center mb-6">
             <Dialog.Title className="text-lg sm:text-xl font-black text-white flex items-center gap-2.5">
               <div className="w-8 h-8 rounded-xl bg-blue-500/15 flex items-center justify-center"><Package className="w-4 h-4 text-blue-400" /></div>
@@ -1625,7 +1625,7 @@ export function StokPage() {
 
       {/* Add Movement Modal */}
       <Dialog.Root open={isAddMovementModalOpen} onOpenChange={(open) => { setIsAddMovementModalOpen(open); if (!open) { setPartySearch(''); setSelectedCariId(null); setMovementTypeForFilter('ALIS'); } }}>
-        <Dialog.Portal><Dialog.Overlay className="fixed inset-0 bg-black/80 backdrop-blur-md z-50" /><Dialog.Content aria-describedby={undefined} className="fixed inset-2 sm:inset-auto sm:top-1/2 sm:left-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 modal-glass p-5 sm:p-7 rounded-2xl sm:rounded-3xl border border-white/10 sm:w-[95vw] sm:max-w-md z-50 shadow-2xl overflow-y-auto" style={{maxHeight:'calc(100dvh - 1rem)'}}>
+        <Dialog.Portal><Dialog.Overlay className="fixed inset-0 bg-black/80 backdrop-blur-md z-50" /><Dialog.Content aria-describedby={undefined} className="fixed inset-2 sm:inset-auto sm:top-1/2 sm:left-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 modal-glass p-5 sm:p-7 rounded-2xl sm:rounded-3xl border border-white/10 sm:w-[95vw] sm:max-w-md z-50 shadow-2xl overflow-y-auto overscroll-contain" style={{maxHeight:'calc(100dvh - 1rem)'}}>
           <div className="flex justify-between items-center mb-6">
             <Dialog.Title className="text-lg sm:text-xl font-black text-white flex items-center gap-2.5">
               <div className="w-8 h-8 rounded-xl bg-indigo-500/15 flex items-center justify-center"><RefreshCcw className="w-4 h-4 text-indigo-400" /></div>
@@ -1703,7 +1703,7 @@ export function StokPage() {
 
       {/* Edit Product Modal */}
       <Dialog.Root open={isEditModalOpen} onOpenChange={(open) => { setIsEditModalOpen(open); if (open && selectedProduct) { setEditFormCategory(selectedProduct.category); setEditFormUnit(selectedProduct.unit); } }}>
-        <Dialog.Portal><Dialog.Overlay className="fixed inset-0 bg-black/80 backdrop-blur-md z-50" /><Dialog.Content aria-describedby={undefined} className="fixed inset-2 sm:inset-auto sm:top-1/2 sm:left-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 modal-glass p-5 sm:p-7 rounded-2xl sm:rounded-3xl border border-white/10 sm:w-[95vw] sm:max-w-md z-50 shadow-2xl overflow-y-auto" style={{maxHeight:'calc(100dvh - 1rem)'}}>
+        <Dialog.Portal><Dialog.Overlay className="fixed inset-0 bg-black/80 backdrop-blur-md z-50" /><Dialog.Content aria-describedby={undefined} className="fixed inset-2 sm:inset-auto sm:top-1/2 sm:left-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 modal-glass p-5 sm:p-7 rounded-2xl sm:rounded-3xl border border-white/10 sm:w-[95vw] sm:max-w-md z-50 shadow-2xl overflow-y-auto overscroll-contain" style={{maxHeight:'calc(100dvh - 1rem)'}}>
           <div className="flex justify-between items-center mb-6">
             <Dialog.Title className="text-lg sm:text-xl font-black text-white flex items-center gap-2.5">
               <div className="w-8 h-8 rounded-xl bg-blue-500/15 flex items-center justify-center"><Edit className="w-4 h-4 text-blue-400" /></div>
