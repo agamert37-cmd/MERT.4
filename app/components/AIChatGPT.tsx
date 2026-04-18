@@ -436,7 +436,7 @@ function ChartCard({ response }: { response: AIResponse }) {
  */
 export function AIChatGPTPage() {
   return (
-    <div className="h-[calc(100vh-4rem)] sm:h-screen flex flex-col bg-background pb-20 lg:pb-0">
+    <div className="h-[calc(100dvh-4rem)] sm:h-dvh flex flex-col bg-background pb-20 lg:pb-0">
       {/* Header */}
       <div className="bg-gradient-to-r from-blue-600 via-purple-600 to-pink-600 p-3 sm:p-6">
         <div className="flex items-center gap-2.5 sm:gap-3">

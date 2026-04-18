@@ -908,7 +908,7 @@ export function SalesPage() {
                     {filteredCariList.length > 0 ? (
                       filteredCariList.map((cari, index) => (
                         <motion.div
-                          key={`${cari.id}-${index}`}
+                          key={cari.id}
                           initial={{ opacity: 0 }}
                           animate={{ opacity: 1 }}
                           className="p-3 sm:p-4 bg-secondary/30 border border-border/30 hover:border-blue-500/40 hover:bg-secondary/50 rounded-xl cursor-pointer transition-all duration-200 active:bg-secondary/60"

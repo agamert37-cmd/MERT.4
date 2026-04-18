@@ -4827,7 +4827,7 @@ export function UretimPage() {
 
                     {/* Kar marjı senaryoları + özel marj */}
                     <div className="mb-3 pt-3 border-t border-border/20">
-                      <div className="grid grid-cols-4 gap-2 mb-2">
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-2">
                         {[20, 30, 50].map(marj => (
                           <div key={marj} className="text-center p-2 rounded-lg bg-secondary/30">
                             <p className="text-xs md:text-sm font-bold text-emerald-400 tech-number">

@@ -12,6 +12,7 @@ import { staggerContainer, staggerItem, hover, tap, rowItem } from '../utils/ani
 import { toast } from 'sonner';
 import * as Dialog from '@radix-ui/react-dialog';
 import { SyncStatusBar, SyncBadge } from '../components/SyncStatusBar';
+import { SwipeToDelete } from '../components/MobileHelpers';
 import { useTableSync } from '../hooks/useTableSync';
 import { getFromStorage, setInStorage, StorageKey } from '../utils/storage';
 import { logActivity } from '../utils/activityLogger';
@@ -619,14 +620,14 @@ export function StokPage() {
     setAddFormOncekiStok('');
   };
 
-  const handleEditProduct = (e: React.FormEvent<HTMLFormElement>) => {
+  const handleEditProduct = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!canEdit) { sec.logUnauthorized('stok_edit', `Kullanici ${selectedProduct?.name} urunu duzenlemeye calisti.`); return; }
     if (!selectedProduct) return;
     const fd = new FormData(e.currentTarget);
     const productName = fd.get('name') as string;
     if (!sec.preCheck('edit', { name: productName })) return;
-    updateItem(selectedProduct.id, {
+    await updateItem(selectedProduct.id, {
       ...selectedProduct,
       name: sec.sanitize(productName),
       category: (editFormCategory || selectedProduct.category) as ProductCategory,
@@ -640,7 +641,7 @@ export function StokPage() {
     setIsEditModalOpen(false);
   };
 
-  const handleDeleteProduct = (productId: string, productName: string) => {
+  const handleDeleteProduct = async (productId: string, productName: string) => {
     if (!canDelete) { sec.logUnauthorized('stok_delete', `Kullanici ${productName} urunu silmeye calisti.`); return; }
     if (!sec.checkRate('delete')) return;
     if (confirm(`"${productName}" urununu silmek istediginize emin misiniz?`)) {
@@ -657,7 +658,7 @@ export function StokPage() {
         setInStorage(StorageKey.SILINEN_STOKLAR, updated);
       }
 
-      deleteItem(productId);
+      await deleteItem(productId);
       emit('stok:deleted', { productId, productName });
       sec.auditLog('stok_delete', productId, productName);
       logActivity('employee_update', 'Urun Silindi', { employeeName: user?.name, page: 'Stok', description: `${productName} urunu sistemden silindi.` });
@@ -665,7 +666,7 @@ export function StokPage() {
     }
   };
 
-  const handleAddMovement = (e: React.FormEvent<HTMLFormElement>) => {
+  const handleAddMovement = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!selectedProduct) return;
     const fd = new FormData(e.currentTarget);
@@ -687,7 +688,7 @@ export function StokPage() {
     let sc = 0;
     if (['ALIS', 'MUSTERI_IADE', 'URETIM_GIRIS', 'FATURA_ALIS', 'ONCEKI_BAKIYE'].includes(type)) sc = qty;
     if (['SATIS', 'TOPTANCI_IADE', 'FIRE', 'URETIM_CIKIS', 'FATURA_SATIS'].includes(type)) sc = -qty;
-    updateItem(selectedProduct.id, {
+    await updateItem(selectedProduct.id, {
       ...selectedProduct,
       currentStock: selectedProduct.currentStock + sc,
       movements: [newMv, ...selectedProduct.movements]
@@ -990,9 +991,12 @@ export function StokPage() {
                 const profitMargin = avgSell > 0 && avgCost > 0 ? ((avgSell - avgCost) / avgCost * 100) : 0;
 
                 return (
-                  <motion.div
+                  <SwipeToDelete
                     key={product.id}
-                    layout
+                    disabled={!canDelete}
+                    onDelete={() => handleDeleteProduct(product.id, product.name)}
+                  >
+                  <motion.div
                     variants={staggerItem}
                     exit={{ opacity: 0, y: -8, filter: 'blur(4px)', transition: { duration: 0.18 } }}
                     whileHover={{ y: -2, transition: { duration: 0.15 } }}
@@ -1104,6 +1108,7 @@ export function StokPage() {
                       )}
                     </AnimatePresence>
                   </motion.div>
+                  </SwipeToDelete>
                 );
               })}
             </AnimatePresence>
@@ -1608,7 +1613,7 @@ export function StokPage() {
 
       {/* Add Product Modal */}
       <Dialog.Root open={isAddModalOpen} onOpenChange={(open) => { setIsAddModalOpen(open); if (!open) { setAddFormCategory(categories[0] || 'Dana'); setAddFormUnit('KG'); } }}>
-        <Dialog.Portal><Dialog.Overlay className="fixed inset-0 bg-black/80 backdrop-blur-md z-50" /><Dialog.Content aria-describedby={undefined} className="fixed inset-2 sm:inset-auto sm:top-1/2 sm:left-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 modal-glass p-5 sm:p-7 rounded-2xl sm:rounded-3xl border border-white/10 sm:w-[95vw] sm:max-w-md z-50 shadow-2xl overflow-y-auto" style={{maxHeight:'calc(100dvh - 1rem)'}}>
+        <Dialog.Portal><Dialog.Overlay className="fixed inset-0 bg-black/80 backdrop-blur-md z-50" /><Dialog.Content aria-describedby={undefined} className="fixed inset-2 sm:inset-auto sm:top-1/2 sm:left-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 modal-glass p-5 sm:p-7 rounded-2xl sm:rounded-3xl border border-white/10 sm:w-[95vw] sm:max-w-md z-50 shadow-2xl overflow-y-auto overscroll-contain" style={{maxHeight:'calc(100dvh - 1rem)'}}>
           <div className="flex justify-between items-center mb-6">
             <Dialog.Title className="text-lg sm:text-xl font-black text-white flex items-center gap-2.5">
               <div className="w-8 h-8 rounded-xl bg-blue-500/15 flex items-center justify-center"><Package className="w-4 h-4 text-blue-400" /></div>
@@ -1658,7 +1663,7 @@ export function StokPage() {
 
       {/* Add Movement Modal */}
       <Dialog.Root open={isAddMovementModalOpen} onOpenChange={(open) => { setIsAddMovementModalOpen(open); if (!open) { setPartySearch(''); setSelectedCariId(null); setMovementTypeForFilter('ALIS'); } }}>
-        <Dialog.Portal><Dialog.Overlay className="fixed inset-0 bg-black/80 backdrop-blur-md z-50" /><Dialog.Content aria-describedby={undefined} className="fixed inset-2 sm:inset-auto sm:top-1/2 sm:left-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 modal-glass p-5 sm:p-7 rounded-2xl sm:rounded-3xl border border-white/10 sm:w-[95vw] sm:max-w-md z-50 shadow-2xl overflow-y-auto" style={{maxHeight:'calc(100dvh - 1rem)'}}>
+        <Dialog.Portal><Dialog.Overlay className="fixed inset-0 bg-black/80 backdrop-blur-md z-50" /><Dialog.Content aria-describedby={undefined} className="fixed inset-2 sm:inset-auto sm:top-1/2 sm:left-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 modal-glass p-5 sm:p-7 rounded-2xl sm:rounded-3xl border border-white/10 sm:w-[95vw] sm:max-w-md z-50 shadow-2xl overflow-y-auto overscroll-contain" style={{maxHeight:'calc(100dvh - 1rem)'}}>
           <div className="flex justify-between items-center mb-6">
             <Dialog.Title className="text-lg sm:text-xl font-black text-white flex items-center gap-2.5">
               <div className="w-8 h-8 rounded-xl bg-indigo-500/15 flex items-center justify-center"><RefreshCcw className="w-4 h-4 text-indigo-400" /></div>
@@ -1755,7 +1760,7 @@ export function StokPage() {
 
       {/* Edit Product Modal */}
       <Dialog.Root open={isEditModalOpen} onOpenChange={(open) => { setIsEditModalOpen(open); if (open && selectedProduct) { setEditFormCategory(selectedProduct.category); setEditFormUnit(selectedProduct.unit); } }}>
-        <Dialog.Portal><Dialog.Overlay className="fixed inset-0 bg-black/80 backdrop-blur-md z-50" /><Dialog.Content aria-describedby={undefined} className="fixed inset-2 sm:inset-auto sm:top-1/2 sm:left-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 modal-glass p-5 sm:p-7 rounded-2xl sm:rounded-3xl border border-white/10 sm:w-[95vw] sm:max-w-md z-50 shadow-2xl overflow-y-auto" style={{maxHeight:'calc(100dvh - 1rem)'}}>
+        <Dialog.Portal><Dialog.Overlay className="fixed inset-0 bg-black/80 backdrop-blur-md z-50" /><Dialog.Content aria-describedby={undefined} className="fixed inset-2 sm:inset-auto sm:top-1/2 sm:left-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 modal-glass p-5 sm:p-7 rounded-2xl sm:rounded-3xl border border-white/10 sm:w-[95vw] sm:max-w-md z-50 shadow-2xl overflow-y-auto overscroll-contain" style={{maxHeight:'calc(100dvh - 1rem)'}}>
           <div className="flex justify-between items-center mb-6">
             <Dialog.Title className="text-lg sm:text-xl font-black text-white flex items-center gap-2.5">
               <div className="w-8 h-8 rounded-xl bg-blue-500/15 flex items-center justify-center"><Edit className="w-4 h-4 text-blue-400" /></div>

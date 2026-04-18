@@ -106,7 +106,7 @@ export function MobileBottomNav() {
   const urunler = useGlobalTableData<any>('urunler');
   const faturalar = useGlobalTableData<any>('faturalar');
   const tabBadges: Record<string, number> = {
-    '/stok': urunler.filter(u => u.minStock > 0 && (u.stock ?? u.miktar ?? 0) <= u.minStock).length,
+    '/stok': urunler.filter(u => u.minStock > 0 && (u.currentStock ?? 0) <= u.minStock).length,
     '/faturalar': faturalar.filter(f => f.status === 'aktif' || f.durum === 'aktif').length,
   };
   const sheetRef = useRef<HTMLDivElement>(null);

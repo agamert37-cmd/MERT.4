@@ -393,7 +393,7 @@ export function TahsilatPage() {
   );
 
   return (
-    <div className="h-[calc(100vh-3.5rem)] flex flex-col md:flex-row bg-background pb-20 lg:pb-0">
+    <div className="h-[calc(100dvh-3.5rem)] flex flex-col md:flex-row bg-background pb-20 lg:pb-0">
       {/* Mobile customer toggle */}
       <div className="md:hidden p-3 border-b border-border bg-card flex items-center gap-3">
         <button 

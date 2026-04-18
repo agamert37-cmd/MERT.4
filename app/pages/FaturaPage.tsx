@@ -1241,8 +1241,8 @@ export function FaturaPage() {
                 <div className="space-y-2">
                   {formItems.map((item, idx) => (
                     <div key={item.id} className="p-3 bg-white/[0.03] border border-white/5 rounded-xl">
-                      <div className="flex gap-2 items-center">
-                        <span className="text-[10px] text-gray-600 font-bold w-5">{idx + 1}</span>
+                      <div className="flex flex-wrap gap-2 items-center">
+                        <span className="text-[10px] text-gray-600 font-bold w-5 flex-shrink-0">{idx + 1}</span>
                         <select value={item.name} onChange={e => {
                           const selected = faturaStok.find(fs => fs.name === e.target.value);
                           updateFormItem(item.id, 'name', e.target.value);
@@ -1250,18 +1250,18 @@ export function FaturaPage() {
                             setFormItems(prev => prev.map(fi => fi.id === item.id ? { ...fi, unit: selected.unit, linkedStockId: selected.linkedStockId, linkedStockName: selected.linkedStockName } : fi));
                           }
                         }}
-                          className="flex-1 px-3 py-2 bg-white/[0.04] border border-white/[0.08] rounded-lg text-white text-xs outline-none">
+                          className="flex-1 min-w-[160px] px-3 py-2 bg-white/[0.04] border border-white/[0.08] rounded-lg text-white text-xs outline-none">
                           <option value="" className="bg-[#111]">Fatura kalemi seçin...</option>
                           {faturaStok.map(fs => (
                             <option key={fs.id} value={fs.name} className="bg-[#111]">{fs.name} ({fs.unit}){fs.linkedStockName ? ` → ${fs.linkedStockName}` : ''}</option>
                           ))}
                         </select>
                         <input type="number" step="0.01" value={item.quantity || ''} onChange={e => updateFormItem(item.id, 'quantity', parseFloat(e.target.value) || 0)}
-                          placeholder="Miktar" className="w-20 px-3 py-2 bg-white/[0.04] border border-white/[0.08] rounded-lg text-white text-xs outline-none text-right" />
+                          placeholder="Miktar" className="w-20 flex-shrink-0 px-3 py-2 bg-white/[0.04] border border-white/[0.08] rounded-lg text-white text-xs outline-none text-right" />
                         <input type="number" step="0.01" value={item.unitPrice || ''} onChange={e => updateFormItem(item.id, 'unitPrice', parseFloat(e.target.value) || 0)}
-                          placeholder="B.Fiyat" className="w-24 px-3 py-2 bg-white/[0.04] border border-white/[0.08] rounded-lg text-white text-xs outline-none text-right" />
-                        <span className="text-xs font-bold text-white w-20 text-right">₺{item.totalPrice.toFixed(2)}</span>
-                        <button onClick={() => removeFormItem(item.id)} className="p-1 hover:bg-red-500/10 rounded-lg transition-all">
+                          placeholder="B.Fiyat" className="w-24 flex-shrink-0 px-3 py-2 bg-white/[0.04] border border-white/[0.08] rounded-lg text-white text-xs outline-none text-right" />
+                        <span className="text-xs font-bold text-white w-20 flex-shrink-0 text-right">₺{item.totalPrice.toFixed(2)}</span>
+                        <button onClick={() => removeFormItem(item.id)} className="p-2 hover:bg-red-500/10 rounded-lg transition-all flex-shrink-0">
                           <Trash2 className="w-3.5 h-3.5 text-red-400" />
                         </button>
                       </div>

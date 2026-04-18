@@ -73,7 +73,7 @@ export function RoleRequestModal({ isOpen, onClose }: RoleRequestModalProps) {
     <Dialog.Root open={isOpen} onOpenChange={(open) => !open && onClose()}>
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50" />
-        <Dialog.Content className="fixed inset-2 sm:inset-auto sm:top-1/2 sm:left-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 bg-popover border border-border p-6 rounded-2xl shadow-2xl sm:w-full sm:max-w-md z-50 overflow-y-auto" style={{maxHeight:'calc(100dvh - 1rem)'}} aria-describedby={undefined}>
+        <Dialog.Content className="fixed inset-2 sm:inset-auto sm:top-1/2 sm:left-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 bg-popover border border-border p-6 rounded-2xl shadow-2xl sm:w-full sm:max-w-md z-50 overflow-y-auto overscroll-contain" style={{maxHeight:'calc(100dvh - 1rem)'}} aria-describedby={undefined}>
           <div className="flex items-center justify-between mb-6">
             <div className="flex items-center gap-3">
               <div className="p-2 bg-purple-500/20 text-purple-400 rounded-lg">

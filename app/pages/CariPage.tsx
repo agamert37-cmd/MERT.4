@@ -216,7 +216,7 @@ function RegionManagerModal({
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[60]" />
         <Dialog.Content
-          className="fixed inset-2 sm:inset-auto sm:top-1/2 sm:left-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 rounded-2xl border border-border/40 sm:w-[95vw] sm:max-w-lg shadow-2xl z-[60] modal-glass overflow-y-auto" style={{maxHeight:'calc(100dvh - 1rem)'}}
+          className="fixed inset-2 sm:inset-auto sm:top-1/2 sm:left-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 rounded-2xl border border-border/40 sm:w-[95vw] sm:max-w-lg shadow-2xl z-[60] modal-glass overflow-y-auto overscroll-contain" style={{maxHeight:'calc(100dvh - 1rem)'}}
           aria-describedby={undefined}
         >
           <div className="flex items-center justify-between p-6 border-b border-border">
@@ -1359,7 +1359,6 @@ export function CariPage() {
               {filteredCari.map((cari) => (
                 <SwipeToDelete key={cari.id} onDelete={() => handleDeleteCari(cari.id, cari.companyName)} className="rounded-xl">
                 <motion.div
-                  layout
                   variants={tableRow}
                   exit={{ opacity: 0, x: 12, filter: 'blur(6px)', transition: { duration: 0.18 } }}
                   onClick={() => { setSelectedCari(cari); setIsDetailModalOpen(true); }}

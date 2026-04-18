@@ -1011,7 +1011,7 @@ export function YedeklerPage() {
       <Dialog.Root open={isFileModalOpen} onOpenChange={setIsFileModalOpen}>
         <Dialog.Portal>
           <Dialog.Overlay className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50" />
-          <Dialog.Content className="fixed inset-2 sm:inset-auto sm:top-1/2 sm:left-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 sm:w-[95vw] sm:max-w-lg z-50 card-premium rounded-2xl p-4 sm:p-5 border border-border/30 overflow-y-auto" style={{maxHeight:'calc(100dvh - 1rem)'}} aria-describedby={undefined}>
+          <Dialog.Content className="fixed inset-2 sm:inset-auto sm:top-1/2 sm:left-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 sm:w-[95vw] sm:max-w-lg z-50 card-premium rounded-2xl p-4 sm:p-5 border border-border/30 overflow-y-auto overscroll-contain" style={{maxHeight:'calc(100dvh - 1rem)'}} aria-describedby={undefined}>
             <Dialog.Title className="text-base font-bold text-white mb-4 flex items-center gap-2">
               <FileUp className="w-5 h-5 text-amber-400" /> Dosyadan Geri Yükle
             </Dialog.Title>

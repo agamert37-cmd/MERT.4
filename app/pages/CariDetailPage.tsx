@@ -716,7 +716,7 @@ export function CariDetailPage() {
                     </div>
                     <div>
                       <div className="flex items-center gap-2">
-                        <p className="font-bold text-white text-sm font-mono">{fis.id.split('-')[0].toUpperCase()}</p>
+                        <p className="font-bold text-white text-sm font-mono">{(fis.id?.split('-')[0] || 'ID').toUpperCase()}</p>
                         {fis.invoice?.status === 'kesildi' && (
                           <span className="w-5 h-5 rounded-full bg-blue-500 text-white text-[10px] font-black flex items-center justify-center shadow-lg shadow-blue-500/30" title="Fatura Kesildi">F</span>
                         )}
@@ -743,7 +743,7 @@ export function CariDetailPage() {
 
       {/* ─── Modals ─── */}
       <Dialog.Root open={isEditModalOpen} onOpenChange={setIsEditModalOpen}>
-        <Dialog.Portal><Dialog.Overlay className="fixed inset-0 bg-black/80 z-50"/><Dialog.Content aria-describedby={undefined} className="fixed inset-2 sm:inset-auto sm:top-1/2 sm:left-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 bg-[#111] p-4 sm:p-8 rounded-2xl sm:rounded-3xl border border-white/10 sm:w-[95vw] sm:max-w-2xl z-50 shadow-2xl overflow-y-auto" style={{maxHeight:'calc(100dvh - 1rem)'}}>
+        <Dialog.Portal><Dialog.Overlay className="fixed inset-0 bg-black/80 z-50"/><Dialog.Content aria-describedby={undefined} className="fixed inset-2 sm:inset-auto sm:top-1/2 sm:left-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 bg-[#111] p-4 sm:p-8 rounded-2xl sm:rounded-3xl border border-white/10 sm:w-[95vw] sm:max-w-2xl z-50 shadow-2xl overflow-y-auto overscroll-contain" style={{maxHeight:'calc(100dvh - 1rem)'}}>
           <Dialog.Title className="text-xl sm:text-2xl font-bold mb-4 sm:mb-6">Müşteri Düzenle</Dialog.Title>
           <div className="grid grid-cols-2 gap-4 mb-4">
             {[
@@ -777,7 +777,7 @@ export function CariDetailPage() {
 
       {/* Ekstre Detay Modal */}
       <Dialog.Root open={isOrderDetailOpen} onOpenChange={setIsOrderDetailOpen}>
-        <Dialog.Portal><Dialog.Overlay className="fixed inset-0 bg-black/80 z-50"/><Dialog.Content aria-describedby={undefined} className="fixed inset-2 sm:inset-auto sm:top-1/2 sm:left-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 bg-[#111] p-4 sm:p-8 rounded-2xl sm:rounded-3xl border border-white/10 sm:w-[95vw] sm:max-w-lg z-50 shadow-2xl overflow-y-auto" style={{maxHeight:'calc(100dvh - 1rem)'}}>
+        <Dialog.Portal><Dialog.Overlay className="fixed inset-0 bg-black/80 z-50"/><Dialog.Content aria-describedby={undefined} className="fixed inset-2 sm:inset-auto sm:top-1/2 sm:left-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 bg-[#111] p-4 sm:p-8 rounded-2xl sm:rounded-3xl border border-white/10 sm:w-[95vw] sm:max-w-lg z-50 shadow-2xl overflow-y-auto overscroll-contain" style={{maxHeight:'calc(100dvh - 1rem)'}}>
           {selectedExtract && (
             <>
               <h2 className="text-2xl font-bold text-white mb-2">{selectedExtract.date} Hareketleri</h2>
@@ -787,7 +787,7 @@ export function CariDetailPage() {
                 {selectedExtract.fisler.map(fis => (
                   <div key={fis.id} className="p-4 bg-black/50 border border-white/10 rounded-2xl">
                     <div className="flex justify-between items-center mb-3 pb-3 border-b border-white/5">
-                      <span className="font-bold text-white font-mono">{fis.id.split('-')[0].toUpperCase()}</span>
+                      <span className="font-bold text-white font-mono">{(fis.id?.split('-')[0] || 'ID').toUpperCase()}</span>
                       <span className={`text-[10px] font-bold px-2 py-1 rounded ${fis.mode === 'alis' ? 'bg-orange-500/20 text-orange-400' : 'bg-blue-500/20 text-blue-400'}`}>
                         {fis.mode === 'alis' ? 'ALIŞ' : 'SATIŞ'}
                       </span>
@@ -1108,7 +1108,7 @@ export function CariDetailPage() {
 
       {/* Not Ekleme Modal */}
       <Dialog.Root open={isNoteModalOpen} onOpenChange={setIsNoteModalOpen}>
-        <Dialog.Portal><Dialog.Overlay className="fixed inset-0 bg-black/80 z-50" /><Dialog.Content aria-describedby={undefined} className="fixed inset-2 sm:inset-auto sm:top-1/2 sm:left-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 bg-[#111] p-6 sm:p-8 rounded-2xl sm:rounded-3xl border border-white/10 sm:w-[95vw] sm:max-w-lg z-50 shadow-2xl overflow-y-auto" style={{maxHeight:'calc(100dvh - 1rem)'}}>
+        <Dialog.Portal><Dialog.Overlay className="fixed inset-0 bg-black/80 z-50" /><Dialog.Content aria-describedby={undefined} className="fixed inset-2 sm:inset-auto sm:top-1/2 sm:left-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 bg-[#111] p-6 sm:p-8 rounded-2xl sm:rounded-3xl border border-white/10 sm:w-[95vw] sm:max-w-lg z-50 shadow-2xl overflow-y-auto overscroll-contain" style={{maxHeight:'calc(100dvh - 1rem)'}}>
           <Dialog.Title className="text-2xl font-bold mb-6 flex items-center gap-3">
             <StickyNote className="w-6 h-6 text-amber-400" /> Yeni Not Ekle
           </Dialog.Title>
