@@ -30,6 +30,7 @@ BACKUP_INDEX          = os.path.join(BACKUP_DIR, "index.json")
 DOCKER_IMAGE_NAME     = "mert4-mert-site"   # docker image adı
 MAX_BACKUPS           = 10                  # en fazla kaç yedek saklanır
 SUMMARY_FILE          = os.path.join(REPO_DIR, ".mert4_backups", "summary.json")
+CONFIG_FILE           = os.path.join(REPO_DIR, "mert4_config.json")
 COUCHDB_URL           = "http://localhost:5984"
 COUCHDB_SETUP_SCRIPT  = os.path.join(REPO_DIR, "couchdb-setup.sh")
 COUCHDB_CONTAINER     = "mert-couchdb"
@@ -292,6 +293,66 @@ class SummaryManager:
 
     def all(self) -> list:
         return self._load()
+
+
+# ─── Yapılandırma Yöneticisi ──────────────────────────────────────────────────
+
+class ConfigManager:
+    """Tüm sistem ayarlarını mert4_config.json'a kaydeder/okur."""
+
+    DEFAULT: dict = {
+        # Genel
+        "app_url":               APP_URL,
+        "git_remote":            REMOTE,
+        "git_branch":            BRANCH,
+        # CouchDB
+        "couchdb_url":           COUCHDB_URL,
+        "couchdb_user":          "admin",
+        "couchdb_pass":          "",
+        # Telegram
+        "telegram_token":        "",
+        "telegram_chat_id":      "",
+        "telegram_on_build":     True,
+        "telegram_on_error":     True,
+        "telegram_on_couch_down": True,
+        # SSH / Sunucu
+        "ssh_host":              "",
+        "ssh_port":              "22",
+        "ssh_user":              "",
+        "ssh_pass":              "",
+        "ssh_key_path":          "",
+        "ssh_remote_path":       "/var/www/mert4",
+    }
+
+    def __init__(self):
+        self._data: dict = dict(self.DEFAULT)
+        self.load()
+
+    def load(self):
+        if os.path.exists(CONFIG_FILE):
+            try:
+                with open(CONFIG_FILE, "r", encoding="utf-8") as f:
+                    self._data.update(json.load(f))
+            except Exception:
+                pass
+
+    def save(self):
+        try:
+            with open(CONFIG_FILE, "w", encoding="utf-8") as f:
+                json.dump(self._data, f, indent=2, ensure_ascii=False)
+        except Exception:
+            pass
+
+    def get(self, key: str, fallback: str = "") -> str:
+        v = self._data.get(key, self.DEFAULT.get(key, fallback))
+        return str(v) if v is not None else fallback
+
+    def get_bool(self, key: str) -> bool:
+        v = self._data.get(key, self.DEFAULT.get(key, False))
+        return bool(v)
+
+    def set(self, key: str, value) -> None:
+        self._data[key] = value
 
 
 def _collect_update_diff(old_hash: str) -> dict:
@@ -660,6 +721,7 @@ class MertUpdater(tk.Tk):
         self._behind_count = 0
         self._backup_mgr      = BackupManager()
         self._summary_mgr     = SummaryManager()
+        self._cfg_mgr         = ConfigManager()
         self._pre_update_hash = ""
         # Canlı Docker istatistikleri
         self._cpu_history:  list[float] = []
@@ -697,6 +759,7 @@ class MertUpdater(tk.Tk):
         self._build_ui()
         self._check_status()
         self._schedule_status_refresh()
+        self.after(200, self._update_telegram_dot)
 
         # Kısayollar
         self.bind("<F5>",       lambda e: self._do_full_update())
@@ -770,6 +833,17 @@ class MertUpdater(tk.Tk):
         )
         self.grafana_lbl.pack(side="left", padx=(3, 0))
 
+        # Telegram göstergesi
+        self.tg_dot = tk.Label(
+            sinner, text="✈", font=("Segoe UI", 10), fg=FG_DIM, bg=BG_CARD
+        )
+        self.tg_dot.pack(side="left", padx=(12, 0))
+        self.tg_lbl = tk.Label(
+            sinner, text="Telegram kapalı",
+            font=("Segoe UI", 9), fg=FG_DIM, bg=BG_CARD
+        )
+        self.tg_lbl.pack(side="left", padx=(3, 0))
+
         # Sağ taraf: commit bilgisi + "behind" badge + aç butonu
         right = tk.Frame(sinner, bg=BG_CARD)
         right.pack(side="right")
@@ -787,12 +861,21 @@ class MertUpdater(tk.Tk):
 
         self.open_btn = tk.Button(
             right, text="🌐 Aç",
-            command=lambda: webbrowser.open(APP_URL),
+            command=lambda: webbrowser.open(self._cfg_mgr.get("app_url") or APP_URL),
             font=("Segoe UI", 9), fg=BG_DARK, bg=ACCENT,
             relief="flat", cursor="hand2", padx=8, pady=2, bd=0
         )
         self.open_btn.pack(side="right", padx=(0, 8))
         _bind_hover(self.open_btn, ACCENT, ACCENT_H)
+
+        settings_btn = tk.Button(
+            right, text="⚙ Ayarlar",
+            command=self._open_settings_window,
+            font=("Segoe UI", 9), fg=FG_TEXT, bg=BG_INPUT,
+            relief="flat", cursor="hand2", padx=8, pady=2, bd=0
+        )
+        settings_btn.pack(side="right", padx=(0, 6))
+        _bind_hover(settings_btn, BG_INPUT, BORDER)
 
         # ── Ana butonlar ─────────────────────────────────────────────────────
         btn_frame = tk.Frame(self, bg=BG_DARK)
@@ -1408,27 +1491,381 @@ class MertUpdater(tk.Tk):
         # İlk yükleme
         self.after(400, self._refresh_commits)
 
+    # ─── Ayarlar Penceresi ────────────────────────────────────────────────────
+
+    def _open_settings_window(self):
+        """⚙ Ayarlar penceresini açar (singleton)."""
+        if hasattr(self, "_settings_win") and self._settings_win.winfo_exists():
+            self._settings_win.lift()
+            return
+
+        win = tk.Toplevel(self)
+        win.title("⚙  MERT.4 — Sistem Ayarları")
+        win.geometry("700x580")
+        win.minsize(600, 480)
+        win.configure(bg=BG_DARK)
+        win.resizable(True, True)
+        self._settings_win = win
+
+        # ── Başlık ──────────────────────────────────────────────────────────
+        hdr = tk.Frame(win, bg=BG_DARK)
+        hdr.pack(fill="x", padx=20, pady=(16, 6))
+        tk.Label(hdr, text="⚙  Sistem Ayarları",
+                 font=("Segoe UI", 15, "bold"), fg=FG_TITLE, bg=BG_DARK).pack(side="left")
+        tk.Label(hdr, text="mert4_config.json · .env.local",
+                 font=("Segoe UI", 8), fg=FG_DIM, bg=BG_DARK).pack(side="right", pady=(4, 0))
+
+        # ── Notebook ────────────────────────────────────────────────────────
+        style = ttk.Style(win)
+        style.theme_use("default")
+        style.configure("S.TNotebook", background=BG_DARK, borderwidth=0, tabmargins=0)
+        style.configure("S.TNotebook.Tab", background=BG_CARD, foreground=FG_DIM,
+                        padding=[14, 7], font=("Segoe UI", 9))
+        style.map("S.TNotebook.Tab",
+                  background=[("selected", BG_INPUT)],
+                  foreground=[("selected", FG_TEXT)])
+
+        nb = ttk.Notebook(win, style="S.TNotebook")
+        nb.pack(fill="both", expand=True, padx=20, pady=(0, 8))
+
+        tab_genel = tk.Frame(nb, bg=BG_DARK, padx=4, pady=4)
+        tab_couch = tk.Frame(nb, bg=BG_DARK, padx=4, pady=4)
+        tab_tg    = tk.Frame(nb, bg=BG_DARK, padx=4, pady=4)
+        tab_ssh   = tk.Frame(nb, bg=BG_DARK, padx=4, pady=4)
+        nb.add(tab_genel, text="🏠  Genel")
+        nb.add(tab_couch, text="🗄  CouchDB")
+        nb.add(tab_tg,    text="✈  Telegram")
+        nb.add(tab_ssh,   text="🔌  SSH / Sunucu")
+
+        def _row(parent, label, var, placeholder="", show=""):
+            f = tk.Frame(parent, bg=BG_DARK)
+            f.pack(fill="x", pady=(0, 8))
+            tk.Label(f, text=label, font=("Segoe UI", 9, "bold"),
+                     fg=ACCENT, bg=BG_DARK, width=20, anchor="w").pack(side="left")
+            kw = dict(textvariable=var, font=("Consolas", 10),
+                      fg=FG_TEXT, bg=BG_INPUT, insertbackground=FG_TEXT,
+                      relief="flat", highlightthickness=1,
+                      highlightbackground=BORDER, highlightcolor=ACCENT)
+            if show:
+                kw["show"] = show
+            e = tk.Entry(f, **kw)
+            e.pack(side="left", fill="x", expand=True, ipady=5)
+            if placeholder and not var.get():
+                e.insert(0, placeholder)
+                e.configure(fg=FG_DIM)
+                e.bind("<FocusIn>", lambda ev, en=e, v=var, ph=placeholder: (
+                    en.delete(0, "end"), en.configure(fg=FG_TEXT)
+                ) if en.get() == ph else None)
+            return e
+
+        def _section(parent, title):
+            f = tk.Frame(parent, bg=BG_DARK)
+            f.pack(fill="x", pady=(8, 4))
+            tk.Label(f, text=title, font=("Segoe UI", 9, "bold"),
+                     fg=FG_DIM, bg=BG_DARK).pack(side="left")
+            tk.Frame(f, bg=BORDER, height=1).pack(side="left", fill="x", expand=True, padx=(8, 0))
+
+        # ── Genel sekmesi ────────────────────────────────────────────────────
+        self._s_app_url     = tk.StringVar()
+        self._s_git_remote  = tk.StringVar()
+        self._s_git_branch  = tk.StringVar()
+
+        _section(tab_genel, "Uygulama")
+        _row(tab_genel, "Uygulama URL",   self._s_app_url,    "http://localhost:8080")
+        _section(tab_genel, "Git")
+        _row(tab_genel, "Remote",         self._s_git_remote, "origin")
+        _row(tab_genel, "Branch",         self._s_git_branch, BRANCH)
+
+        tk.Label(tab_genel,
+                 text="⚠  Branch değişikliği bir sonraki git pull/güncelle'de etkin olur.",
+                 font=("Segoe UI", 8), fg=WARNING, bg=BG_DARK).pack(anchor="w", pady=(0, 4))
+
+        # ── CouchDB sekmesi ──────────────────────────────────────────────────
+        self._s_couch_url  = tk.StringVar()
+        self._s_couch_user = tk.StringVar()
+        self._s_couch_pass = tk.StringVar()
+
+        _section(tab_couch, "Bağlantı")
+        _row(tab_couch, "CouchDB URL",    self._s_couch_url,  "http://localhost:5984")
+        _row(tab_couch, "Kullanıcı Adı",  self._s_couch_user, "admin")
+        _row(tab_couch, "Şifre",          self._s_couch_pass, show="•")
+
+        tk.Label(tab_couch,
+                 text="Kaydedildiğinde .env.local (VITE_COUCHDB_*) de güncellenir.",
+                 font=("Segoe UI", 8), fg=FG_DIM, bg=BG_DARK).pack(anchor="w", pady=(0, 4))
+
+        couch_test_btn = tk.Button(
+            tab_couch, text="🔌 Bağlantıyı Test Et",
+            command=self._test_couchdb_from_settings,
+            font=("Segoe UI", 9), fg=BG_DARK, bg=TEAL,
+            relief="flat", cursor="hand2", padx=10, pady=4, bd=0
+        )
+        couch_test_btn.pack(anchor="w")
+        _bind_hover(couch_test_btn, TEAL, TEAL_H)
+
+        self._s_couch_test_lbl = tk.Label(
+            tab_couch, text="", font=("Segoe UI", 9), fg=FG_DIM, bg=BG_DARK
+        )
+        self._s_couch_test_lbl.pack(anchor="w", pady=(4, 0))
+
+        # ── Telegram sekmesi ─────────────────────────────────────────────────
+        self._s_tg_token   = tk.StringVar()
+        self._s_tg_chat    = tk.StringVar()
+        self._s_tg_build   = tk.BooleanVar(value=True)
+        self._s_tg_error   = tk.BooleanVar(value=True)
+        self._s_tg_couch   = tk.BooleanVar(value=True)
+
+        _section(tab_tg, "Bot Bilgileri")
+        _row(tab_tg, "Bot Token",         self._s_tg_token,   "1234567890:ABC...", show="•")
+        _row(tab_tg, "Chat ID",           self._s_tg_chat,    "-1001234567890")
+
+        _section(tab_tg, "Bildirimler")
+        for var, label in [
+            (self._s_tg_build, "Build/güncelleme tamamlandığında bildir"),
+            (self._s_tg_error, "Hata oluştuğunda bildir"),
+            (self._s_tg_couch, "CouchDB erişilemez olduğunda uyar"),
+        ]:
+            tk.Checkbutton(
+                tab_tg, text=label, variable=var,
+                font=("Segoe UI", 9), fg=FG_TEXT, bg=BG_DARK,
+                selectcolor=BG_CARD, activebackground=BG_DARK,
+                activeforeground=FG_TEXT
+            ).pack(anchor="w", pady=2)
+
+        tg_test_btn = tk.Button(
+            tab_tg, text="📨 Test Mesajı Gönder",
+            command=self._send_telegram_test,
+            font=("Segoe UI", 9), fg=BG_DARK, bg=ACCENT,
+            relief="flat", cursor="hand2", padx=10, pady=4, bd=0
+        )
+        tg_test_btn.pack(anchor="w", pady=(12, 0))
+        _bind_hover(tg_test_btn, ACCENT, ACCENT_H)
+
+        self._s_tg_test_lbl = tk.Label(
+            tab_tg, text="", font=("Segoe UI", 9), fg=FG_DIM, bg=BG_DARK
+        )
+        self._s_tg_test_lbl.pack(anchor="w", pady=(4, 0))
+
+        # ── SSH / Sunucu sekmesi ─────────────────────────────────────────────
+        self._s_ssh_host    = tk.StringVar()
+        self._s_ssh_port    = tk.StringVar()
+        self._s_ssh_user    = tk.StringVar()
+        self._s_ssh_pass    = tk.StringVar()
+        self._s_ssh_key     = tk.StringVar()
+        self._s_ssh_remote  = tk.StringVar()
+
+        _section(tab_ssh, "Bağlantı")
+        _row(tab_ssh, "Host / IP",        self._s_ssh_host,   "192.168.1.100")
+        _row(tab_ssh, "Port",             self._s_ssh_port,   "22")
+        _row(tab_ssh, "Kullanıcı",        self._s_ssh_user,   "root")
+        _row(tab_ssh, "Şifre",            self._s_ssh_pass,   show="•")
+        _row(tab_ssh, "SSH Anahtar Yolu", self._s_ssh_key,    "~/.ssh/id_rsa")
+        _section(tab_ssh, "Uzak Sunucu")
+        _row(tab_ssh, "Uzak Dizin",       self._s_ssh_remote, "/var/www/mert4")
+
+        tk.Label(tab_ssh,
+                 text="SSH sync özellikleri Aşama 3'te eklenecek.",
+                 font=("Segoe UI", 8), fg=FG_DIM, bg=BG_DARK).pack(anchor="w", pady=(4, 0))
+
+        # ── Alt bar: durum + kaydet ───────────────────────────────────────────
+        bot = tk.Frame(win, bg=BG_DARK)
+        bot.pack(fill="x", padx=20, pady=(0, 14))
+
+        self._s_status_lbl = tk.Label(
+            bot, text="", font=("Segoe UI", 9), fg=FG_DIM, bg=BG_DARK
+        )
+        self._s_status_lbl.pack(side="left")
+
+        save_btn = tk.Button(
+            bot, text="💾  Tümünü Kaydet",
+            command=self._save_all_settings,
+            font=("Segoe UI", 10, "bold"), fg=BG_DARK, bg=SUCCESS,
+            relief="flat", cursor="hand2", padx=16, pady=6, bd=0
+        )
+        save_btn.pack(side="right")
+        _bind_hover(save_btn, SUCCESS, SUCCESS_H)
+
+        # ── Mevcut değerleri yükle ────────────────────────────────────────────
+        self._settings_load_values()
+        self._update_telegram_dot()
+
+    def _settings_load_values(self):
+        """Config dosyasından settings penceresine değerleri doldurur."""
+        c = self._cfg_mgr
+        self._s_app_url.set(c.get("app_url"))
+        self._s_git_remote.set(c.get("git_remote"))
+        self._s_git_branch.set(c.get("git_branch"))
+        self._s_couch_url.set(c.get("couchdb_url"))
+        self._s_couch_user.set(c.get("couchdb_user"))
+        self._s_couch_pass.set(c.get("couchdb_pass"))
+        self._s_tg_token.set(c.get("telegram_token"))
+        self._s_tg_chat.set(c.get("telegram_chat_id"))
+        self._s_tg_build.set(c.get_bool("telegram_on_build"))
+        self._s_tg_error.set(c.get_bool("telegram_on_error"))
+        self._s_tg_couch.set(c.get_bool("telegram_on_couch_down"))
+        self._s_ssh_host.set(c.get("ssh_host"))
+        self._s_ssh_port.set(c.get("ssh_port"))
+        self._s_ssh_user.set(c.get("ssh_user"))
+        self._s_ssh_pass.set(c.get("ssh_pass"))
+        self._s_ssh_key.set(c.get("ssh_key_path"))
+        self._s_ssh_remote.set(c.get("ssh_remote_path"))
+
+    def _save_all_settings(self):
+        """Tüm sekme değerlerini config'e kaydeder."""
+        c = self._cfg_mgr
+        c.set("app_url",               self._s_app_url.get().strip())
+        c.set("git_remote",            self._s_git_remote.get().strip())
+        c.set("git_branch",            self._s_git_branch.get().strip())
+        c.set("couchdb_url",           self._s_couch_url.get().strip())
+        c.set("couchdb_user",          self._s_couch_user.get().strip())
+        c.set("couchdb_pass",          self._s_couch_pass.get().strip())
+        c.set("telegram_token",        self._s_tg_token.get().strip())
+        c.set("telegram_chat_id",      self._s_tg_chat.get().strip())
+        c.set("telegram_on_build",     self._s_tg_build.get())
+        c.set("telegram_on_error",     self._s_tg_error.get())
+        c.set("telegram_on_couch_down", self._s_tg_couch.get())
+        c.set("ssh_host",              self._s_ssh_host.get().strip())
+        c.set("ssh_port",              self._s_ssh_port.get().strip())
+        c.set("ssh_user",              self._s_ssh_user.get().strip())
+        c.set("ssh_pass",              self._s_ssh_pass.get().strip())
+        c.set("ssh_key_path",          self._s_ssh_key.get().strip())
+        c.set("ssh_remote_path",       self._s_ssh_remote.get().strip())
+        c.save()
+
+        # .env.local'a CouchDB ayarlarını da yaz
+        self._cfg_db_url_var.set(self._s_couch_url.get().strip())
+        self._cfg_user_var.set(self._s_couch_user.get().strip())
+        self._cfg_pass_var.set(self._s_couch_pass.get().strip())
+        self._save_couchdb_config()
+
+        self._s_status_lbl.configure(
+            text=f"✓ Kaydedildi  ({datetime.datetime.now().strftime('%H:%M:%S')})",
+            fg=SUCCESS
+        )
+        self._update_telegram_dot()
+        self._log("⚙ Ayarlar kaydedildi → mert4_config.json + .env.local", "success")
+
+    def _update_telegram_dot(self):
+        """Telegram göstergesini token durumuna göre günceller."""
+        token = self._cfg_mgr.get("telegram_token")
+        if token:
+            self.tg_dot.configure(fg=SUCCESS)
+            self.tg_lbl.configure(fg=SUCCESS,
+                text=f"Telegram aktif  chat:{self._cfg_mgr.get('telegram_chat_id') or '?'}")
+        else:
+            self.tg_dot.configure(fg=FG_DIM)
+            self.tg_lbl.configure(fg=FG_DIM, text="Telegram kapalı")
+
+    def _test_couchdb_from_settings(self):
+        """Ayarlar penceresindeki CouchDB bilgileriyle bağlantı testi."""
+        url  = self._s_couch_url.get().strip() or COUCHDB_URL
+        user = self._s_couch_user.get().strip()
+        pwd  = self._s_couch_pass.get().strip()
+        self._s_couch_test_lbl.configure(text="Test ediliyor…", fg=FG_DIM)
+        def _worker():
+            try:
+                import base64
+                req = urllib.request.Request(url)
+                if user:
+                    creds = base64.b64encode(f"{user}:{pwd}".encode()).decode()
+                    req.add_header("Authorization", f"Basic {creds}")
+                with urllib.request.urlopen(req, timeout=5) as r:
+                    data = json.loads(r.read())
+                ver = data.get("version", "?")
+                self.after(0, lambda: self._s_couch_test_lbl.configure(
+                    text=f"✓ CouchDB {ver} — bağlantı başarılı", fg=SUCCESS
+                ))
+            except Exception as e:
+                self.after(0, lambda: self._s_couch_test_lbl.configure(
+                    text=f"✗ Bağlantı hatası: {e}", fg=ERROR
+                ))
+        threading.Thread(target=_worker, daemon=True).start()
+
+    # ─── Telegram Bildirimi ────────────────────────────────────────────────────
+
+    def _send_telegram(self, text: str) -> bool:
+        """Telegram Bot API üzerinden mesaj gönderir. True = başarılı."""
+        token   = self._cfg_mgr.get("telegram_token")
+        chat_id = self._cfg_mgr.get("telegram_chat_id")
+        if not token or not chat_id:
+            return False
+        try:
+            url     = f"https://api.telegram.org/bot{token}/sendMessage"
+            payload = json.dumps({"chat_id": chat_id, "text": text,
+                                  "parse_mode": "HTML"}).encode()
+            req = urllib.request.Request(url, data=payload,
+                                         headers={"Content-Type": "application/json"},
+                                         method="POST")
+            with urllib.request.urlopen(req, timeout=8) as r:
+                return r.status == 200
+        except Exception:
+            return False
+
+    def _send_telegram_test(self):
+        """Ayarlar penceresinden test mesajı gönderir."""
+        token = self._s_tg_token.get().strip()
+        chat  = self._s_tg_chat.get().strip()
+        if not token or not chat:
+            self._s_tg_test_lbl.configure(
+                text="⚠  Token ve Chat ID boş olamaz.", fg=WARNING
+            )
+            return
+        self._s_tg_test_lbl.configure(text="Gönderiliyor…", fg=FG_DIM)
+        def _worker():
+            try:
+                url     = f"https://api.telegram.org/bot{token}/sendMessage"
+                payload = json.dumps({
+                    "chat_id": chat,
+                    "text": "🤖 <b>MERT.4 Test</b>\n\nAyarlar bağlantısı başarılı!",
+                    "parse_mode": "HTML"
+                }).encode()
+                req = urllib.request.Request(url, data=payload,
+                                             headers={"Content-Type": "application/json"},
+                                             method="POST")
+                with urllib.request.urlopen(req, timeout=8) as r:
+                    ok = r.status == 200
+                self.after(0, lambda: self._s_tg_test_lbl.configure(
+                    text="✓ Mesaj gönderildi!" if ok else "✗ Gönderme başarısız",
+                    fg=SUCCESS if ok else ERROR
+                ))
+            except Exception as e:
+                self.after(0, lambda: self._s_tg_test_lbl.configure(
+                    text=f"✗ Hata: {e}", fg=ERROR
+                ))
+        threading.Thread(target=_worker, daemon=True).start()
+
     # ─── CouchDB Yapılandırma ─────────────────────────────────────────────────
 
     _ENV_FILE = os.path.join(REPO_DIR, ".env.local")
 
     def _load_couchdb_config_ui(self):
-        """Mevcut .env.local dosyasından CouchDB ayarlarını oku ve UI'a doldur."""
-        config = {"url": "http://localhost:5984", "user": "admin", "password": "mert2024"}
-        env_path = self._ENV_FILE
-        if os.path.exists(env_path):
-            try:
-                with open(env_path, "r", encoding="utf-8") as f:
-                    for line in f:
-                        line = line.strip()
-                        if line.startswith("VITE_COUCHDB_URL="):
-                            config["url"] = line.split("=", 1)[1]
-                        elif line.startswith("VITE_COUCHDB_USER="):
-                            config["user"] = line.split("=", 1)[1]
-                        elif line.startswith("VITE_COUCHDB_PASSWORD="):
-                            config["password"] = line.split("=", 1)[1]
-            except Exception:
-                pass
+        """CouchDB ayarlarını önce mert4_config.json'dan, yoksa .env.local'dan oku."""
+        # mert4_config.json öncelikli
+        cfg_url  = self._cfg_mgr.get("couchdb_url")
+        cfg_user = self._cfg_mgr.get("couchdb_user")
+        cfg_pass = self._cfg_mgr.get("couchdb_pass")
+
+        # .env.local fallback (ilk çalıştırma veya config yoksa)
+        config = {
+            "url":      cfg_url  or "http://localhost:5984",
+            "user":     cfg_user or "admin",
+            "password": cfg_pass or "",
+        }
+        if not cfg_url:
+            env_path = self._ENV_FILE
+            if os.path.exists(env_path):
+                try:
+                    with open(env_path, "r", encoding="utf-8") as f:
+                        for line in f:
+                            line = line.strip()
+                            if line.startswith("VITE_COUCHDB_URL="):
+                                config["url"] = line.split("=", 1)[1]
+                            elif line.startswith("VITE_COUCHDB_USER="):
+                                config["user"] = line.split("=", 1)[1]
+                            elif line.startswith("VITE_COUCHDB_PASSWORD="):
+                                config["password"] = line.split("=", 1)[1]
+                except Exception:
+                    pass
         self._cfg_db_url_var.set(config["url"])
         self._cfg_user_var.set(config["user"])
         self._cfg_pass_var.set(config["password"])
@@ -1750,13 +2187,26 @@ class MertUpdater(tk.Tk):
             )
             if ok2:
                 self.after(0, self._log, "━━━ Güncelleme Tamamlandı! ━━━", "success")
+                if self._cfg_mgr.get_bool("telegram_on_build"):
+                    threading.Thread(target=self._send_telegram,
+                        args=(f"✅ <b>MERT.4 Güncelleme Tamamlandı</b>\n"
+                              f"Dal: {BRANCH}\nSüre: {time.monotonic()-self._task_start:.0f}s",),
+                        daemon=True).start()
                 if self.auto_var.get():
                     self.after(0, self._log, "Otomatik build başlatılıyor...", "info")
                     ok3 = self._build_inner()
                     if not ok3:
                         self.after(0, self._log, "Otomatik build başarısız!", "error")
+                        if self._cfg_mgr.get_bool("telegram_on_error"):
+                            threading.Thread(target=self._send_telegram,
+                                args=("❌ <b>MERT.4 Build Başarısız</b>\nOtomatik build hatalı!",),
+                                daemon=True).start()
             else:
                 self.after(0, self._log, "Reset başarısız!", "error")
+                if self._cfg_mgr.get_bool("telegram_on_error"):
+                    threading.Thread(target=self._send_telegram,
+                        args=("❌ <b>MERT.4 Güncelleme Hatası</b>\ngit reset başarısız!",),
+                        daemon=True).start()
 
             elapsed = time.monotonic() - self._task_start
             self._save_summary("Güncelleme", ok2, elapsed)
@@ -1783,9 +2233,18 @@ class MertUpdater(tk.Tk):
             self._save_summary("Build & Başlat", ok, elapsed)
             if ok:
                 self.after(0, self._log, "━━━ Build Tamamlandı! ━━━", "success")
-                self.after(0, self._log, f"→ {APP_URL}", "success")
+                app_url = self._cfg_mgr.get("app_url") or APP_URL
+                self.after(0, self._log, f"→ {app_url}", "success")
+                if self._cfg_mgr.get_bool("telegram_on_build"):
+                    threading.Thread(target=self._send_telegram,
+                        args=(f"🚀 <b>MERT.4 Build Tamamlandı</b>\nSüre: {elapsed:.0f}s\n{app_url}",),
+                        daemon=True).start()
             else:
                 self.after(0, self._log, "━━━ Build Başarısız! ━━━", "error")
+                if self._cfg_mgr.get_bool("telegram_on_error"):
+                    threading.Thread(target=self._send_telegram,
+                        args=("❌ <b>MERT.4 Build Başarısız</b>\nDocker build hatalı!",),
+                        daemon=True).start()
             self._end_task("Build")
 
         self._threaded(_task)
@@ -2282,6 +2741,10 @@ class MertUpdater(tk.Tk):
             if was_ok:
                 self._couch_up_since = None
                 self._toast("CouchDB bağlantısı kesildi!", ERROR, duration=6000)
+                if self._cfg_mgr.get_bool("telegram_on_couch_down"):
+                    threading.Thread(target=self._send_telegram,
+                        args=("⚠️ <b>MERT.4 — CouchDB Çevrim Dışı!</b>\nVeritabanı bağlantısı kesildi.",),
+                        daemon=True).start()
             self._couch_up_since = None
             self.couch_dot.config(fg=ERROR)
             self.couch_lbl.config(text="CouchDB çevrim dışı", fg=ERROR)
