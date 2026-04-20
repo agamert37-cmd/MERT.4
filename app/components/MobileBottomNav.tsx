@@ -295,11 +295,45 @@ export function MobileBottomNav() {
 
               {/* Scrollable content */}
               <div className="flex-1 overflow-y-auto px-4 pb-6 space-y-4 overscroll-contain" style={{ WebkitOverflowScrolling: 'touch' }}>
-                {filteredGroups.length === 0 && (
+                {filteredGroups.length === 0 ? (
                   <div className="flex flex-col items-center justify-center py-10 text-gray-500">
                     <Search className="w-8 h-8 mb-2 opacity-40" />
                     <p className="text-sm">Sonuç bulunamadı</p>
                   </div>
+                ) : (
+                  filteredGroups.map(group => (
+                    <div key={group.titleKey}>
+                      <p className="text-[10px] font-bold text-gray-600 uppercase tracking-wider mb-2 px-1">
+                        {t(group.titleKey)}
+                      </p>
+                      <div className="grid grid-cols-3 gap-2">
+                        {group.items.map(item => {
+                          const Icon = item.icon;
+                          const active = isActive(item.path);
+                          const colors = colorMap[item.color] || colorMap.gray;
+                          return (
+                            <button
+                              key={item.path}
+                              onClick={() => { haptic('light'); navigate(item.path); setIsMoreOpen(false); }}
+                              aria-label={t(item.labelKey)}
+                              className={`flex flex-col items-center justify-center gap-1.5 p-3 rounded-2xl border transition-all active:scale-95 ${
+                                active
+                                  ? `${colors.bg} border-current/20`
+                                  : 'bg-white/[0.04] border-white/[0.06] hover:bg-white/[0.08]'
+                              }`}
+                            >
+                              <div className={`p-2 rounded-xl ${active ? colors.bg : 'bg-white/[0.06]'}`}>
+                                <Icon className={`w-5 h-5 ${active ? colors.text : 'text-gray-400'}`} />
+                              </div>
+                              <span className={`text-[11px] font-medium text-center leading-tight ${active ? 'text-white' : 'text-gray-400'}`}>
+                                {t(item.labelKey)}
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ))
                 )}
 
                 {/* Oturum Kapat */}

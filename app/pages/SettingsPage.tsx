@@ -497,7 +497,7 @@ export function SettingsPage() {
                   <p className="font-bold text-white truncate">{img.title}</p>
                   <p className="text-xs text-gray-400 truncate">{img.subtitle}</p>
                 </div>
-                <button onClick={() => handleRemoveBrandingImage(idx)} className="absolute top-2 right-2 p-2 bg-red-600 text-white rounded-xl opacity-0 group-hover:opacity-100 transition-all shadow-lg hover:bg-red-500"><Trash2 className="w-4 h-4"/></button>
+                <button onClick={() => handleRemoveBrandingImage(idx)} className="absolute top-2 right-2 p-2 bg-red-600 text-white rounded-xl sm:opacity-0 sm:group-hover:opacity-100 transition-all shadow-lg hover:bg-red-500"><Trash2 className="w-4 h-4"/></button>
               </div>
             ))}
           </div>
