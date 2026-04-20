@@ -4,7 +4,7 @@ import {
   Plus, Search, Building2, User, Phone, TrendingUp, TrendingDown,
   Eye, Trash2, MapPin, Tag, Receipt, Mail, CreditCard, Edit2,
   X, ChevronDown, Check, Globe, LayoutGrid, List, Filter, BadgeCheck, Users,
-  Sparkles, ArrowRight, ShieldCheck, Store, Truck, CheckCircle2, History
+  Sparkles, ArrowRight, ShieldCheck, Store, Truck, CheckCircle2, History, Clock, Zap
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { staggerContainer, tableRow, gridCard, hover, tap } from '../utils/animations';
@@ -22,6 +22,8 @@ import { getPagePermissions } from '../utils/permissions';
 import { usePageSecurity } from '../hooks/usePageSecurity';
 import { kvGet, kvSet } from '../lib/pouchdb-kv';
 import { SwipeToDelete } from '../components/MobileHelpers';
+import { ChangeLogModal } from '../components/ChangeLogModal';
+import { DuplicateFinderModal } from '../components/DuplicateFinderModal';
 
 // ─── Interfaces ─────────────────────────────────────────────────────────────
 interface Cari {
@@ -705,6 +707,9 @@ export function CariPage() {
   const [isRegionManagerOpen, setIsRegionManagerOpen] = useState(false);
   const [selectedCari, setSelectedCari] = useState<Cari | null>(null);
 
+  const [changeLogTarget, setChangeLogTarget] = useState<string | null>(null);
+  const [showDupFinder, setShowDupFinder] = useState(false);
+
   // Önceki Bakiye dialog state
   const [isOncekiBakiyeOpen, setIsOncekiBakiyeOpen] = useState(false);
   const [oncekiBakiyeCari, setOncekiBakiyeCari] = useState<Cari | null>(null);
@@ -1071,6 +1076,15 @@ export function CariPage() {
           Kategori Yönet
         </button>
 
+        {/* Benzer Kayıt Bul */}
+        <button
+          onClick={() => setShowDupFinder(true)}
+          className="flex items-center gap-2 px-3 py-2.5 bg-amber-600/10 hover:bg-amber-600/20 border border-amber-500/20 text-amber-400 text-sm rounded-xl transition-colors"
+        >
+          <Zap className="w-4 h-4" />
+          Benzer Kayıt
+        </button>
+
         {/* Görünüm */}
         <div className="flex gap-1 bg-secondary border border-border rounded-xl p-1">
           <button onClick={() => setViewMode('grid')} className={`p-1.5 rounded-lg transition-colors ${viewMode === 'grid' ? 'bg-blue-600 text-white' : 'text-muted-foreground hover:text-white'}`}>
@@ -1237,6 +1251,13 @@ export function CariPage() {
                     <History className="w-4 h-4" />
                     <span className="text-xs font-semibold">Önceki</span>
                   </button>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); setChangeLogTarget(cari.id); }}
+                    className="px-3 py-2 text-sm text-blue-400/70 hover:text-white bg-blue-600/5 hover:bg-blue-600/20 border border-blue-600/20 rounded-xl transition-all flex items-center justify-center"
+                    title="Değişim Geçmişi"
+                  >
+                    <Clock className="w-4 h-4" />
+                  </button>
                 </div>
               </motion.div>
             ))}
@@ -1336,6 +1357,13 @@ export function CariPage() {
                             title="Önceki Bakiye Gir"
                           >
                             <History className="w-4 h-4 text-violet-400" />
+                          </button>
+                          <button
+                            onClick={() => setChangeLogTarget(cari.id)}
+                            className="p-1.5 hover:bg-blue-900/40 rounded-lg transition-colors"
+                            title="Değişim Geçmişi"
+                          >
+                            <Clock className="w-4 h-4 text-blue-400" />
                           </button>
                           <button onClick={() => handleDeleteCari(cari.id, cari.companyName)} className="p-1.5 hover:bg-red-900/40 rounded-lg transition-colors" title="Sil">
                             <Trash2 className="w-4 h-4 text-red-400" />
@@ -2352,6 +2380,21 @@ export function CariPage() {
           </Dialog.Content>
         </Dialog.Portal>
       </Dialog.Root>
+
+      {changeLogTarget && (
+        <ChangeLogModal
+          tableName="cari_hesaplar"
+          docId={changeLogTarget}
+          onClose={() => setChangeLogTarget(null)}
+        />
+      )}
+      {showDupFinder && (
+        <DuplicateFinderModal
+          tableName="cari_hesaplar"
+          onClose={() => setShowDupFinder(false)}
+          onMergeComplete={() => refresh()}
+        />
+      )}
     </div>
   );
 }

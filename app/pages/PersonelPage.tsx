@@ -1,6 +1,6 @@
 // [AJAN-2 | claude/serene-gagarin | 2026-03-25] Son düzenleyen: Claude Sonnet 4.6
 import React, { useState, useMemo } from 'react';
-import { UserCog, Shield, Clock, MapPin, Phone, Mail, Plus, Trash2, Activity, MousePointerClick, History, Eye, EyeOff, Edit3, Lock, Key, Save, X, Search, CheckCircle2, LogOut, WifiOff } from 'lucide-react';
+import { UserCog, Shield, Clock, MapPin, Phone, Mail, Plus, Trash2, Activity, MousePointerClick, History, Eye, EyeOff, Edit3, Lock, Key, Save, X, Search, CheckCircle2, LogOut, WifiOff, Zap } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { staggerContainer, gridCard, hover, tap } from '../utils/animations';
 import * as Dialog from '@radix-ui/react-dialog';
@@ -19,6 +19,8 @@ import { kvSet } from '../lib/pouchdb-kv';
 import { analyzePasswordStrength, getSecurityPolicy, checkRateLimit, generateCSRFToken, validateCSRFToken, addSecurityThreat, detectRapidActions, deepSanitize, detectSQLInjection, appendToLogChain } from '../utils/security';
 import { useSecurityMonitor } from '../hooks/useSecurityMonitor';
 import { PasswordStrengthBar } from '../components/PasswordStrengthBar';
+import { ChangeLogModal } from '../components/ChangeLogModal';
+import { DuplicateFinderModal } from '../components/DuplicateFinderModal';
 import {
   AreaChart, Area, XAxis, Tooltip, ResponsiveContainer
 } from 'recharts';
@@ -169,6 +171,9 @@ export function PersonelPage() {
     tableName: 'personeller', storageKey: 'personel_data', initialData: INITIAL_PERSONNEL,
     orderBy: 'created_at', orderAsc: false, toDb: personnelToDb, fromDb: personnelFromDb,
   });
+
+  const [changeLogTarget, setChangeLogTarget] = useState<string | null>(null);
+  const [showDupFinder, setShowDupFinder] = useState(false);
 
   const [searchTerm, setSearchTerm] = useState('');
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -547,6 +552,9 @@ export function PersonelPage() {
           <p className="text-gray-400">Sistem kullanıcıları, yetkiler ve güvenlik ayarları</p>
         </div>
         <div className="flex items-center gap-3 w-full md:w-auto">
+          <button onClick={() => setShowDupFinder(true)} className="hidden md:flex items-center justify-center gap-2 px-4 py-3 bg-amber-600/10 hover:bg-amber-600/20 text-amber-400 border border-amber-500/20 rounded-xl font-bold transition-all">
+            <Zap className="w-4 h-4" /> <span className="hidden lg:inline">Benzer</span>
+          </button>
           <button onClick={handleOpenRequestsModal} className="flex-1 md:flex-none flex items-center justify-center gap-2 px-5 py-3 bg-purple-600/10 hover:bg-purple-600/20 text-purple-400 border border-purple-500/20 rounded-xl font-bold transition-all">
             <Shield className="w-5 h-5" /> Talep Onayları
           </button>
@@ -663,6 +671,13 @@ export function PersonelPage() {
                     </div>
                     {/* Action buttons — always visible on mobile, hover-only on desktop */}
                     <div className="flex items-center gap-1 shrink-0 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity duration-150">
+                      <button
+                        onClick={(e) => { e.stopPropagation(); setChangeLogTarget(person.id); }}
+                        className="p-1.5 bg-white/5 hover:bg-blue-900/40 rounded-lg text-gray-400 hover:text-blue-400 transition-all"
+                        title="Değişim Geçmişi"
+                      >
+                        <Clock className="w-3.5 h-3.5" />
+                      </button>
                       <button
                         onClick={(e) => openEditModal(person, e)}
                         className="p-1.5 bg-white/5 hover:bg-blue-600 rounded-lg text-gray-400 hover:text-white transition-all"
@@ -948,6 +963,21 @@ export function PersonelPage() {
           </Dialog.Content>
         </Dialog.Portal>
       </Dialog.Root>
+
+      {changeLogTarget && (
+        <ChangeLogModal
+          tableName="personeller"
+          docId={changeLogTarget}
+          onClose={() => setChangeLogTarget(null)}
+        />
+      )}
+      {showDupFinder && (
+        <DuplicateFinderModal
+          tableName="personeller"
+          onClose={() => setShowDupFinder(false)}
+          onMergeComplete={() => refresh()}
+        />
+      )}
 
     </div>
   );

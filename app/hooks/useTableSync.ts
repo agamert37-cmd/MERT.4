@@ -23,6 +23,7 @@ import { getDb } from '../lib/pouchdb';
 import { setInStorage } from '../utils/storage';
 import { toast } from 'sonner';
 import { broadcastTableChange, onBroadcastMessage } from '../lib/broadcast-sync';
+import { logChange } from '../lib/db-changelog';
 
 // ─── Tipler ───────────────────────────────────────────────────────────────────
 
@@ -333,6 +334,7 @@ export function useTableSync<T extends { id: string }>(
           await db.put({ ...dbRow, _id: item.id, _rev: (existing as any)._rev });
         }
         broadcastTableChange(tableName, 'add');
+        logChange(tableName, item.id, 'create', 'system').catch(() => {});
         return item; // başarılı
       } catch (e: any) {
         if (e.status === 409 && attempt < MAX_RETRIES - 1) continue;
@@ -378,6 +380,13 @@ export function useTableSync<T extends { id: string }>(
         const dbRow = toDbRef.current ? toDbRef.current(merged) : merged;
         await db.put({ ...dbRow, _id: id, _rev: existing._rev });
         broadcastTableChange(tableName, 'update');
+        const diffRecord: Record<string, { old: any; new: any }> = {};
+        for (const key of Object.keys(updates as object)) {
+          if ((oldItem as any)?.[key] !== (merged as any)[key]) {
+            diffRecord[key] = { old: (oldItem as any)?.[key], new: (merged as any)[key] };
+          }
+        }
+        logChange(tableName, id, 'update', 'system', undefined, Object.keys(diffRecord).length > 0 ? diffRecord : undefined).catch(() => {});
         return; // başarılı
       } catch (e: any) {
         if (e.status === 409 && attempt < MAX_RETRIES - 1) continue; // conflict retry
@@ -404,6 +413,7 @@ export function useTableSync<T extends { id: string }>(
       const doc = await db.get(id);
       await db.remove(doc);
       broadcastTableChange(tableName, 'delete');
+      logChange(tableName, id, 'delete', 'system').catch(() => {});
     } catch (e: any) {
       if (e.status !== 404) {
         console.error(`[deleteItem] ${tableName}:`, e.message);
