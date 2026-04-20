@@ -304,7 +304,7 @@ function VitrinAnalyticsTab() {
         ) : (
           <div className="space-y-2">
             {popular.slice(0, 10).map((p, i) => (
-              <div key={i} className="flex items-center gap-3 p-3 rounded-xl bg-white/[0.03] border border-white/5">
+              <div key={p.name ?? i} className="flex items-center gap-3 p-3 rounded-xl bg-white/[0.03] border border-white/5">
                 <span className="w-6 h-6 rounded-lg bg-white/5 flex items-center justify-center text-[10px] font-bold text-gray-500">{i + 1}</span>
                 <span className="flex-1 text-sm font-medium text-white truncate">{p.name}</span>
                 <div className="flex gap-3 shrink-0 text-[10px]">

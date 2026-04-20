@@ -270,7 +270,7 @@ export function YedeklerPage() {
         {autoBackupCfg.enabled && (
           <div>
             <label className="text-xs font-semibold text-gray-400">Interval</label>
-            <select value={autoBackupCfg.intervalHours} onChange={e => { const cfg = { ...autoBackupCfg, intervalHours: parseInt(e.target.value) }; setAutoBackupCfg(cfg); saveAutoBackupConfig(cfg); }} className="w-full mt-1 px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white text-sm">
+            <select value={autoBackupCfg.intervalHours} onChange={e => { const cfg = { ...autoBackupCfg, intervalHours: parseInt(e.target.value, 10) }; setAutoBackupCfg(cfg); saveAutoBackupConfig(cfg); }} className="w-full mt-1 px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white text-sm">
               <option value={1}>1 saat</option>
               <option value={6}>6 saat</option>
               <option value={24}>24 saat</option>

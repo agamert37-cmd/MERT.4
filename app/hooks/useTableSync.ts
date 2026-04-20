@@ -144,8 +144,10 @@ export function useTableSync<T extends { id: string }>(
   const sortData = useCallback((items: T[]): T[] => {
     if (!orderBy) return items;
     return [...items].sort((a: any, b: any) => {
-      if (a[orderBy] < b[orderBy]) return orderAsc ? -1 : 1;
-      if (a[orderBy] > b[orderBy]) return orderAsc ? 1 : -1;
+      const aVal = a[orderBy] ?? '';
+      const bVal = b[orderBy] ?? '';
+      if (aVal < bVal) return orderAsc ? -1 : 1;
+      if (aVal > bVal) return orderAsc ? 1 : -1;
       return 0;
     });
   }, [orderBy, orderAsc]);
@@ -225,7 +227,9 @@ export function useTableSync<T extends { id: string }>(
         items = items.filter((item: any) => {
           const val = item[dateField];
           if (!val) return true;
-          return new Date(val).getTime() >= cutoff;
+          const time = new Date(val).getTime();
+          if (isNaN(time)) return true;
+          return time >= cutoff;
         });
       }
 
