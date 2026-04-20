@@ -11,7 +11,7 @@ if ('serviceWorker' in navigator) {
 
       // Arka plan sync kaydı — sayfa arka plandayken sync tetiklensin
       if ('SyncManager' in window) {
-        reg.sync?.register('mert-db-sync').catch(() => {});
+        (reg as any).sync?.register('mert-db-sync').catch(() => {});
       }
     }).catch(err => console.warn('[SW] Kayıt başarısız:', err));
 

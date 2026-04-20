@@ -627,7 +627,7 @@ export function CariPage() {
   const { canAdd, canDelete } = getPagePermissions(user, currentEmployee, 'cari');
   const sec = usePageSecurity('cari');
 
-  const { data: cariList, addItem, deleteItem } = useTableSync<Cari>({
+  const { data: cariList, addItem, deleteItem, updateItem } = useTableSync<Cari>({
     tableName: 'cari_hesaplar',
     storageKey: 'cari_data',
     initialData: initialCariList,
@@ -1321,8 +1321,6 @@ export function CariPage() {
                       </td>
                       <td className="px-5 py-4" onClick={(e) => e.stopPropagation()}>
                         <div className="flex gap-1 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
-                          <button onClick={() => navigate(`/cari/${cari.id}`)} className="p-1.5 hover:bg-accent rounded-lg transition-colors">
-                        <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                           <button onClick={() => navigate(`/cari/${cari.id}`)} className="p-1.5 hover:bg-accent rounded-lg transition-colors" title="Detay">
                             <Eye className="w-4 h-4 text-blue-400" />
                           </button>
