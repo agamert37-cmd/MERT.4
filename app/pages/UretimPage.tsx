@@ -798,6 +798,10 @@ export function UretimPage() {
         pisSuresiSaat: k.pisSuresiSaat ?? 6,
         tupPerKazan,
         tupKullanilanKg: k.tupKullanilanKg ?? oldTupUsed ?? (kazanSayisi * tupPerKazan),
+        fireOrani: k.fireOrani ?? 0,
+        copOrani: k.copOrani ?? 0,
+        kgBasinaMaliyet: k.kgBasinaMaliyet ?? 0,
+        toplamMaliyet: k.toplamMaliyet ?? 0,
       };
     });
   }, [syncKayitlar]);
@@ -3150,7 +3154,7 @@ export function UretimPage() {
                         <span className="text-emerald-400 font-medium">{kayit.ciktiUrunAdi}</span>
                       </div>
                       <p className="text-[9px] text-muted-foreground/50">
-                        {kayit.cigKg}→{kayit.ciktiKg} {kayit.fireKg > 0 ? `• F%${kayit.fireOrani.toFixed(0)}` : ''}
+                        {kayit.cigKg}→{kayit.ciktiKg} {kayit.fireKg > 0 ? `• F%${(kayit.fireOrani ?? 0).toFixed(0)}` : ''}
                         <span className="ml-1">{new Date(kayit.date).toLocaleDateString('tr-TR', { day: '2-digit', month: '2-digit' })}</span>
                       </p>
                     </div>
@@ -4184,16 +4188,16 @@ export function UretimPage() {
                               {kayit.toptanciAdi && <span className="bg-secondary/60 px-2 py-0.5 rounded-md">{kayit.toptanciAdi}</span>}
                               {kayit.trKodu && <span className="text-emerald-400/80 bg-emerald-400/8 px-2 py-0.5 rounded-md flex items-center gap-1"><BadgeCheck className="w-2.5 h-2.5" />TR: {kayit.trKodu}</span>}
                               <span className="bg-secondary/60 px-2 py-0.5 rounded-md tech-number">{kayit.cigKg}kg → {kayit.ciktiKg}kg</span>
-                              <span className={`px-2 py-0.5 rounded-md tech-number ${kayit.fireOrani > 35 ? 'text-red-400 bg-red-400/8' : 'text-orange-300 bg-orange-400/8'}`}>Fire %{kayit.fireOrani.toFixed(1)}</span>
-                              {kayit.copKg > 0 && <span className="text-orange-400/80 bg-orange-400/8 px-2 py-0.5 rounded-md tech-number">Cop {kayit.copKg}kg (%{kayit.copOrani.toFixed(0)})</span>}
+                              <span className={`px-2 py-0.5 rounded-md tech-number ${kayit.fireOrani > 35 ? 'text-red-400 bg-red-400/8' : 'text-orange-300 bg-orange-400/8'}`}>Fire %{(kayit.fireOrani ?? 0).toFixed(1)}</span>
+                              {kayit.copKg > 0 && <span className="text-orange-400/80 bg-orange-400/8 px-2 py-0.5 rounded-md tech-number">Cop {kayit.copKg}kg (%{(kayit.copOrani ?? 0).toFixed(0)})</span>}
                               {kayit.kazanSayisi > 0 && <span className="bg-secondary/60 px-2 py-0.5 rounded-md">{kayit.kazanSayisi} kazan</span>}
                               <span className="bg-secondary/60 px-2 py-0.5 rounded-md">{new Date(kayit.date).toLocaleDateString('tr-TR')}</span>
                             </div>
                           </div>
                         </div>
                         <div className="flex flex-col items-end flex-shrink-0 gap-1">
-                          <p className="text-lg font-bold text-emerald-400 tech-number">₺{kayit.toplamMaliyet.toLocaleString('tr-TR', { maximumFractionDigits: 0 })}</p>
-                          <p className="text-[10px] text-muted-foreground/60 tech-number">₺{kayit.kgBasinaMaliyet.toFixed(2)}/kg · Verim %{verim.toFixed(0)}</p>
+                          <p className="text-lg font-bold text-emerald-400 tech-number">₺{(kayit.toplamMaliyet ?? 0).toLocaleString('tr-TR', { maximumFractionDigits: 0 })}</p>
+                          <p className="text-[10px] text-muted-foreground/60 tech-number">₺{(kayit.kgBasinaMaliyet ?? 0).toFixed(2)}/kg · Verim %{verim.toFixed(0)}</p>
                           <motion.button whileTap={{ scale: 0.9 }} onClick={() => handleDeleteKayit(kayit.id)}
                             className="p-1.5 rounded-lg bg-red-500/8 hover:bg-red-500/20 text-red-400/60 hover:text-red-400 transition-all duration-200 mt-1 sm:opacity-0 sm:group-hover:opacity-100" title="Sil">
                             <Trash2 className="w-3.5 h-3.5" />
@@ -4214,7 +4218,7 @@ export function UretimPage() {
                             {kayit.stokIslemleriYapildi && <CheckCircle className="w-2.5 h-2.5 text-emerald-400 flex-shrink-0" />}
                           </div>
                           <div className="flex items-center gap-2 flex-shrink-0 ml-2">
-                            <span className="text-sm font-bold text-emerald-400 tech-number">₺{kayit.toplamMaliyet.toLocaleString('tr-TR', { maximumFractionDigits: 0 })}</span>
+                            <span className="text-sm font-bold text-emerald-400 tech-number">₺{(kayit.toplamMaliyet ?? 0).toLocaleString('tr-TR', { maximumFractionDigits: 0 })}</span>
                             <motion.button whileTap={{ scale: 0.9 }} onClick={() => handleDeleteKayit(kayit.id)}
                               className="p-1 rounded-md bg-red-500/10 text-red-400/70">
                               <Trash2 className="w-3 h-3" />
@@ -4229,10 +4233,10 @@ export function UretimPage() {
                           <span className="text-muted-foreground/70 tech-number">{kayit.cigKg}→{kayit.ciktiKg}kg</span>
                         </div>
                         <div className="flex items-center gap-2 text-[9px] text-muted-foreground/60">
-                          <span className={`tech-number ${kayit.fireOrani > 35 ? 'text-red-400' : 'text-orange-300/80'}`}>F%{kayit.fireOrani.toFixed(0)}</span>
-                          {kayit.copKg > 0 && <span className="text-orange-400/70">C%{kayit.copOrani.toFixed(0)}</span>}
+                          <span className={`tech-number ${kayit.fireOrani > 35 ? 'text-red-400' : 'text-orange-300/80'}`}>F%{(kayit.fireOrani ?? 0).toFixed(0)}</span>
+                          {kayit.copKg > 0 && <span className="text-orange-400/70">C%{(kayit.copOrani ?? 0).toFixed(0)}</span>}
                           {kayit.trKodu && <span className="text-emerald-400/70">TR:{kayit.trKodu}</span>}
-                          <span className="tech-number">₺{kayit.kgBasinaMaliyet.toFixed(0)}/kg</span>
+                          <span className="tech-number">₺{(kayit.kgBasinaMaliyet ?? 0).toFixed(0)}/kg</span>
                           <span className="ml-auto text-muted-foreground/40">{new Date(kayit.date).toLocaleDateString('tr-TR', { day: '2-digit', month: '2-digit' })}</span>
                         </div>
                       </div>
@@ -4340,7 +4344,7 @@ export function UretimPage() {
                         <div className="mt-3 pt-3 border-t border-border/30">
                           <div className="flex justify-between text-[11px]">
                             <span className="text-muted-foreground">{profileKayitlar.length} uretim</span>
-                            <span className="text-red-400">Ort. Fire: %{profile.avgFireOrani.toFixed(1)}</span>
+                            <span className="text-red-400">Ort. Fire: %{(profile.avgFireOrani ?? 0).toFixed(1)}</span>
                           </div>
                           {profile.avgCopOrani > 0 && (
                             <div className="flex justify-between text-[11px] mt-0.5">
