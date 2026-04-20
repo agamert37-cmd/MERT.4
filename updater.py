@@ -844,6 +844,17 @@ class MertUpdater(tk.Tk):
         )
         self.tg_lbl.pack(side="left", padx=(3, 0))
 
+        # SSH göstergesi
+        self.ssh_dot = tk.Label(
+            sinner, text="⬡", font=("Segoe UI", 10), fg=FG_DIM, bg=BG_CARD
+        )
+        self.ssh_dot.pack(side="left", padx=(12, 0))
+        self.ssh_lbl = tk.Label(
+            sinner, text="SSH: —",
+            font=("Segoe UI", 9), fg=FG_DIM, bg=BG_CARD
+        )
+        self.ssh_lbl.pack(side="left", padx=(3, 0))
+
         # Sağ taraf: commit bilgisi + "behind" badge + aç butonu
         right = tk.Frame(sinner, bg=BG_CARD)
         right.pack(side="right")
@@ -1281,6 +1292,101 @@ class MertUpdater(tk.Tk):
             btn.pack(side="left", padx=(0 if i == 0 else 6, 0))
             _bind_hover(btn, color, hover)
 
+        # ── SSH / Sync Paneli ─────────────────────────────────────────────────
+        ssh_bar = tk.Frame(self, bg=BG_DARK)
+        ssh_bar.pack(fill="x", padx=20, pady=(10, 0))
+
+        self._ssh_open = tk.BooleanVar(value=False)   # başlangıçta kapalı
+        ssh_bar_left = tk.Frame(ssh_bar, bg=BG_DARK)
+        ssh_bar_left.pack(side="left")
+        tk.Label(
+            ssh_bar_left, text="SSH / Sunucu Sync",
+            font=("Segoe UI", 9, "bold"), fg=FG_DIM, bg=BG_DARK
+        ).pack(side="left")
+        self._ssh_toggle_lbl = tk.Label(
+            ssh_bar_left, text="▼", font=("Segoe UI", 8), fg=FG_DIM, bg=BG_DARK,
+            cursor="hand2"
+        )
+        self._ssh_toggle_lbl.pack(side="left", padx=(4, 0))
+        self._ssh_toggle_lbl.bind("<Button-1>", self._toggle_ssh_panel)
+
+        self._ssh_info_lbl = tk.Label(
+            ssh_bar, text="Ayarlar'dan SSH bilgileri girin",
+            font=("Segoe UI", 8), fg=FG_DIM, bg=BG_DARK
+        )
+        self._ssh_info_lbl.pack(side="right")
+
+        self._ssh_frame = tk.Frame(
+            self, bg=BG_CARD, highlightbackground=BORDER, highlightthickness=1
+        )
+        # Başlangıçta gizli
+        # self._ssh_frame.pack(...)  ← toggle ile açılacak
+
+        ssh_inner = tk.Frame(self._ssh_frame, bg=BG_CARD)
+        ssh_inner.pack(fill="x", padx=14, pady=10)
+
+        # Durum satırı
+        ssh_status_row = tk.Frame(ssh_inner, bg=BG_CARD)
+        ssh_status_row.pack(fill="x", anchor="w", pady=(0, 8))
+
+        self._ssh_panel_dot = tk.Label(
+            ssh_status_row, text="●", font=("Segoe UI", 11), fg=FG_DIM, bg=BG_CARD
+        )
+        self._ssh_panel_dot.pack(side="left")
+        self._ssh_panel_lbl = tk.Label(
+            ssh_status_row, text="Bağlantı test edilmedi",
+            font=("Segoe UI", 9), fg=FG_DIM, bg=BG_CARD
+        )
+        self._ssh_panel_lbl.pack(side="left", padx=(6, 0))
+
+        # Aksiyon butonları — Satır 1
+        ssh_row1 = tk.Frame(ssh_inner, bg=BG_CARD)
+        ssh_row1.pack(fill="x", anchor="w", pady=(0, 4))
+
+        ssh_btns1 = [
+            ("🔌 Bağlantı Test",  self._do_ssh_test,          TEAL,    TEAL_H),
+            ("📺 Uzak Durum",     self._do_ssh_remote_status, ACCENT,  ACCENT_H),
+            ("📤 Dosya Sync",     self._do_ssh_deploy,        SUCCESS, SUCCESS_H),
+        ]
+        for text, cmd, col, hov in ssh_btns1:
+            b = tk.Button(
+                ssh_row1, text=text, command=cmd,
+                font=("Segoe UI", 9, "bold"),
+                fg=BG_DARK, bg=col, activebackground=hov,
+                relief="flat", cursor="hand2", padx=10, pady=5, bd=0
+            )
+            b.pack(side="left", padx=(0, 6))
+            _bind_hover(b, col, hov)
+
+        # Aksiyon butonları — Satır 2: CouchDB replikasyon
+        ssh_row2 = tk.Frame(ssh_inner, bg=BG_CARD)
+        ssh_row2.pack(fill="x", anchor="w")
+
+        tk.Label(
+            ssh_row2, text="CouchDB Replikasyon:",
+            font=("Segoe UI", 9), fg=FG_DIM, bg=BG_CARD
+        ).pack(side="left", padx=(0, 8))
+
+        ssh_btns2 = [
+            ("▶ Yerel → Uzak",  lambda: self._do_couch_replicate("push"), PEACH,  PEACH_H),
+            ("◀ Uzak → Yerel",  lambda: self._do_couch_replicate("pull"), PURPLE, PURPLE_H),
+        ]
+        for text, cmd, col, hov in ssh_btns2:
+            b = tk.Button(
+                ssh_row2, text=text, command=cmd,
+                font=("Segoe UI", 9, "bold"),
+                fg=BG_DARK, bg=col, activebackground=hov,
+                relief="flat", cursor="hand2", padx=10, pady=5, bd=0
+            )
+            b.pack(side="left", padx=(0, 6))
+            _bind_hover(b, col, hov)
+
+        tk.Label(
+            ssh_row2,
+            text="(HTTP API — SSH şifresi gerekmez)",
+            font=("Segoe UI", 8), fg=FG_DIM, bg=BG_CARD
+        ).pack(side="left", padx=(4, 0))
+
         # ── Güncelleme Özeti Paneli ───────────────────────────────────────────
         sbar = tk.Frame(self, bg=BG_DARK)
         sbar.pack(fill="x", padx=20, pady=(10, 0))
@@ -1663,9 +1769,23 @@ class MertUpdater(tk.Tk):
         _section(tab_ssh, "Uzak Sunucu")
         _row(tab_ssh, "Uzak Dizin",       self._s_ssh_remote, "/var/www/mert4")
 
+        ssh_test_btn = tk.Button(
+            tab_ssh, text="🔌 Bağlantıyı Test Et",
+            command=self._test_ssh_from_settings,
+            font=("Segoe UI", 9), fg=BG_DARK, bg=TEAL,
+            relief="flat", cursor="hand2", padx=10, pady=4, bd=0
+        )
+        ssh_test_btn.pack(anchor="w", pady=(8, 0))
+        _bind_hover(ssh_test_btn, TEAL, TEAL_H)
+
+        self._s_ssh_test_lbl = tk.Label(
+            tab_ssh, text="", font=("Segoe UI", 9), fg=FG_DIM, bg=BG_DARK
+        )
+        self._s_ssh_test_lbl.pack(anchor="w", pady=(4, 0))
+
         tk.Label(tab_ssh,
-                 text="SSH sync özellikleri Aşama 3'te eklenecek.",
-                 font=("Segoe UI", 8), fg=FG_DIM, bg=BG_DARK).pack(anchor="w", pady=(4, 0))
+                 text="Dosya sync ve replikasyon için Ana Pencere → SSH/Sync panelini kullanın.",
+                 font=("Segoe UI", 8), fg=FG_DIM, bg=BG_DARK).pack(anchor="w", pady=(8, 0))
 
         # ── Alt bar: durum + kaydet ───────────────────────────────────────────
         bot = tk.Frame(win, bg=BG_DARK)
@@ -3197,6 +3317,274 @@ class MertUpdater(tk.Tk):
             elif ram_max > 0 and (ram_used / ram_max) >= 0.90:
                 self._health_last_toast = now
                 self._toast(f"Yüksek RAM: {ram_used:.0f}/{ram_max:.0f}MB", WARNING)
+
+    # ─── SSH / Sync ──────────────────────────────────────────────────────────
+
+    def _toggle_ssh_panel(self, event=None):
+        if self._ssh_open.get():
+            self._ssh_frame.pack_forget()
+            self._ssh_open.set(False)
+            self._ssh_toggle_lbl.configure(text="▼")
+        else:
+            self._ssh_frame.pack(fill="x", padx=20, pady=(3, 0))
+            self._ssh_open.set(True)
+            self._ssh_toggle_lbl.configure(text="▲")
+
+    def _ssh_cfg(self) -> dict:
+        """Güncel SSH ayarlarını döndürür."""
+        return {
+            "host":        self._cfg_mgr.get("ssh_host"),
+            "port":        self._cfg_mgr.get("ssh_port") or "22",
+            "user":        self._cfg_mgr.get("ssh_user"),
+            "password":    self._cfg_mgr.get("ssh_pass"),
+            "key_path":    self._cfg_mgr.get("ssh_key_path"),
+            "remote_path": self._cfg_mgr.get("ssh_remote_path") or "/var/www/mert4",
+        }
+
+    def _ssh_base_args(self) -> list[str]:
+        """SSH temel argümanlarını döndürür (host hariç)."""
+        c = self._ssh_cfg()
+        args = [
+            "-o", "StrictHostKeyChecking=no",
+            "-o", "ConnectTimeout=8",
+            "-p", c["port"],
+        ]
+        if c["key_path"] and os.path.exists(os.path.expanduser(c["key_path"])):
+            args += ["-i", os.path.expanduser(c["key_path"])]
+        return args
+
+    def _ssh_prefix(self) -> list[str]:
+        """sshpass veya düz ssh komutunu döndürür."""
+        c = self._ssh_cfg()
+        # sshpass varsa ve şifre girildiyse kullan
+        if c["password"] and shutil.which("sshpass"):
+            return ["sshpass", "-p", c["password"], "ssh"] + self._ssh_base_args()
+        return ["ssh"] + self._ssh_base_args()
+
+    def _rsync_prefix(self) -> list[str]:
+        """rsync için ssh komutunu döndürür."""
+        c = self._ssh_cfg()
+        ssh_cmd = "ssh -o StrictHostKeyChecking=no -o ConnectTimeout=8"
+        ssh_cmd += f" -p {c['port']}"
+        if c["key_path"] and os.path.exists(os.path.expanduser(c["key_path"])):
+            ssh_cmd += f" -i {os.path.expanduser(c['key_path'])}"
+        if c["password"] and shutil.which("sshpass"):
+            ssh_cmd = f"sshpass -p {c['password']} " + ssh_cmd
+        return ["rsync", "-avz", "--progress",
+                "--exclude=node_modules", "--exclude=dist",
+                "--exclude=.git", "--exclude=.mert4_backups",
+                "--exclude=mert4_config.json",
+                "-e", ssh_cmd]
+
+    def _apply_ssh_status(self, ok: bool, msg: str):
+        color = SUCCESS if ok else (WARNING if "test" in msg.lower() else ERROR)
+        self.ssh_dot.configure(fg=color)
+        self.ssh_lbl.configure(fg=color, text=f"SSH: {msg}")
+        if hasattr(self, "_ssh_panel_dot"):
+            self._ssh_panel_dot.configure(fg=color)
+            self._ssh_panel_lbl.configure(fg=color, text=msg)
+
+    def _do_ssh_test(self):
+        """SSH bağlantısını test eder."""
+        c = self._ssh_cfg()
+        if not c["host"] or not c["user"]:
+            self._log("⚠ SSH: Ayarlar'dan host ve kullanıcı girin.", "warning")
+            return
+
+        def _task():
+            self._start_task()
+            self.after(0, self._log, f"🔌 SSH test: {c['user']}@{c['host']}:{c['port']}", "info")
+            prefix = self._ssh_prefix()
+            target = f"{c['user']}@{c['host']}"
+            cmd    = prefix + [target, "echo SSH_OK && uname -a && uptime"]
+            ok, out = self._run_cmd(" ".join(cmd), "SSH bağlantısı test ediliyor...")
+            if ok and "SSH_OK" in out:
+                # Uptime satırı
+                uptime_line = next((l for l in out.splitlines() if "load" in l or "up" in l), "")
+                msg = f"{c['host']} bağlandı  •  {uptime_line[:60]}" if uptime_line else f"{c['host']} ✓"
+                self.after(0, self._apply_ssh_status, True, msg)
+                self.after(0, self._ssh_info_lbl.configure, {"text": f"{c['user']}@{c['host']}:{c['port']}"})
+            else:
+                self.after(0, self._apply_ssh_status, False, f"Bağlantı hatası — {c['host']}")
+            self._end_task("SSH Test")
+        self._threaded(_task)
+
+    def _test_ssh_from_settings(self):
+        """Ayarlar penceresinden SSH bağlantısı test eder (değerleri önce kaydeder)."""
+        # Geçici olarak cfg'ye yaz (kaydetmeden)
+        self._cfg_mgr.set("ssh_host",    self._s_ssh_host.get().strip())
+        self._cfg_mgr.set("ssh_port",    self._s_ssh_port.get().strip() or "22")
+        self._cfg_mgr.set("ssh_user",    self._s_ssh_user.get().strip())
+        self._cfg_mgr.set("ssh_pass",    self._s_ssh_pass.get().strip())
+        self._cfg_mgr.set("ssh_key_path", self._s_ssh_key.get().strip())
+        self._s_ssh_test_lbl.configure(text="Test ediliyor…", fg=FG_DIM)
+
+        def _worker():
+            c = self._ssh_cfg()
+            if not c["host"] or not c["user"]:
+                self.after(0, lambda: self._s_ssh_test_lbl.configure(
+                    text="⚠  Host ve kullanıcı adı boş olamaz.", fg=WARNING))
+                return
+            prefix = self._ssh_prefix()
+            target = f"{c['user']}@{c['host']}"
+            try:
+                result = subprocess.run(
+                    prefix + [target, "echo SSH_OK"],
+                    cwd=REPO_DIR, capture_output=True, text=True, timeout=12,
+                    shell=False
+                )
+                ok = result.returncode == 0 and "SSH_OK" in result.stdout
+                self.after(0, lambda: self._s_ssh_test_lbl.configure(
+                    text=f"✓ {c['host']} — bağlantı başarılı" if ok
+                         else f"✗ Hata: {result.stderr[:80]}",
+                    fg=SUCCESS if ok else ERROR
+                ))
+                if ok:
+                    self.after(0, self._apply_ssh_status, True, f"{c['host']} ✓")
+            except Exception as e:
+                self.after(0, lambda: self._s_ssh_test_lbl.configure(
+                    text=f"✗ {e}", fg=ERROR))
+        threading.Thread(target=_worker, daemon=True).start()
+
+    def _do_ssh_remote_status(self):
+        """Uzak sunucu durumunu gösterir (docker ps + disk + memory)."""
+        c = self._ssh_cfg()
+        if not c["host"] or not c["user"]:
+            self._log("⚠ SSH: Önce bağlantı bilgileri girin.", "warning")
+            return
+
+        def _task():
+            self._start_task()
+            self.after(0, self._log, "━━━ Uzak Sunucu Durumu ━━━", "info")
+            prefix = self._ssh_prefix()
+            target = f"{c['user']}@{c['host']}"
+            remote_cmd = (
+                "echo '=== DOCKER ===' && docker ps --format 'table {{.Names}}\\t{{.Status}}\\t{{.Ports}}' 2>/dev/null || echo '(docker yok)'; "
+                "echo '=== DISK ===' && df -h / 2>/dev/null; "
+                "echo '=== BELLEK ===' && free -h 2>/dev/null; "
+                "echo '=== UPTIME ===' && uptime"
+            )
+            ok, _ = self._run_cmd(
+                " ".join(prefix + [target, f"bash -c '{remote_cmd}'"]),
+                "Uzak sunucu bilgileri alınıyor..."
+            )
+            if not ok:
+                self.after(0, self._apply_ssh_status, False, f"Durum alınamadı — {c['host']}")
+            else:
+                self.after(0, self._apply_ssh_status, True, f"{c['host']} ✓")
+            self._end_task("Uzak Durum")
+        self._threaded(_task)
+
+    def _do_ssh_deploy(self):
+        """Yerel dosyaları rsync ile uzak sunucuya senkronize eder."""
+        c = self._ssh_cfg()
+        if not c["host"] or not c["user"]:
+            self._log("⚠ SSH: Önce bağlantı bilgileri girin.", "warning")
+            return
+        if not shutil.which("rsync"):
+            self._log("⚠ rsync bulunamadı. Lütfen rsync'i yükleyin.", "error")
+            return
+        if not messagebox.askyesno(
+            "Dosya Sync",
+            f"Yerel proje dosyaları şuraya kopyalanacak:\n\n"
+            f"{c['user']}@{c['host']}:{c['remote_path']}\n\n"
+            f"node_modules, dist, .git hariç tutulur.\n\nDevam edilsin mi?"
+        ):
+            return
+
+        def _task():
+            self._start_task()
+            self.after(0, self._log, "━━━ Dosya Sync (rsync) ━━━", "info")
+            prefix = self._rsync_prefix()
+            target = f"{c['user']}@{c['host']}:{c['remote_path']}/"
+            cmd    = prefix + [REPO_DIR + "/", target]
+            ok, _ = self._run_cmd(" ".join(cmd), "Dosyalar senkronize ediliyor...")
+            if ok:
+                self.after(0, self._log, "━━━ Sync Tamamlandı! ━━━", "success")
+                self.after(0, self._apply_ssh_status, True, f"{c['host']} — sync tamamlandı")
+                if self._cfg_mgr.get_bool("telegram_on_build"):
+                    threading.Thread(target=self._send_telegram,
+                        args=(f"📤 <b>MERT.4 Dosya Sync Tamamlandı</b>\n→ {c['host']}:{c['remote_path']}",),
+                        daemon=True).start()
+            else:
+                self.after(0, self._log, "━━━ Sync Başarısız! ━━━", "error")
+                self.after(0, self._apply_ssh_status, False, f"{c['host']} — sync hatası")
+            self._end_task("Dosya Sync")
+        self._threaded(_task)
+
+    def _do_couch_replicate(self, direction: str):
+        """CouchDB HTTP API üzerinden replikasyon (push=yerel→uzak, pull=uzak→yerel)."""
+        c       = self._ssh_cfg()
+        local_u = self._cfg_mgr.get("couchdb_user")
+        local_p = self._cfg_mgr.get("couchdb_pass")
+        local_b = self._cfg_mgr.get("couchdb_url").rstrip("/")
+        r_host  = c["host"]
+        r_port  = "5984"   # uzak CouchDB port'u (standart)
+
+        if not r_host:
+            self._log("⚠ CouchDB Replikasyon: SSH ayarlarından uzak host girin.", "warning")
+            return
+
+        remote_base = f"http://{local_u}:{local_p}@{r_host}:{r_port}" if local_u else f"http://{r_host}:{r_port}"
+
+        label = "Yerel → Uzak" if direction == "push" else "Uzak → Yerel"
+        if not messagebox.askyesno(
+            "CouchDB Replikasyon",
+            f"{label}\n\nTüm MERT tablolar replike edilecek ({len(COUCHDB_DBS)} tablo).\n\nDevam?"
+        ):
+            return
+
+        def _task():
+            self._start_task()
+            self.after(0, self._log, f"━━━ CouchDB Replikasyon: {label} ━━━", "info")
+            import base64
+            auth = base64.b64encode(f"{local_u}:{local_p}".encode()).decode() if local_u else ""
+            headers = {"Content-Type": "application/json"}
+            if auth:
+                headers["Authorization"] = f"Basic {auth}"
+
+            ok_count = fail_count = 0
+            for db_name in COUCHDB_DBS:
+                if direction == "push":
+                    src = f"{local_b}/{db_name}"
+                    tgt = f"{remote_base}/{db_name}"
+                else:
+                    src = f"{remote_base}/{db_name}"
+                    tgt = f"{local_b}/{db_name}"
+
+                payload = json.dumps({
+                    "source": src, "target": tgt,
+                    "create_target": True, "continuous": False
+                }).encode()
+                try:
+                    req = urllib.request.Request(
+                        f"{local_b}/_replicate",
+                        data=payload, headers=headers, method="POST"
+                    )
+                    with urllib.request.urlopen(req, timeout=30) as resp:
+                        result = json.loads(resp.read())
+                        if result.get("ok"):
+                            ok_count += 1
+                            self.after(0, self._log, f"  ✓ {db_name}", "success")
+                        else:
+                            fail_count += 1
+                            self.after(0, self._log, f"  ✗ {db_name}: {result}", "error")
+                except Exception as e:
+                    fail_count += 1
+                    self.after(0, self._log, f"  ✗ {db_name}: {e}", "error")
+
+            summary = f"Tamamlandı: {ok_count} başarılı, {fail_count} hatalı"
+            self.after(0, self._log, f"━━━ {summary} ━━━",
+                       "success" if fail_count == 0 else "warning")
+            self.after(0, self._apply_ssh_status,
+                       fail_count == 0,
+                       f"Replikasyon {label}: {ok_count}/{len(COUCHDB_DBS)}")
+            if self._cfg_mgr.get_bool("telegram_on_build"):
+                threading.Thread(target=self._send_telegram,
+                    args=(f"🔄 <b>CouchDB Replikasyon</b> ({label})\n{summary}",),
+                    daemon=True).start()
+            self._end_task(f"CouchDB {label}")
+        self._threaded(_task)
 
     # ─── CouchDB İşlemleri ─────────────────────────────────────────────────
 
