@@ -238,7 +238,7 @@ export function FisHistoryPage() {
   };
 
   // Fis silme (Silinenler geçmişine taşı)
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     if (confirm('Bu fisi silmek istediginizden emin misiniz?')) {
       const fisToDelete = fisler.find(f => f.id === id);
 
@@ -279,13 +279,13 @@ export function FisHistoryPage() {
             const orig = existingStokList[i];
             return orig && p.currentStock !== orig.currentStock;
           });
-          changedProducts.forEach(async (product: any) => {
+          await Promise.all(changedProducts.map(async (product: any) => {
             try {
               const db = getDb('urunler');
               const existing = await db.get(product.id) as any;
               await db.put({ ...existing, current_stock: product.currentStock });
             } catch {}
-          });
+          }));
         }
 
         // ─── Gider → Kasa kaydını sil ────────────────────────────
@@ -296,13 +296,13 @@ export function FisHistoryPage() {
             const updatedKasa = kasaList.filter(k => k.receiptNo !== id && k.fisId !== id);
             setInStorage(StorageKey.KASA_DATA, updatedKasa);
             // PouchDB kasa_islemleri tablosundan da kaldır
-            kasaToDelete.forEach(async (entry: any) => {
+            await Promise.all(kasaToDelete.map(async (entry: any) => {
               try {
                 const db = getDb('kasa_islemleri');
                 const doc = await db.get(entry.id) as any;
                 await db.remove(doc._id, doc._rev);
               } catch {}
-            });
+            }));
           }
         }
 
@@ -555,7 +555,7 @@ export function FisHistoryPage() {
       setInStorage(StorageKey.STOK_DATA, updatedStokList);
 
       // PouchDB urunler tablosunu da güncelle (CouchDB sync için)
-      updatedStokList.forEach(async (product: any, i: number) => {
+      await Promise.all(updatedStokList.map(async (product: any, i: number) => {
         const orig = existingStokList[i];
         if (!orig || product.currentStock === orig.currentStock) return;
         try {
@@ -563,7 +563,7 @@ export function FisHistoryPage() {
           const doc = await db.get(product.id) as any;
           await db.put({ ...doc, current_stock: product.currentStock });
         } catch {}
-      });
+      }));
     }
 
     // ─── Cari bakiyesi delta güncelle ─────────────────────────

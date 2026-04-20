@@ -1,6 +1,11 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
+  Database, Download, RefreshCw, Settings, Lock, Wifi, Clock, Trash2,
+  Shield, Activity, Server, BarChart3, Eye, EyeOff, LogOut, AlertTriangle, CheckCircle2,
+  X, FileUp, UploadCloud,
+} from 'lucide-react';
+import * as Dialog from '@radix-ui/react-dialog';
   Database, Download, RefreshCw, Clock, Trash2,
   Shield, BarChart3, Eye, EyeOff, LogOut, AlertTriangle,
 } from 'lucide-react';
@@ -59,6 +64,9 @@ export function YedeklerPage() {
   const [securityScore, setSecurityScore] = useState<SecurityScore | null>(null);
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [isFileModalOpen, setIsFileModalOpen] = useState(false);
+  const [restoreFileName, setRestoreFileName] = useState('');
+  const [restoreFileContent, setRestoreFileContent] = useState<any>(null);
 
   useEffect(() => {
     refreshStats();
@@ -80,6 +88,21 @@ export function YedeklerPage() {
       setBackupList(getBackupMetaList());
     } catch (e) { console.error('[YedeklerPage] Refresh:', e); }
   }, []);
+
+  const handleRestoreFromFile = useCallback(async () => {
+    if (!restoreFileContent) return;
+    setLoading(true);
+    try {
+      await restorePouchBackup(restoreFileContent);
+      toast.success('Geri yükleme tamamlandı', { duration: 3000 });
+      setIsFileModalOpen(false);
+      await refreshStats();
+    } catch (e: any) {
+      toast.error(`Hata: ${e.message}`, { duration: 3000 });
+    } finally {
+      setLoading(false);
+    }
+  }, [restoreFileContent, refreshStats]);
 
   const handleIntegrityCheck = useCallback(async () => {
     setLoading(true);
@@ -215,7 +238,7 @@ export function YedeklerPage() {
     <div className="space-y-6">
       <div className="bg-white/5 border border-white/10 rounded-xl p-4">
         <h3 className="font-semibold text-white mb-4">Yedek Oluştur</h3>
-        <button onClick={async () => { setLoading(true); try { const backup = await createPouchBackup(); downloadBackup(backup, `mert_${new Date().toISOString().split('T')[0]}.json`); toast.success('Yedeklendi', { duration: 3000 }); } finally { setLoading(false); } }} disabled={loading} className="w-full px-4 py-3 bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-white font-bold rounded-lg flex items-center justify-center gap-2">
+        <button onClick={async () => { setLoading(true); try { const result = await createPouchBackup(); if (result.ok && result.backup) downloadBackup(result.backup, `mert_${new Date().toISOString().split('T')[0]}.json`); toast.success('Yedeklendi', { duration: 3000 }); } finally { setLoading(false); } }} disabled={loading} className="w-full px-4 py-3 bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-white font-bold rounded-lg flex items-center justify-center gap-2">
           <Download className="w-4 h-4" /> Yedek Al
         </button>
       </div>
@@ -229,8 +252,8 @@ export function YedeklerPage() {
             {backupList.map(meta => (
               <div key={meta.id} className="flex items-center justify-between p-3 bg-white/[0.03] rounded-lg">
                 <div className="flex-1">
-                  <p className="text-sm font-semibold text-white">{new Date(meta.createdAt).toLocaleDateString('tr-TR')}</p>
-                  <p className="text-xs text-gray-500">{meta.tableCount} tablo</p>
+                  <p className="text-sm font-semibold text-white">{new Date(meta.timestamp).toLocaleDateString('tr-TR')}</p>
+                  <p className="text-xs text-gray-500">{Object.keys(meta.tableStats).length} tablo</p>
                 </div>
                 <button onClick={() => { deleteBackupMeta(meta.id); setBackupList(getBackupMetaList()); toast.success('Silindi', { duration: 2000 }); }} className="p-2 bg-red-500/20 hover:bg-red-500/30 text-red-400 rounded-lg">
                   <Trash2 className="w-4 h-4" />
@@ -284,7 +307,7 @@ export function YedeklerPage() {
                   <p className="text-xs text-gray-500">{timeAgo(s.loginTime)} önce</p>
                 </div>
                 {!s.isCurrentSession && (
-                  <button onClick={() => { forceLogoutSession(s.id); setSessions(s => s.filter(x => x.id !== s.id)); }} className="p-2 bg-red-500/20 hover:bg-red-500/30 text-red-400 rounded-lg">
+                  <button onClick={() => { forceLogoutSession(s.id); setSessions(prev => prev.filter(x => x.id !== s.id)); }} className="p-2 bg-red-500/20 hover:bg-red-500/30 text-red-400 rounded-lg">
                     <LogOut className="w-4 h-4" />
                   </button>
                 )}
@@ -332,25 +355,6 @@ export function YedeklerPage() {
             <div className="flex justify-between"><span className="text-gray-400">Toplam Kayıt:</span> <span className="text-white font-semibold">{dbStats.reduce((s, d) => s + d.docCount, 0)}</span></div>
           </div>
         </div>
-      {/* ═══════════════════════════════════════════════════════ */}
-      {/* MODAL: Seçici Geri Yükleme                             */}
-      {/* ═══════════════════════════════════════════════════════ */}
-      <AnimatePresence>
-        {selectiveModal && (
-          <>
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-              className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50" onClick={() => !selectiveRestoring && setSelectiveModal(null)} />
-            <motion.div initial={{ opacity: 0, scale: 0.95, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              transition={{ type: 'spring', stiffness: 240, damping: 26 }}
-              className="fixed inset-2 sm:inset-auto sm:top-1/2 sm:left-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 sm:w-[95vw] sm:max-w-lg overflow-y-auto z-50 card-premium rounded-2xl p-4 sm:p-5 border border-border/30" style={{maxHeight:'calc(100dvh - 1rem)'}}>
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-base font-bold text-white flex items-center gap-2">
-                  <RotateCcw className="w-5 h-5 text-amber-400" /> Seçici Geri Yükleme
-                </h3>
-                <button onClick={() => !selectiveRestoring && setSelectiveModal(null)} className="p-1 rounded-lg hover:bg-secondary/60 text-muted-foreground transition-all">
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
 
         <div className="bg-white/5 border border-white/10 rounded-xl p-4">
           <h3 className="font-semibold text-white mb-4">localStorage</h3>

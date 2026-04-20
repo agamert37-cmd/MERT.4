@@ -61,13 +61,18 @@ export function NotificationPanel() {
       <Popover.Trigger className="relative p-2 rounded-lg hover:bg-secondary transition-colors cursor-pointer border-none bg-transparent">
           <Bell className="w-5 h-5 text-muted-foreground" />
           {unreadCount > 0 && (
-            <motion.span
-              initial={{ scale: 0 }}
-              animate={{ scale: 1 }}
-              className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-xs font-bold rounded-full flex items-center justify-center"
-            >
-              {unreadCount > 9 ? '9+' : unreadCount}
-            </motion.span>
+            <AnimatePresence>
+              <motion.span
+                key="badge"
+                initial={{ scale: 0 }}
+                animate={{ scale: 1 }}
+                exit={{ scale: 0 }}
+                transition={{ type: 'spring', stiffness: 400, damping: 20 }}
+                className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-xs font-bold rounded-full flex items-center justify-center"
+              >
+                {unreadCount > 9 ? '9+' : unreadCount}
+              </motion.span>
+            </AnimatePresence>
           )}
       </Popover.Trigger>
 
