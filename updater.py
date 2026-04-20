@@ -30,6 +30,7 @@ BACKUP_INDEX          = os.path.join(BACKUP_DIR, "index.json")
 DOCKER_IMAGE_NAME     = "mert4-mert-site"   # docker image adı
 MAX_BACKUPS           = 10                  # en fazla kaç yedek saklanır
 SUMMARY_FILE          = os.path.join(REPO_DIR, ".mert4_backups", "summary.json")
+CONFIG_FILE           = os.path.join(REPO_DIR, "mert4_config.json")
 COUCHDB_URL           = "http://localhost:5984"
 COUCHDB_SETUP_SCRIPT  = os.path.join(REPO_DIR, "couchdb-setup.sh")
 COUCHDB_CONTAINER     = "mert-couchdb"
@@ -292,6 +293,74 @@ class SummaryManager:
 
     def all(self) -> list:
         return self._load()
+
+
+# ─── Yapılandırma Yöneticisi ──────────────────────────────────────────────────
+
+class ConfigManager:
+    """Tüm sistem ayarlarını mert4_config.json'a kaydeder/okur."""
+
+    DEFAULT: dict = {
+        # Genel
+        "app_url":               APP_URL,
+        "git_remote":            REMOTE,
+        "git_branch":            BRANCH,
+        # CouchDB
+        "couchdb_url":           COUCHDB_URL,
+        "couchdb_user":          "admin",
+        "couchdb_pass":          "",
+        # Telegram
+        "telegram_token":        "",
+        "telegram_chat_id":      "",
+        "telegram_on_build":     True,
+        "telegram_on_error":     True,
+        "telegram_on_couch_down": True,
+        # SSH / Sunucu
+        "ssh_host":              "",
+        "ssh_port":              "22",
+        "ssh_user":              "",
+        "ssh_pass":              "",
+        "ssh_key_path":          "",
+        "ssh_remote_path":       "/var/www/mert4",
+        # Bulut Yedek (S3 / Cloudflare R2 / MinIO)
+        "cloud_type":            "r2",   # aws | r2 | minio
+        "cloud_endpoint":        "",     # R2 & MinIO için endpoint URL
+        "cloud_bucket":          "",
+        "cloud_access_key":      "",
+        "cloud_secret_key":      "",
+        "cloud_prefix":          "mert4-backups/",
+        "cloud_auto_on_backup":  False,  # Manuel yedek alınınca otomatik buluta yükle
+    }
+
+    def __init__(self):
+        self._data: dict = dict(self.DEFAULT)
+        self.load()
+
+    def load(self):
+        if os.path.exists(CONFIG_FILE):
+            try:
+                with open(CONFIG_FILE, "r", encoding="utf-8") as f:
+                    self._data.update(json.load(f))
+            except Exception:
+                pass
+
+    def save(self):
+        try:
+            with open(CONFIG_FILE, "w", encoding="utf-8") as f:
+                json.dump(self._data, f, indent=2, ensure_ascii=False)
+        except Exception:
+            pass
+
+    def get(self, key: str, fallback: str = "") -> str:
+        v = self._data.get(key, self.DEFAULT.get(key, fallback))
+        return str(v) if v is not None else fallback
+
+    def get_bool(self, key: str) -> bool:
+        v = self._data.get(key, self.DEFAULT.get(key, False))
+        return bool(v)
+
+    def set(self, key: str, value) -> None:
+        self._data[key] = value
 
 
 def _collect_update_diff(old_hash: str) -> dict:
@@ -660,6 +729,7 @@ class MertUpdater(tk.Tk):
         self._behind_count = 0
         self._backup_mgr      = BackupManager()
         self._summary_mgr     = SummaryManager()
+        self._cfg_mgr         = ConfigManager()
         self._pre_update_hash = ""
         # Canlı Docker istatistikleri
         self._cpu_history:  list[float] = []
@@ -697,6 +767,7 @@ class MertUpdater(tk.Tk):
         self._build_ui()
         self._check_status()
         self._schedule_status_refresh()
+        self.after(200, self._update_telegram_dot)
 
         # Kısayollar
         self.bind("<F5>",       lambda e: self._do_full_update())
@@ -770,6 +841,28 @@ class MertUpdater(tk.Tk):
         )
         self.grafana_lbl.pack(side="left", padx=(3, 0))
 
+        # Telegram göstergesi
+        self.tg_dot = tk.Label(
+            sinner, text="✈", font=("Segoe UI", 10), fg=FG_DIM, bg=BG_CARD
+        )
+        self.tg_dot.pack(side="left", padx=(12, 0))
+        self.tg_lbl = tk.Label(
+            sinner, text="Telegram kapalı",
+            font=("Segoe UI", 9), fg=FG_DIM, bg=BG_CARD
+        )
+        self.tg_lbl.pack(side="left", padx=(3, 0))
+
+        # SSH göstergesi
+        self.ssh_dot = tk.Label(
+            sinner, text="⬡", font=("Segoe UI", 10), fg=FG_DIM, bg=BG_CARD
+        )
+        self.ssh_dot.pack(side="left", padx=(12, 0))
+        self.ssh_lbl = tk.Label(
+            sinner, text="SSH: —",
+            font=("Segoe UI", 9), fg=FG_DIM, bg=BG_CARD
+        )
+        self.ssh_lbl.pack(side="left", padx=(3, 0))
+
         # Sağ taraf: commit bilgisi + "behind" badge + aç butonu
         right = tk.Frame(sinner, bg=BG_CARD)
         right.pack(side="right")
@@ -787,12 +880,21 @@ class MertUpdater(tk.Tk):
 
         self.open_btn = tk.Button(
             right, text="🌐 Aç",
-            command=lambda: webbrowser.open(APP_URL),
+            command=lambda: webbrowser.open(self._cfg_mgr.get("app_url") or APP_URL),
             font=("Segoe UI", 9), fg=BG_DARK, bg=ACCENT,
             relief="flat", cursor="hand2", padx=8, pady=2, bd=0
         )
         self.open_btn.pack(side="right", padx=(0, 8))
         _bind_hover(self.open_btn, ACCENT, ACCENT_H)
+
+        settings_btn = tk.Button(
+            right, text="⚙ Ayarlar",
+            command=self._open_settings_window,
+            font=("Segoe UI", 9), fg=FG_TEXT, bg=BG_INPUT,
+            relief="flat", cursor="hand2", padx=8, pady=2, bd=0
+        )
+        settings_btn.pack(side="right", padx=(0, 6))
+        _bind_hover(settings_btn, BG_INPUT, BORDER)
 
         # ── Ana butonlar ─────────────────────────────────────────────────────
         btn_frame = tk.Frame(self, bg=BG_DARK)
@@ -1198,6 +1300,101 @@ class MertUpdater(tk.Tk):
             btn.pack(side="left", padx=(0 if i == 0 else 6, 0))
             _bind_hover(btn, color, hover)
 
+        # ── SSH / Sync Paneli ─────────────────────────────────────────────────
+        ssh_bar = tk.Frame(self, bg=BG_DARK)
+        ssh_bar.pack(fill="x", padx=20, pady=(10, 0))
+
+        self._ssh_open = tk.BooleanVar(value=False)   # başlangıçta kapalı
+        ssh_bar_left = tk.Frame(ssh_bar, bg=BG_DARK)
+        ssh_bar_left.pack(side="left")
+        tk.Label(
+            ssh_bar_left, text="SSH / Sunucu Sync",
+            font=("Segoe UI", 9, "bold"), fg=FG_DIM, bg=BG_DARK
+        ).pack(side="left")
+        self._ssh_toggle_lbl = tk.Label(
+            ssh_bar_left, text="▼", font=("Segoe UI", 8), fg=FG_DIM, bg=BG_DARK,
+            cursor="hand2"
+        )
+        self._ssh_toggle_lbl.pack(side="left", padx=(4, 0))
+        self._ssh_toggle_lbl.bind("<Button-1>", self._toggle_ssh_panel)
+
+        self._ssh_info_lbl = tk.Label(
+            ssh_bar, text="Ayarlar'dan SSH bilgileri girin",
+            font=("Segoe UI", 8), fg=FG_DIM, bg=BG_DARK
+        )
+        self._ssh_info_lbl.pack(side="right")
+
+        self._ssh_frame = tk.Frame(
+            self, bg=BG_CARD, highlightbackground=BORDER, highlightthickness=1
+        )
+        # Başlangıçta gizli
+        # self._ssh_frame.pack(...)  ← toggle ile açılacak
+
+        ssh_inner = tk.Frame(self._ssh_frame, bg=BG_CARD)
+        ssh_inner.pack(fill="x", padx=14, pady=10)
+
+        # Durum satırı
+        ssh_status_row = tk.Frame(ssh_inner, bg=BG_CARD)
+        ssh_status_row.pack(fill="x", anchor="w", pady=(0, 8))
+
+        self._ssh_panel_dot = tk.Label(
+            ssh_status_row, text="●", font=("Segoe UI", 11), fg=FG_DIM, bg=BG_CARD
+        )
+        self._ssh_panel_dot.pack(side="left")
+        self._ssh_panel_lbl = tk.Label(
+            ssh_status_row, text="Bağlantı test edilmedi",
+            font=("Segoe UI", 9), fg=FG_DIM, bg=BG_CARD
+        )
+        self._ssh_panel_lbl.pack(side="left", padx=(6, 0))
+
+        # Aksiyon butonları — Satır 1
+        ssh_row1 = tk.Frame(ssh_inner, bg=BG_CARD)
+        ssh_row1.pack(fill="x", anchor="w", pady=(0, 4))
+
+        ssh_btns1 = [
+            ("🔌 Bağlantı Test",  self._do_ssh_test,          TEAL,    TEAL_H),
+            ("📺 Uzak Durum",     self._do_ssh_remote_status, ACCENT,  ACCENT_H),
+            ("📤 Dosya Sync",     self._do_ssh_deploy,        SUCCESS, SUCCESS_H),
+        ]
+        for text, cmd, col, hov in ssh_btns1:
+            b = tk.Button(
+                ssh_row1, text=text, command=cmd,
+                font=("Segoe UI", 9, "bold"),
+                fg=BG_DARK, bg=col, activebackground=hov,
+                relief="flat", cursor="hand2", padx=10, pady=5, bd=0
+            )
+            b.pack(side="left", padx=(0, 6))
+            _bind_hover(b, col, hov)
+
+        # Aksiyon butonları — Satır 2: CouchDB replikasyon
+        ssh_row2 = tk.Frame(ssh_inner, bg=BG_CARD)
+        ssh_row2.pack(fill="x", anchor="w")
+
+        tk.Label(
+            ssh_row2, text="CouchDB Replikasyon:",
+            font=("Segoe UI", 9), fg=FG_DIM, bg=BG_CARD
+        ).pack(side="left", padx=(0, 8))
+
+        ssh_btns2 = [
+            ("▶ Yerel → Uzak",  lambda: self._do_couch_replicate("push"), PEACH,  PEACH_H),
+            ("◀ Uzak → Yerel",  lambda: self._do_couch_replicate("pull"), PURPLE, PURPLE_H),
+        ]
+        for text, cmd, col, hov in ssh_btns2:
+            b = tk.Button(
+                ssh_row2, text=text, command=cmd,
+                font=("Segoe UI", 9, "bold"),
+                fg=BG_DARK, bg=col, activebackground=hov,
+                relief="flat", cursor="hand2", padx=10, pady=5, bd=0
+            )
+            b.pack(side="left", padx=(0, 6))
+            _bind_hover(b, col, hov)
+
+        tk.Label(
+            ssh_row2,
+            text="(HTTP API — SSH şifresi gerekmez)",
+            font=("Segoe UI", 8), fg=FG_DIM, bg=BG_CARD
+        ).pack(side="left", padx=(4, 0))
+
         # ── Güncelleme Özeti Paneli ───────────────────────────────────────────
         sbar = tk.Frame(self, bg=BG_DARK)
         sbar.pack(fill="x", padx=20, pady=(10, 0))
@@ -1408,27 +1605,468 @@ class MertUpdater(tk.Tk):
         # İlk yükleme
         self.after(400, self._refresh_commits)
 
+    # ─── Ayarlar Penceresi ────────────────────────────────────────────────────
+
+    def _open_settings_window(self):
+        """⚙ Ayarlar penceresini açar (singleton)."""
+        if hasattr(self, "_settings_win") and self._settings_win.winfo_exists():
+            self._settings_win.lift()
+            return
+
+        win = tk.Toplevel(self)
+        win.title("⚙  MERT.4 — Sistem Ayarları")
+        win.geometry("700x580")
+        win.minsize(600, 480)
+        win.configure(bg=BG_DARK)
+        win.resizable(True, True)
+        self._settings_win = win
+
+        # ── Başlık ──────────────────────────────────────────────────────────
+        hdr = tk.Frame(win, bg=BG_DARK)
+        hdr.pack(fill="x", padx=20, pady=(16, 6))
+        tk.Label(hdr, text="⚙  Sistem Ayarları",
+                 font=("Segoe UI", 15, "bold"), fg=FG_TITLE, bg=BG_DARK).pack(side="left")
+        tk.Label(hdr, text="mert4_config.json · .env.local",
+                 font=("Segoe UI", 8), fg=FG_DIM, bg=BG_DARK).pack(side="right", pady=(4, 0))
+
+        # ── Notebook ────────────────────────────────────────────────────────
+        style = ttk.Style(win)
+        style.theme_use("default")
+        style.configure("S.TNotebook", background=BG_DARK, borderwidth=0, tabmargins=0)
+        style.configure("S.TNotebook.Tab", background=BG_CARD, foreground=FG_DIM,
+                        padding=[14, 7], font=("Segoe UI", 9))
+        style.map("S.TNotebook.Tab",
+                  background=[("selected", BG_INPUT)],
+                  foreground=[("selected", FG_TEXT)])
+
+        nb = ttk.Notebook(win, style="S.TNotebook")
+        nb.pack(fill="both", expand=True, padx=20, pady=(0, 8))
+
+        tab_genel = tk.Frame(nb, bg=BG_DARK, padx=4, pady=4)
+        tab_couch = tk.Frame(nb, bg=BG_DARK, padx=4, pady=4)
+        tab_tg    = tk.Frame(nb, bg=BG_DARK, padx=4, pady=4)
+        tab_ssh   = tk.Frame(nb, bg=BG_DARK, padx=4, pady=4)
+        tab_cloud = tk.Frame(nb, bg=BG_DARK, padx=4, pady=4)
+        nb.add(tab_genel, text="🏠  Genel")
+        nb.add(tab_couch, text="🗄  CouchDB")
+        nb.add(tab_tg,    text="✈  Telegram")
+        nb.add(tab_ssh,   text="🔌  SSH / Sunucu")
+        nb.add(tab_cloud, text="☁  Bulut Yedek")
+
+        def _row(parent, label, var, placeholder="", show=""):
+            f = tk.Frame(parent, bg=BG_DARK)
+            f.pack(fill="x", pady=(0, 8))
+            tk.Label(f, text=label, font=("Segoe UI", 9, "bold"),
+                     fg=ACCENT, bg=BG_DARK, width=20, anchor="w").pack(side="left")
+            kw = dict(textvariable=var, font=("Consolas", 10),
+                      fg=FG_TEXT, bg=BG_INPUT, insertbackground=FG_TEXT,
+                      relief="flat", highlightthickness=1,
+                      highlightbackground=BORDER, highlightcolor=ACCENT)
+            if show:
+                kw["show"] = show
+            e = tk.Entry(f, **kw)
+            e.pack(side="left", fill="x", expand=True, ipady=5)
+            if placeholder and not var.get():
+                e.insert(0, placeholder)
+                e.configure(fg=FG_DIM)
+                e.bind("<FocusIn>", lambda ev, en=e, v=var, ph=placeholder: (
+                    en.delete(0, "end"), en.configure(fg=FG_TEXT)
+                ) if en.get() == ph else None)
+            return e
+
+        def _section(parent, title):
+            f = tk.Frame(parent, bg=BG_DARK)
+            f.pack(fill="x", pady=(8, 4))
+            tk.Label(f, text=title, font=("Segoe UI", 9, "bold"),
+                     fg=FG_DIM, bg=BG_DARK).pack(side="left")
+            tk.Frame(f, bg=BORDER, height=1).pack(side="left", fill="x", expand=True, padx=(8, 0))
+
+        # ── Genel sekmesi ────────────────────────────────────────────────────
+        self._s_app_url     = tk.StringVar()
+        self._s_git_remote  = tk.StringVar()
+        self._s_git_branch  = tk.StringVar()
+
+        _section(tab_genel, "Uygulama")
+        _row(tab_genel, "Uygulama URL",   self._s_app_url,    "http://localhost:8080")
+        _section(tab_genel, "Git")
+        _row(tab_genel, "Remote",         self._s_git_remote, "origin")
+        _row(tab_genel, "Branch",         self._s_git_branch, BRANCH)
+
+        tk.Label(tab_genel,
+                 text="⚠  Branch değişikliği bir sonraki git pull/güncelle'de etkin olur.",
+                 font=("Segoe UI", 8), fg=WARNING, bg=BG_DARK).pack(anchor="w", pady=(0, 4))
+
+        # ── CouchDB sekmesi ──────────────────────────────────────────────────
+        self._s_couch_url  = tk.StringVar()
+        self._s_couch_user = tk.StringVar()
+        self._s_couch_pass = tk.StringVar()
+
+        _section(tab_couch, "Bağlantı")
+        _row(tab_couch, "CouchDB URL",    self._s_couch_url,  "http://localhost:5984")
+        _row(tab_couch, "Kullanıcı Adı",  self._s_couch_user, "admin")
+        _row(tab_couch, "Şifre",          self._s_couch_pass, show="•")
+
+        tk.Label(tab_couch,
+                 text="Kaydedildiğinde .env.local (VITE_COUCHDB_*) de güncellenir.",
+                 font=("Segoe UI", 8), fg=FG_DIM, bg=BG_DARK).pack(anchor="w", pady=(0, 4))
+
+        couch_test_btn = tk.Button(
+            tab_couch, text="🔌 Bağlantıyı Test Et",
+            command=self._test_couchdb_from_settings,
+            font=("Segoe UI", 9), fg=BG_DARK, bg=TEAL,
+            relief="flat", cursor="hand2", padx=10, pady=4, bd=0
+        )
+        couch_test_btn.pack(anchor="w")
+        _bind_hover(couch_test_btn, TEAL, TEAL_H)
+
+        self._s_couch_test_lbl = tk.Label(
+            tab_couch, text="", font=("Segoe UI", 9), fg=FG_DIM, bg=BG_DARK
+        )
+        self._s_couch_test_lbl.pack(anchor="w", pady=(4, 0))
+
+        # ── Telegram sekmesi ─────────────────────────────────────────────────
+        self._s_tg_token   = tk.StringVar()
+        self._s_tg_chat    = tk.StringVar()
+        self._s_tg_build   = tk.BooleanVar(value=True)
+        self._s_tg_error   = tk.BooleanVar(value=True)
+        self._s_tg_couch   = tk.BooleanVar(value=True)
+
+        _section(tab_tg, "Bot Bilgileri")
+        _row(tab_tg, "Bot Token",         self._s_tg_token,   "1234567890:ABC...", show="•")
+        _row(tab_tg, "Chat ID",           self._s_tg_chat,    "-1001234567890")
+
+        _section(tab_tg, "Bildirimler")
+        for var, label in [
+            (self._s_tg_build, "Build/güncelleme tamamlandığında bildir"),
+            (self._s_tg_error, "Hata oluştuğunda bildir"),
+            (self._s_tg_couch, "CouchDB erişilemez olduğunda uyar"),
+        ]:
+            tk.Checkbutton(
+                tab_tg, text=label, variable=var,
+                font=("Segoe UI", 9), fg=FG_TEXT, bg=BG_DARK,
+                selectcolor=BG_CARD, activebackground=BG_DARK,
+                activeforeground=FG_TEXT
+            ).pack(anchor="w", pady=2)
+
+        tg_test_btn = tk.Button(
+            tab_tg, text="📨 Test Mesajı Gönder",
+            command=self._send_telegram_test,
+            font=("Segoe UI", 9), fg=BG_DARK, bg=ACCENT,
+            relief="flat", cursor="hand2", padx=10, pady=4, bd=0
+        )
+        tg_test_btn.pack(anchor="w", pady=(12, 0))
+        _bind_hover(tg_test_btn, ACCENT, ACCENT_H)
+
+        self._s_tg_test_lbl = tk.Label(
+            tab_tg, text="", font=("Segoe UI", 9), fg=FG_DIM, bg=BG_DARK
+        )
+        self._s_tg_test_lbl.pack(anchor="w", pady=(4, 0))
+
+        # ── SSH / Sunucu sekmesi ─────────────────────────────────────────────
+        self._s_ssh_host    = tk.StringVar()
+        self._s_ssh_port    = tk.StringVar()
+        self._s_ssh_user    = tk.StringVar()
+        self._s_ssh_pass    = tk.StringVar()
+        self._s_ssh_key     = tk.StringVar()
+        self._s_ssh_remote  = tk.StringVar()
+
+        _section(tab_ssh, "Bağlantı")
+        _row(tab_ssh, "Host / IP",        self._s_ssh_host,   "192.168.1.100")
+        _row(tab_ssh, "Port",             self._s_ssh_port,   "22")
+        _row(tab_ssh, "Kullanıcı",        self._s_ssh_user,   "root")
+        _row(tab_ssh, "Şifre",            self._s_ssh_pass,   show="•")
+        _row(tab_ssh, "SSH Anahtar Yolu", self._s_ssh_key,    "~/.ssh/id_rsa")
+        _section(tab_ssh, "Uzak Sunucu")
+        _row(tab_ssh, "Uzak Dizin",       self._s_ssh_remote, "/var/www/mert4")
+
+        ssh_test_btn = tk.Button(
+            tab_ssh, text="🔌 Bağlantıyı Test Et",
+            command=self._test_ssh_from_settings,
+            font=("Segoe UI", 9), fg=BG_DARK, bg=TEAL,
+            relief="flat", cursor="hand2", padx=10, pady=4, bd=0
+        )
+        ssh_test_btn.pack(anchor="w", pady=(8, 0))
+        _bind_hover(ssh_test_btn, TEAL, TEAL_H)
+
+        self._s_ssh_test_lbl = tk.Label(
+            tab_ssh, text="", font=("Segoe UI", 9), fg=FG_DIM, bg=BG_DARK
+        )
+        self._s_ssh_test_lbl.pack(anchor="w", pady=(4, 0))
+
+        tk.Label(tab_ssh,
+                 text="Dosya sync ve replikasyon için Ana Pencere → SSH/Sync panelini kullanın.",
+                 font=("Segoe UI", 8), fg=FG_DIM, bg=BG_DARK).pack(anchor="w", pady=(8, 0))
+
+        # ── Bulut Yedek sekmesi ──────────────────────────────────────────────
+        self._s_cloud_type      = tk.StringVar(value="r2")
+        self._s_cloud_endpoint  = tk.StringVar()
+        self._s_cloud_bucket    = tk.StringVar()
+        self._s_cloud_access    = tk.StringVar()
+        self._s_cloud_secret    = tk.StringVar()
+        self._s_cloud_prefix    = tk.StringVar()
+        self._s_cloud_auto      = tk.BooleanVar(value=False)
+
+        _section(tab_cloud, "Depolama Türü")
+        type_row = tk.Frame(tab_cloud, bg=BG_DARK)
+        type_row.pack(fill="x", pady=(0, 8))
+        tk.Label(type_row, text="Provider", font=("Segoe UI", 9, "bold"),
+                 fg=ACCENT, bg=BG_DARK, width=20, anchor="w").pack(side="left")
+        for val, lbl in [("r2", "Cloudflare R2"), ("aws", "AWS S3"), ("minio", "MinIO / Özel")]:
+            tk.Radiobutton(
+                type_row, text=lbl, variable=self._s_cloud_type, value=val,
+                font=("Segoe UI", 9), fg=FG_TEXT, bg=BG_DARK,
+                selectcolor=BG_CARD, activebackground=BG_DARK, activeforeground=FG_TEXT
+            ).pack(side="left", padx=(0, 8))
+
+        _section(tab_cloud, "Bağlantı")
+        _row(tab_cloud, "Endpoint URL",   self._s_cloud_endpoint,
+             "https://<account>.r2.cloudflarestorage.com")
+        _row(tab_cloud, "Bucket",         self._s_cloud_bucket,    "mert4-backups")
+        _row(tab_cloud, "Access Key",     self._s_cloud_access,    "")
+        _row(tab_cloud, "Secret Key",     self._s_cloud_secret,    show="•")
+        _row(tab_cloud, "Prefix (klasör)", self._s_cloud_prefix,   "mert4-backups/")
+
+        _section(tab_cloud, "Otomatik Yükleme")
+        tk.Checkbutton(
+            tab_cloud,
+            text="Manuel yedek alındığında otomatik buluta yükle",
+            variable=self._s_cloud_auto,
+            font=("Segoe UI", 9), fg=FG_TEXT, bg=BG_DARK,
+            selectcolor=BG_CARD, activebackground=BG_DARK, activeforeground=FG_TEXT
+        ).pack(anchor="w", pady=2)
+
+        cloud_test_btn = tk.Button(
+            tab_cloud, text="☁ Bağlantıyı Test Et",
+            command=self._test_cloud_from_settings,
+            font=("Segoe UI", 9), fg=BG_DARK, bg=TEAL,
+            relief="flat", cursor="hand2", padx=10, pady=4, bd=0
+        )
+        cloud_test_btn.pack(anchor="w", pady=(12, 0))
+        _bind_hover(cloud_test_btn, TEAL, TEAL_H)
+
+        self._s_cloud_test_lbl = tk.Label(
+            tab_cloud, text="", font=("Segoe UI", 9), fg=FG_DIM, bg=BG_DARK
+        )
+        self._s_cloud_test_lbl.pack(anchor="w", pady=(4, 0))
+
+        tk.Label(tab_cloud,
+                 text="Yedek listesinde ☁ butonuna tıklayarak seçili yedeği buluta yükleyebilirsiniz.",
+                 font=("Segoe UI", 8), fg=FG_DIM, bg=BG_DARK, wraplength=440, justify="left"
+                 ).pack(anchor="w", pady=(8, 0))
+
+        # ── Alt bar: durum + kaydet ───────────────────────────────────────────
+        bot = tk.Frame(win, bg=BG_DARK)
+        bot.pack(fill="x", padx=20, pady=(0, 14))
+
+        self._s_status_lbl = tk.Label(
+            bot, text="", font=("Segoe UI", 9), fg=FG_DIM, bg=BG_DARK
+        )
+        self._s_status_lbl.pack(side="left")
+
+        save_btn = tk.Button(
+            bot, text="💾  Tümünü Kaydet",
+            command=self._save_all_settings,
+            font=("Segoe UI", 10, "bold"), fg=BG_DARK, bg=SUCCESS,
+            relief="flat", cursor="hand2", padx=16, pady=6, bd=0
+        )
+        save_btn.pack(side="right")
+        _bind_hover(save_btn, SUCCESS, SUCCESS_H)
+
+        # ── Mevcut değerleri yükle ────────────────────────────────────────────
+        self._settings_load_values()
+        self._update_telegram_dot()
+
+    def _settings_load_values(self):
+        """Config dosyasından settings penceresine değerleri doldurur."""
+        c = self._cfg_mgr
+        self._s_app_url.set(c.get("app_url"))
+        self._s_git_remote.set(c.get("git_remote"))
+        self._s_git_branch.set(c.get("git_branch"))
+        self._s_couch_url.set(c.get("couchdb_url"))
+        self._s_couch_user.set(c.get("couchdb_user"))
+        self._s_couch_pass.set(c.get("couchdb_pass"))
+        self._s_tg_token.set(c.get("telegram_token"))
+        self._s_tg_chat.set(c.get("telegram_chat_id"))
+        self._s_tg_build.set(c.get_bool("telegram_on_build"))
+        self._s_tg_error.set(c.get_bool("telegram_on_error"))
+        self._s_tg_couch.set(c.get_bool("telegram_on_couch_down"))
+        self._s_ssh_host.set(c.get("ssh_host"))
+        self._s_ssh_port.set(c.get("ssh_port"))
+        self._s_ssh_user.set(c.get("ssh_user"))
+        self._s_ssh_pass.set(c.get("ssh_pass"))
+        self._s_ssh_key.set(c.get("ssh_key_path"))
+        self._s_ssh_remote.set(c.get("ssh_remote_path"))
+        self._s_cloud_type.set(c.get("cloud_type") or "r2")
+        self._s_cloud_endpoint.set(c.get("cloud_endpoint"))
+        self._s_cloud_bucket.set(c.get("cloud_bucket"))
+        self._s_cloud_access.set(c.get("cloud_access_key"))
+        self._s_cloud_secret.set(c.get("cloud_secret_key"))
+        self._s_cloud_prefix.set(c.get("cloud_prefix") or "mert4-backups/")
+        self._s_cloud_auto.set(c.get_bool("cloud_auto_on_backup"))
+
+    def _save_all_settings(self):
+        """Tüm sekme değerlerini config'e kaydeder."""
+        c = self._cfg_mgr
+        c.set("app_url",               self._s_app_url.get().strip())
+        c.set("git_remote",            self._s_git_remote.get().strip())
+        c.set("git_branch",            self._s_git_branch.get().strip())
+        c.set("couchdb_url",           self._s_couch_url.get().strip())
+        c.set("couchdb_user",          self._s_couch_user.get().strip())
+        c.set("couchdb_pass",          self._s_couch_pass.get().strip())
+        c.set("telegram_token",        self._s_tg_token.get().strip())
+        c.set("telegram_chat_id",      self._s_tg_chat.get().strip())
+        c.set("telegram_on_build",     self._s_tg_build.get())
+        c.set("telegram_on_error",     self._s_tg_error.get())
+        c.set("telegram_on_couch_down", self._s_tg_couch.get())
+        c.set("ssh_host",              self._s_ssh_host.get().strip())
+        c.set("ssh_port",              self._s_ssh_port.get().strip())
+        c.set("ssh_user",              self._s_ssh_user.get().strip())
+        c.set("ssh_pass",              self._s_ssh_pass.get().strip())
+        c.set("ssh_key_path",          self._s_ssh_key.get().strip())
+        c.set("ssh_remote_path",       self._s_ssh_remote.get().strip())
+        c.set("cloud_type",            self._s_cloud_type.get().strip())
+        c.set("cloud_endpoint",        self._s_cloud_endpoint.get().strip())
+        c.set("cloud_bucket",          self._s_cloud_bucket.get().strip())
+        c.set("cloud_access_key",      self._s_cloud_access.get().strip())
+        c.set("cloud_secret_key",      self._s_cloud_secret.get().strip())
+        c.set("cloud_prefix",          self._s_cloud_prefix.get().strip())
+        c.set("cloud_auto_on_backup",  self._s_cloud_auto.get())
+        c.save()
+
+        # .env.local'a CouchDB ayarlarını da yaz
+        self._cfg_db_url_var.set(self._s_couch_url.get().strip())
+        self._cfg_user_var.set(self._s_couch_user.get().strip())
+        self._cfg_pass_var.set(self._s_couch_pass.get().strip())
+        self._save_couchdb_config()
+
+        self._s_status_lbl.configure(
+            text=f"✓ Kaydedildi  ({datetime.datetime.now().strftime('%H:%M:%S')})",
+            fg=SUCCESS
+        )
+        self._update_telegram_dot()
+        self._log("⚙ Ayarlar kaydedildi → mert4_config.json + .env.local", "success")
+
+    def _update_telegram_dot(self):
+        """Telegram göstergesini token durumuna göre günceller."""
+        token = self._cfg_mgr.get("telegram_token")
+        if token:
+            self.tg_dot.configure(fg=SUCCESS)
+            self.tg_lbl.configure(fg=SUCCESS,
+                text=f"Telegram aktif  chat:{self._cfg_mgr.get('telegram_chat_id') or '?'}")
+        else:
+            self.tg_dot.configure(fg=FG_DIM)
+            self.tg_lbl.configure(fg=FG_DIM, text="Telegram kapalı")
+
+    def _test_couchdb_from_settings(self):
+        """Ayarlar penceresindeki CouchDB bilgileriyle bağlantı testi."""
+        url  = self._s_couch_url.get().strip() or COUCHDB_URL
+        user = self._s_couch_user.get().strip()
+        pwd  = self._s_couch_pass.get().strip()
+        self._s_couch_test_lbl.configure(text="Test ediliyor…", fg=FG_DIM)
+        def _worker():
+            try:
+                import base64
+                req = urllib.request.Request(url)
+                if user:
+                    creds = base64.b64encode(f"{user}:{pwd}".encode()).decode()
+                    req.add_header("Authorization", f"Basic {creds}")
+                with urllib.request.urlopen(req, timeout=5) as r:
+                    data = json.loads(r.read())
+                ver = data.get("version", "?")
+                self.after(0, lambda: self._s_couch_test_lbl.configure(
+                    text=f"✓ CouchDB {ver} — bağlantı başarılı", fg=SUCCESS
+                ))
+            except Exception as e:
+                self.after(0, lambda: self._s_couch_test_lbl.configure(
+                    text=f"✗ Bağlantı hatası: {e}", fg=ERROR
+                ))
+        threading.Thread(target=_worker, daemon=True).start()
+
+    # ─── Telegram Bildirimi ────────────────────────────────────────────────────
+
+    def _send_telegram(self, text: str) -> bool:
+        """Telegram Bot API üzerinden mesaj gönderir. True = başarılı."""
+        token   = self._cfg_mgr.get("telegram_token")
+        chat_id = self._cfg_mgr.get("telegram_chat_id")
+        if not token or not chat_id:
+            return False
+        try:
+            url     = f"https://api.telegram.org/bot{token}/sendMessage"
+            payload = json.dumps({"chat_id": chat_id, "text": text,
+                                  "parse_mode": "HTML"}).encode()
+            req = urllib.request.Request(url, data=payload,
+                                         headers={"Content-Type": "application/json"},
+                                         method="POST")
+            with urllib.request.urlopen(req, timeout=8) as r:
+                return r.status == 200
+        except Exception:
+            return False
+
+    def _send_telegram_test(self):
+        """Ayarlar penceresinden test mesajı gönderir."""
+        token = self._s_tg_token.get().strip()
+        chat  = self._s_tg_chat.get().strip()
+        if not token or not chat:
+            self._s_tg_test_lbl.configure(
+                text="⚠  Token ve Chat ID boş olamaz.", fg=WARNING
+            )
+            return
+        self._s_tg_test_lbl.configure(text="Gönderiliyor…", fg=FG_DIM)
+        def _worker():
+            try:
+                url     = f"https://api.telegram.org/bot{token}/sendMessage"
+                payload = json.dumps({
+                    "chat_id": chat,
+                    "text": "🤖 <b>MERT.4 Test</b>\n\nAyarlar bağlantısı başarılı!",
+                    "parse_mode": "HTML"
+                }).encode()
+                req = urllib.request.Request(url, data=payload,
+                                             headers={"Content-Type": "application/json"},
+                                             method="POST")
+                with urllib.request.urlopen(req, timeout=8) as r:
+                    ok = r.status == 200
+                self.after(0, lambda: self._s_tg_test_lbl.configure(
+                    text="✓ Mesaj gönderildi!" if ok else "✗ Gönderme başarısız",
+                    fg=SUCCESS if ok else ERROR
+                ))
+            except Exception as e:
+                self.after(0, lambda: self._s_tg_test_lbl.configure(
+                    text=f"✗ Hata: {e}", fg=ERROR
+                ))
+        threading.Thread(target=_worker, daemon=True).start()
+
     # ─── CouchDB Yapılandırma ─────────────────────────────────────────────────
 
     _ENV_FILE = os.path.join(REPO_DIR, ".env.local")
 
     def _load_couchdb_config_ui(self):
-        """Mevcut .env.local dosyasından CouchDB ayarlarını oku ve UI'a doldur."""
-        config = {"url": "http://localhost:5984", "user": "admin", "password": "mert2024"}
-        env_path = self._ENV_FILE
-        if os.path.exists(env_path):
-            try:
-                with open(env_path, "r", encoding="utf-8") as f:
-                    for line in f:
-                        line = line.strip()
-                        if line.startswith("VITE_COUCHDB_URL="):
-                            config["url"] = line.split("=", 1)[1]
-                        elif line.startswith("VITE_COUCHDB_USER="):
-                            config["user"] = line.split("=", 1)[1]
-                        elif line.startswith("VITE_COUCHDB_PASSWORD="):
-                            config["password"] = line.split("=", 1)[1]
-            except Exception:
-                pass
+        """CouchDB ayarlarını önce mert4_config.json'dan, yoksa .env.local'dan oku."""
+        # mert4_config.json öncelikli
+        cfg_url  = self._cfg_mgr.get("couchdb_url")
+        cfg_user = self._cfg_mgr.get("couchdb_user")
+        cfg_pass = self._cfg_mgr.get("couchdb_pass")
+
+        # .env.local fallback (ilk çalıştırma veya config yoksa)
+        config = {
+            "url":      cfg_url  or "http://localhost:5984",
+            "user":     cfg_user or "admin",
+            "password": cfg_pass or "",
+        }
+        if not cfg_url:
+            env_path = self._ENV_FILE
+            if os.path.exists(env_path):
+                try:
+                    with open(env_path, "r", encoding="utf-8") as f:
+                        for line in f:
+                            line = line.strip()
+                            if line.startswith("VITE_COUCHDB_URL="):
+                                config["url"] = line.split("=", 1)[1]
+                            elif line.startswith("VITE_COUCHDB_USER="):
+                                config["user"] = line.split("=", 1)[1]
+                            elif line.startswith("VITE_COUCHDB_PASSWORD="):
+                                config["password"] = line.split("=", 1)[1]
+                except Exception:
+                    pass
         self._cfg_db_url_var.set(config["url"])
         self._cfg_user_var.set(config["user"])
         self._cfg_pass_var.set(config["password"])
@@ -1750,13 +2388,26 @@ class MertUpdater(tk.Tk):
             )
             if ok2:
                 self.after(0, self._log, "━━━ Güncelleme Tamamlandı! ━━━", "success")
+                if self._cfg_mgr.get_bool("telegram_on_build"):
+                    threading.Thread(target=self._send_telegram,
+                        args=(f"✅ <b>MERT.4 Güncelleme Tamamlandı</b>\n"
+                              f"Dal: {BRANCH}\nSüre: {time.monotonic()-self._task_start:.0f}s",),
+                        daemon=True).start()
                 if self.auto_var.get():
                     self.after(0, self._log, "Otomatik build başlatılıyor...", "info")
                     ok3 = self._build_inner()
                     if not ok3:
                         self.after(0, self._log, "Otomatik build başarısız!", "error")
+                        if self._cfg_mgr.get_bool("telegram_on_error"):
+                            threading.Thread(target=self._send_telegram,
+                                args=("❌ <b>MERT.4 Build Başarısız</b>\nOtomatik build hatalı!",),
+                                daemon=True).start()
             else:
                 self.after(0, self._log, "Reset başarısız!", "error")
+                if self._cfg_mgr.get_bool("telegram_on_error"):
+                    threading.Thread(target=self._send_telegram,
+                        args=("❌ <b>MERT.4 Güncelleme Hatası</b>\ngit reset başarısız!",),
+                        daemon=True).start()
 
             elapsed = time.monotonic() - self._task_start
             self._save_summary("Güncelleme", ok2, elapsed)
@@ -1783,9 +2434,18 @@ class MertUpdater(tk.Tk):
             self._save_summary("Build & Başlat", ok, elapsed)
             if ok:
                 self.after(0, self._log, "━━━ Build Tamamlandı! ━━━", "success")
-                self.after(0, self._log, f"→ {APP_URL}", "success")
+                app_url = self._cfg_mgr.get("app_url") or APP_URL
+                self.after(0, self._log, f"→ {app_url}", "success")
+                if self._cfg_mgr.get_bool("telegram_on_build"):
+                    threading.Thread(target=self._send_telegram,
+                        args=(f"🚀 <b>MERT.4 Build Tamamlandı</b>\nSüre: {elapsed:.0f}s\n{app_url}",),
+                        daemon=True).start()
             else:
                 self.after(0, self._log, "━━━ Build Başarısız! ━━━", "error")
+                if self._cfg_mgr.get_bool("telegram_on_error"):
+                    threading.Thread(target=self._send_telegram,
+                        args=("❌ <b>MERT.4 Build Başarısız</b>\nDocker build hatalı!",),
+                        daemon=True).start()
             self._end_task("Build")
 
         self._threaded(_task)
@@ -1922,6 +2582,26 @@ class MertUpdater(tk.Tk):
                     inner, text="🐳",
                     font=("Segoe UI", 8), fg=ACCENT, bg=row_bg
                 ).pack(side="left", padx=(4, 0))
+
+            # SFTP (SSH) yükle butonu
+            sftp_btn = tk.Button(
+                inner, text="📡",
+                command=lambda bid=b["id"]: self._do_sftp_backup(bid),
+                font=("Segoe UI", 9), fg=TEAL, bg=row_bg,
+                relief="flat", cursor="hand2", bd=0, padx=4, pady=1
+            )
+            sftp_btn.pack(side="right", padx=(2, 0))
+            _bind_hover(sftp_btn, row_bg, BG_INPUT)
+
+            # Bulut (S3/R2) yükle butonu
+            cloud_btn = tk.Button(
+                inner, text="☁",
+                command=lambda bid=b["id"]: self._do_cloud_upload(bid),
+                font=("Segoe UI", 9), fg=ACCENT, bg=row_bg,
+                relief="flat", cursor="hand2", bd=0, padx=4, pady=1
+            )
+            cloud_btn.pack(side="right", padx=(2, 0))
+            _bind_hover(cloud_btn, row_bg, BG_INPUT)
 
             # Geri Yükle butonu
             restore_btn = tk.Button(
@@ -2282,6 +2962,10 @@ class MertUpdater(tk.Tk):
             if was_ok:
                 self._couch_up_since = None
                 self._toast("CouchDB bağlantısı kesildi!", ERROR, duration=6000)
+                if self._cfg_mgr.get_bool("telegram_on_couch_down"):
+                    threading.Thread(target=self._send_telegram,
+                        args=("⚠️ <b>MERT.4 — CouchDB Çevrim Dışı!</b>\nVeritabanı bağlantısı kesildi.",),
+                        daemon=True).start()
             self._couch_up_since = None
             self.couch_dot.config(fg=ERROR)
             self.couch_lbl.config(text="CouchDB çevrim dışı", fg=ERROR)
@@ -2735,6 +3419,274 @@ class MertUpdater(tk.Tk):
                 self._health_last_toast = now
                 self._toast(f"Yüksek RAM: {ram_used:.0f}/{ram_max:.0f}MB", WARNING)
 
+    # ─── SSH / Sync ──────────────────────────────────────────────────────────
+
+    def _toggle_ssh_panel(self, event=None):
+        if self._ssh_open.get():
+            self._ssh_frame.pack_forget()
+            self._ssh_open.set(False)
+            self._ssh_toggle_lbl.configure(text="▼")
+        else:
+            self._ssh_frame.pack(fill="x", padx=20, pady=(3, 0))
+            self._ssh_open.set(True)
+            self._ssh_toggle_lbl.configure(text="▲")
+
+    def _ssh_cfg(self) -> dict:
+        """Güncel SSH ayarlarını döndürür."""
+        return {
+            "host":        self._cfg_mgr.get("ssh_host"),
+            "port":        self._cfg_mgr.get("ssh_port") or "22",
+            "user":        self._cfg_mgr.get("ssh_user"),
+            "password":    self._cfg_mgr.get("ssh_pass"),
+            "key_path":    self._cfg_mgr.get("ssh_key_path"),
+            "remote_path": self._cfg_mgr.get("ssh_remote_path") or "/var/www/mert4",
+        }
+
+    def _ssh_base_args(self) -> list[str]:
+        """SSH temel argümanlarını döndürür (host hariç)."""
+        c = self._ssh_cfg()
+        args = [
+            "-o", "StrictHostKeyChecking=no",
+            "-o", "ConnectTimeout=8",
+            "-p", c["port"],
+        ]
+        if c["key_path"] and os.path.exists(os.path.expanduser(c["key_path"])):
+            args += ["-i", os.path.expanduser(c["key_path"])]
+        return args
+
+    def _ssh_prefix(self) -> list[str]:
+        """sshpass veya düz ssh komutunu döndürür."""
+        c = self._ssh_cfg()
+        # sshpass varsa ve şifre girildiyse kullan
+        if c["password"] and shutil.which("sshpass"):
+            return ["sshpass", "-p", c["password"], "ssh"] + self._ssh_base_args()
+        return ["ssh"] + self._ssh_base_args()
+
+    def _rsync_prefix(self) -> list[str]:
+        """rsync için ssh komutunu döndürür."""
+        c = self._ssh_cfg()
+        ssh_cmd = "ssh -o StrictHostKeyChecking=no -o ConnectTimeout=8"
+        ssh_cmd += f" -p {c['port']}"
+        if c["key_path"] and os.path.exists(os.path.expanduser(c["key_path"])):
+            ssh_cmd += f" -i {os.path.expanduser(c['key_path'])}"
+        if c["password"] and shutil.which("sshpass"):
+            ssh_cmd = f"sshpass -p {c['password']} " + ssh_cmd
+        return ["rsync", "-avz", "--progress",
+                "--exclude=node_modules", "--exclude=dist",
+                "--exclude=.git", "--exclude=.mert4_backups",
+                "--exclude=mert4_config.json",
+                "-e", ssh_cmd]
+
+    def _apply_ssh_status(self, ok: bool, msg: str):
+        color = SUCCESS if ok else (WARNING if "test" in msg.lower() else ERROR)
+        self.ssh_dot.configure(fg=color)
+        self.ssh_lbl.configure(fg=color, text=f"SSH: {msg}")
+        if hasattr(self, "_ssh_panel_dot"):
+            self._ssh_panel_dot.configure(fg=color)
+            self._ssh_panel_lbl.configure(fg=color, text=msg)
+
+    def _do_ssh_test(self):
+        """SSH bağlantısını test eder."""
+        c = self._ssh_cfg()
+        if not c["host"] or not c["user"]:
+            self._log("⚠ SSH: Ayarlar'dan host ve kullanıcı girin.", "warning")
+            return
+
+        def _task():
+            self._start_task()
+            self.after(0, self._log, f"🔌 SSH test: {c['user']}@{c['host']}:{c['port']}", "info")
+            prefix = self._ssh_prefix()
+            target = f"{c['user']}@{c['host']}"
+            cmd    = prefix + [target, "echo SSH_OK && uname -a && uptime"]
+            ok, out = self._run_cmd(" ".join(cmd), "SSH bağlantısı test ediliyor...")
+            if ok and "SSH_OK" in out:
+                # Uptime satırı
+                uptime_line = next((l for l in out.splitlines() if "load" in l or "up" in l), "")
+                msg = f"{c['host']} bağlandı  •  {uptime_line[:60]}" if uptime_line else f"{c['host']} ✓"
+                self.after(0, self._apply_ssh_status, True, msg)
+                self.after(0, self._ssh_info_lbl.configure, {"text": f"{c['user']}@{c['host']}:{c['port']}"})
+            else:
+                self.after(0, self._apply_ssh_status, False, f"Bağlantı hatası — {c['host']}")
+            self._end_task("SSH Test")
+        self._threaded(_task)
+
+    def _test_ssh_from_settings(self):
+        """Ayarlar penceresinden SSH bağlantısı test eder (değerleri önce kaydeder)."""
+        # Geçici olarak cfg'ye yaz (kaydetmeden)
+        self._cfg_mgr.set("ssh_host",    self._s_ssh_host.get().strip())
+        self._cfg_mgr.set("ssh_port",    self._s_ssh_port.get().strip() or "22")
+        self._cfg_mgr.set("ssh_user",    self._s_ssh_user.get().strip())
+        self._cfg_mgr.set("ssh_pass",    self._s_ssh_pass.get().strip())
+        self._cfg_mgr.set("ssh_key_path", self._s_ssh_key.get().strip())
+        self._s_ssh_test_lbl.configure(text="Test ediliyor…", fg=FG_DIM)
+
+        def _worker():
+            c = self._ssh_cfg()
+            if not c["host"] or not c["user"]:
+                self.after(0, lambda: self._s_ssh_test_lbl.configure(
+                    text="⚠  Host ve kullanıcı adı boş olamaz.", fg=WARNING))
+                return
+            prefix = self._ssh_prefix()
+            target = f"{c['user']}@{c['host']}"
+            try:
+                result = subprocess.run(
+                    prefix + [target, "echo SSH_OK"],
+                    cwd=REPO_DIR, capture_output=True, text=True, timeout=12,
+                    shell=False
+                )
+                ok = result.returncode == 0 and "SSH_OK" in result.stdout
+                self.after(0, lambda: self._s_ssh_test_lbl.configure(
+                    text=f"✓ {c['host']} — bağlantı başarılı" if ok
+                         else f"✗ Hata: {result.stderr[:80]}",
+                    fg=SUCCESS if ok else ERROR
+                ))
+                if ok:
+                    self.after(0, self._apply_ssh_status, True, f"{c['host']} ✓")
+            except Exception as e:
+                self.after(0, lambda: self._s_ssh_test_lbl.configure(
+                    text=f"✗ {e}", fg=ERROR))
+        threading.Thread(target=_worker, daemon=True).start()
+
+    def _do_ssh_remote_status(self):
+        """Uzak sunucu durumunu gösterir (docker ps + disk + memory)."""
+        c = self._ssh_cfg()
+        if not c["host"] or not c["user"]:
+            self._log("⚠ SSH: Önce bağlantı bilgileri girin.", "warning")
+            return
+
+        def _task():
+            self._start_task()
+            self.after(0, self._log, "━━━ Uzak Sunucu Durumu ━━━", "info")
+            prefix = self._ssh_prefix()
+            target = f"{c['user']}@{c['host']}"
+            remote_cmd = (
+                "echo '=== DOCKER ===' && docker ps --format 'table {{.Names}}\\t{{.Status}}\\t{{.Ports}}' 2>/dev/null || echo '(docker yok)'; "
+                "echo '=== DISK ===' && df -h / 2>/dev/null; "
+                "echo '=== BELLEK ===' && free -h 2>/dev/null; "
+                "echo '=== UPTIME ===' && uptime"
+            )
+            ok, _ = self._run_cmd(
+                " ".join(prefix + [target, f"bash -c '{remote_cmd}'"]),
+                "Uzak sunucu bilgileri alınıyor..."
+            )
+            if not ok:
+                self.after(0, self._apply_ssh_status, False, f"Durum alınamadı — {c['host']}")
+            else:
+                self.after(0, self._apply_ssh_status, True, f"{c['host']} ✓")
+            self._end_task("Uzak Durum")
+        self._threaded(_task)
+
+    def _do_ssh_deploy(self):
+        """Yerel dosyaları rsync ile uzak sunucuya senkronize eder."""
+        c = self._ssh_cfg()
+        if not c["host"] or not c["user"]:
+            self._log("⚠ SSH: Önce bağlantı bilgileri girin.", "warning")
+            return
+        if not shutil.which("rsync"):
+            self._log("⚠ rsync bulunamadı. Lütfen rsync'i yükleyin.", "error")
+            return
+        if not messagebox.askyesno(
+            "Dosya Sync",
+            f"Yerel proje dosyaları şuraya kopyalanacak:\n\n"
+            f"{c['user']}@{c['host']}:{c['remote_path']}\n\n"
+            f"node_modules, dist, .git hariç tutulur.\n\nDevam edilsin mi?"
+        ):
+            return
+
+        def _task():
+            self._start_task()
+            self.after(0, self._log, "━━━ Dosya Sync (rsync) ━━━", "info")
+            prefix = self._rsync_prefix()
+            target = f"{c['user']}@{c['host']}:{c['remote_path']}/"
+            cmd    = prefix + [REPO_DIR + "/", target]
+            ok, _ = self._run_cmd(" ".join(cmd), "Dosyalar senkronize ediliyor...")
+            if ok:
+                self.after(0, self._log, "━━━ Sync Tamamlandı! ━━━", "success")
+                self.after(0, self._apply_ssh_status, True, f"{c['host']} — sync tamamlandı")
+                if self._cfg_mgr.get_bool("telegram_on_build"):
+                    threading.Thread(target=self._send_telegram,
+                        args=(f"📤 <b>MERT.4 Dosya Sync Tamamlandı</b>\n→ {c['host']}:{c['remote_path']}",),
+                        daemon=True).start()
+            else:
+                self.after(0, self._log, "━━━ Sync Başarısız! ━━━", "error")
+                self.after(0, self._apply_ssh_status, False, f"{c['host']} — sync hatası")
+            self._end_task("Dosya Sync")
+        self._threaded(_task)
+
+    def _do_couch_replicate(self, direction: str):
+        """CouchDB HTTP API üzerinden replikasyon (push=yerel→uzak, pull=uzak→yerel)."""
+        c       = self._ssh_cfg()
+        local_u = self._cfg_mgr.get("couchdb_user")
+        local_p = self._cfg_mgr.get("couchdb_pass")
+        local_b = self._cfg_mgr.get("couchdb_url").rstrip("/")
+        r_host  = c["host"]
+        r_port  = "5984"   # uzak CouchDB port'u (standart)
+
+        if not r_host:
+            self._log("⚠ CouchDB Replikasyon: SSH ayarlarından uzak host girin.", "warning")
+            return
+
+        remote_base = f"http://{local_u}:{local_p}@{r_host}:{r_port}" if local_u else f"http://{r_host}:{r_port}"
+
+        label = "Yerel → Uzak" if direction == "push" else "Uzak → Yerel"
+        if not messagebox.askyesno(
+            "CouchDB Replikasyon",
+            f"{label}\n\nTüm MERT tablolar replike edilecek ({len(COUCHDB_DBS)} tablo).\n\nDevam?"
+        ):
+            return
+
+        def _task():
+            self._start_task()
+            self.after(0, self._log, f"━━━ CouchDB Replikasyon: {label} ━━━", "info")
+            import base64
+            auth = base64.b64encode(f"{local_u}:{local_p}".encode()).decode() if local_u else ""
+            headers = {"Content-Type": "application/json"}
+            if auth:
+                headers["Authorization"] = f"Basic {auth}"
+
+            ok_count = fail_count = 0
+            for db_name in COUCHDB_DBS:
+                if direction == "push":
+                    src = f"{local_b}/{db_name}"
+                    tgt = f"{remote_base}/{db_name}"
+                else:
+                    src = f"{remote_base}/{db_name}"
+                    tgt = f"{local_b}/{db_name}"
+
+                payload = json.dumps({
+                    "source": src, "target": tgt,
+                    "create_target": True, "continuous": False
+                }).encode()
+                try:
+                    req = urllib.request.Request(
+                        f"{local_b}/_replicate",
+                        data=payload, headers=headers, method="POST"
+                    )
+                    with urllib.request.urlopen(req, timeout=30) as resp:
+                        result = json.loads(resp.read())
+                        if result.get("ok"):
+                            ok_count += 1
+                            self.after(0, self._log, f"  ✓ {db_name}", "success")
+                        else:
+                            fail_count += 1
+                            self.after(0, self._log, f"  ✗ {db_name}: {result}", "error")
+                except Exception as e:
+                    fail_count += 1
+                    self.after(0, self._log, f"  ✗ {db_name}: {e}", "error")
+
+            summary = f"Tamamlandı: {ok_count} başarılı, {fail_count} hatalı"
+            self.after(0, self._log, f"━━━ {summary} ━━━",
+                       "success" if fail_count == 0 else "warning")
+            self.after(0, self._apply_ssh_status,
+                       fail_count == 0,
+                       f"Replikasyon {label}: {ok_count}/{len(COUCHDB_DBS)}")
+            if self._cfg_mgr.get_bool("telegram_on_build"):
+                threading.Thread(target=self._send_telegram,
+                    args=(f"🔄 <b>CouchDB Replikasyon</b> ({label})\n{summary}",),
+                    daemon=True).start()
+            self._end_task(f"CouchDB {label}")
+        self._threaded(_task)
+
     # ─── CouchDB İşlemleri ─────────────────────────────────────────────────
 
     def _do_couchdb_setup(self):
@@ -2843,6 +3795,326 @@ class MertUpdater(tk.Tk):
         self._backup_mgr.delete(backup_id)
         self._refresh_backups()
         self._log(f"Yedek silindi: {backup_id}", "dim")
+
+    # ─── Bulut Yedek (S3 / R2 / MinIO) ─────────────────────────────────────
+
+    def _cloud_cfg(self) -> dict:
+        c = self._cfg_mgr
+        return {
+            "type":       c.get("cloud_type") or "r2",
+            "endpoint":   c.get("cloud_endpoint").rstrip("/"),
+            "bucket":     c.get("cloud_bucket"),
+            "access_key": c.get("cloud_access_key"),
+            "secret_key": c.get("cloud_secret_key"),
+            "prefix":     c.get("cloud_prefix").rstrip("/"),
+        }
+
+    def _s3_sign_v4(self, cfg: dict, method: str, key: str,
+                    payload: bytes, extra_headers: dict | None = None) -> dict:
+        """AWS Signature V4 — minimal PUT imzalayıcı (boto3/awscli bağımlılığı yok)."""
+        import hmac, hashlib, email.utils
+        region   = "auto"  # R2 için her zaman 'auto'
+        endpoint = cfg["endpoint"] or f"https://s3.amazonaws.com"
+        host     = endpoint.split("//", 1)[-1].split("/")[0]
+        service  = "s3"
+        now      = datetime.datetime.utcnow()
+        amzdate  = now.strftime("%Y%m%dT%H%M%SZ")
+        datestamp= now.strftime("%Y%m%d")
+        payload_hash = hashlib.sha256(payload).hexdigest()
+        headers = {
+            "host":                 host,
+            "x-amz-date":          amzdate,
+            "x-amz-content-sha256": payload_hash,
+            "content-type":        "application/octet-stream",
+        }
+        if extra_headers:
+            headers.update(extra_headers)
+        signed_headers = ";".join(sorted(headers.keys()))
+        canonical_headers = "".join(f"{k}:{v}\n" for k, v in sorted(headers.items()))
+        canonical_request = "\n".join([
+            method, f"/{key}", "",
+            canonical_headers, signed_headers, payload_hash
+        ])
+        credential_scope = f"{datestamp}/{region}/{service}/aws4_request"
+        string_to_sign = "\n".join([
+            "AWS4-HMAC-SHA256", amzdate, credential_scope,
+            hashlib.sha256(canonical_request.encode()).hexdigest()
+        ])
+        def _sign(key_bytes, msg):
+            return hmac.new(key_bytes, msg.encode(), hashlib.sha256).digest()
+        signing_key = _sign(
+            _sign(_sign(_sign(
+                f"AWS4{cfg['secret_key']}".encode(), datestamp),
+                region), service), "aws4_request"
+        )
+        signature = hmac.new(signing_key, string_to_sign.encode(), hashlib.sha256).hexdigest()
+        auth = (f"AWS4-HMAC-SHA256 Credential={cfg['access_key']}/{credential_scope}, "
+                f"SignedHeaders={signed_headers}, Signature={signature}")
+        result = dict(headers)
+        result["authorization"] = auth
+        return result
+
+    def _do_cloud_upload(self, backup_id: str):
+        """Yedeği bulut depolama alanına yükler (S3/R2/MinIO)."""
+        if self._running:
+            messagebox.showwarning("Bekle", "Başka bir işlem devam ediyor!")
+            return
+        cfg = self._cloud_cfg()
+        if not cfg["bucket"]:
+            messagebox.showerror("Bulut Ayarı Eksik",
+                                 "Ayarlar → ☁ Bulut Yedek sekmesinde bucket adı girilmemiş.")
+            return
+
+        backups = self._backup_mgr.list()
+        entry   = next((b for b in backups if b["id"] == backup_id), None)
+        if not entry:
+            messagebox.showerror("Hata", "Yedek bulunamadı.")
+            return
+
+        def _task():
+            self._start_task()
+            self.after(0, self._log, f"☁ Bulut yükleme başladı → {backup_id}", "info")
+
+            # Yüklenecek dosyaları topla
+            files_to_upload = []
+            meta_path = os.path.join(BACKUP_DIR, f"{backup_id}.meta.json")
+            if os.path.exists(meta_path):
+                files_to_upload.append(meta_path)
+            docker_path = entry.get("docker_file")
+            if docker_path and os.path.exists(docker_path):
+                files_to_upload.append(docker_path)
+
+            if not files_to_upload:
+                self.after(0, self._log, "Yüklenecek dosya bulunamadı (sadece git hash yedeği).", "warn")
+                self._end_task("Bulut Yükleme")
+                return
+
+            # Önce aws CLI ile dene, sonra rclone, sonra urllib S3 v4
+            prefix = cfg["prefix"] or "mert4-backups"
+            ok = False
+
+            if not ok and shutil.which("aws"):
+                ok = self._cloud_upload_aws_cli(cfg, files_to_upload, prefix)
+            if not ok and shutil.which("rclone"):
+                ok = self._cloud_upload_rclone(cfg, files_to_upload, prefix)
+            if not ok:
+                ok = self._cloud_upload_urllib(cfg, files_to_upload, prefix)
+
+            if ok:
+                self.after(0, self._log, f"☁ Yükleme tamamlandı → {prefix}/{backup_id}", "success")
+            else:
+                self.after(0, self._log, "☁ Yükleme başarısız! Ayarları kontrol edin.", "error")
+
+            self._end_task("Bulut Yükleme")
+
+        self._threaded(_task)
+
+    def _cloud_upload_aws_cli(self, cfg: dict, files: list, prefix: str) -> bool:
+        env = os.environ.copy()
+        env["AWS_ACCESS_KEY_ID"]     = cfg["access_key"]
+        env["AWS_SECRET_ACCESS_KEY"] = cfg["secret_key"]
+        env["AWS_DEFAULT_REGION"]    = "auto"
+        ok_all = True
+        for fp in files:
+            fname = os.path.basename(fp)
+            s3_url = f"s3://{cfg['bucket']}/{prefix}/{fname}"
+            cmd = ["aws", "s3", "cp", fp, s3_url]
+            if cfg["endpoint"]:
+                cmd += ["--endpoint-url", cfg["endpoint"]]
+            try:
+                r = subprocess.run(cmd, capture_output=True, text=True,
+                                   env=env, timeout=120)
+                if r.returncode != 0:
+                    ok_all = False
+                    self.after(0, self._log, f"aws CLI hata: {r.stderr.strip()[:120]}", "error")
+                else:
+                    self.after(0, self._log, f"  ✓ {fname}", "dim")
+            except Exception as exc:
+                ok_all = False
+                self.after(0, self._log, f"aws CLI exception: {exc}", "error")
+        return ok_all
+
+    def _cloud_upload_rclone(self, cfg: dict, files: list, prefix: str) -> bool:
+        # rclone ile geçici config — gerçek config dosyasını bozmaz
+        rclone_cfg_content = (
+            "[mert4_cloud]\n"
+            "type = s3\n"
+            f"provider = {'Cloudflare' if cfg['type'] == 'r2' else 'AWS'}\n"
+            f"access_key_id = {cfg['access_key']}\n"
+            f"secret_access_key = {cfg['secret_key']}\n"
+            f"endpoint = {cfg['endpoint']}\n"
+            "acl = private\n"
+        )
+        import tempfile
+        with tempfile.NamedTemporaryFile("w", suffix=".conf", delete=False) as tf:
+            tf.write(rclone_cfg_content)
+            cfg_path = tf.name
+
+        ok_all = True
+        try:
+            for fp in files:
+                fname  = os.path.basename(fp)
+                dest   = f"mert4_cloud:{cfg['bucket']}/{prefix}/{fname}"
+                r = subprocess.run(
+                    ["rclone", "--config", cfg_path, "copyto", fp, dest],
+                    capture_output=True, text=True, timeout=120
+                )
+                if r.returncode != 0:
+                    ok_all = False
+                    self.after(0, self._log, f"rclone hata: {r.stderr.strip()[:120]}", "error")
+                else:
+                    self.after(0, self._log, f"  ✓ {fname} (rclone)", "dim")
+        finally:
+            try:
+                os.unlink(cfg_path)
+            except Exception:
+                pass
+        return ok_all
+
+    def _cloud_upload_urllib(self, cfg: dict, files: list, prefix: str) -> bool:
+        """AWS Sig V4 ile direkt urllib PUT — aws/rclone gerektirmez."""
+        ok_all = True
+        for fp in files:
+            fname = os.path.basename(fp)
+            key   = f"{prefix}/{fname}"
+            try:
+                with open(fp, "rb") as fh:
+                    payload = fh.read()
+                hdrs = self._s3_sign_v4(cfg, "PUT", key, payload)
+                endpoint = cfg["endpoint"] or "https://s3.amazonaws.com"
+                url = f"{endpoint}/{cfg['bucket']}/{key}"
+                req = urllib.request.Request(url, data=payload, method="PUT",
+                                             headers={k.replace("-", "_"): v
+                                                      for k, v in hdrs.items()})
+                with urllib.request.urlopen(req, timeout=120):
+                    pass
+                self.after(0, self._log, f"  ✓ {fname} (urllib)", "dim")
+            except Exception as exc:
+                ok_all = False
+                self.after(0, self._log, f"urllib PUT hata: {exc}", "error")
+        return ok_all
+
+    def _test_cloud_from_settings(self):
+        """Ayarlar penceresinden bulut bağlantı testi."""
+        endpoint = self._s_cloud_endpoint.get().strip()
+        bucket   = self._s_cloud_bucket.get().strip()
+        access   = self._s_cloud_access.get().strip()
+        secret   = self._s_cloud_secret.get().strip()
+        if not (bucket and access and secret):
+            self._s_cloud_test_lbl.configure(
+                text="⚠ Bucket, Access Key ve Secret Key zorunlu!", fg=WARNING)
+            return
+
+        self._s_cloud_test_lbl.configure(text="Test ediliyor...", fg=FG_DIM)
+
+        def _run():
+            cfg = {
+                "type":       self._s_cloud_type.get(),
+                "endpoint":   endpoint.rstrip("/"),
+                "bucket":     bucket,
+                "access_key": access,
+                "secret_key": secret,
+                "prefix":     self._s_cloud_prefix.get().strip().rstrip("/") or "mert4-backups",
+            }
+            # Küçük test nesnesi yükle
+            test_key = f"{cfg['prefix']}/.mert4_test"
+            payload  = b"mert4-cloud-test"
+            try:
+                hdrs = self._s3_sign_v4(cfg, "PUT", test_key, payload)
+                ep   = cfg["endpoint"] or "https://s3.amazonaws.com"
+                url  = f"{ep}/{bucket}/{test_key}"
+                req  = urllib.request.Request(url, data=payload, method="PUT",
+                                              headers={k: v for k, v in hdrs.items()})
+                with urllib.request.urlopen(req, timeout=15):
+                    pass
+                self.after(0, self._s_cloud_test_lbl.configure,
+                           {"text": "✓ Bağlantı başarılı!", "fg": SUCCESS})
+            except Exception as exc:
+                self.after(0, self._s_cloud_test_lbl.configure,
+                           {"text": f"✗ Hata: {str(exc)[:80]}", "fg": ERROR})
+
+        threading.Thread(target=_run, daemon=True).start()
+
+    # ─── SFTP / SCP yedek yükleme ───────────────────────────────────────────
+
+    def _do_sftp_backup(self, backup_id: str):
+        """Yedeği SSH/SCP ile uzak sunucuya kopyalar."""
+        if self._running:
+            messagebox.showwarning("Bekle", "Başka bir işlem devam ediyor!")
+            return
+
+        backups  = self._backup_mgr.list()
+        entry    = next((b for b in backups if b["id"] == backup_id), None)
+        if not entry:
+            messagebox.showerror("Hata", "Yedek bulunamadı.")
+            return
+
+        cfg = self._ssh_cfg()
+        if not cfg["host"]:
+            messagebox.showerror("SSH Ayarı Eksik",
+                                 "Ayarlar → SSH sekmesinde Host girilmemiş.")
+            return
+
+        def _task():
+            self._start_task()
+            self.after(0, self._log, f"📡 SFTP yükleme başladı → {backup_id}", "info")
+
+            remote_dir = (cfg["remote_path"] or "/tmp").rstrip("/") + f"/backups/{backup_id}"
+            scp_prefix = self._rsync_prefix()  # rsync prefix == scp auth args prefix
+
+            files_to_upload = []
+            meta_path = os.path.join(BACKUP_DIR, f"{backup_id}.meta.json")
+            if os.path.exists(meta_path):
+                files_to_upload.append(meta_path)
+            docker_path = entry.get("docker_file")
+            if docker_path and os.path.exists(docker_path):
+                files_to_upload.append(docker_path)
+
+            if not files_to_upload:
+                self.after(0, self._log, "Yüklenecek dosya yok (sadece git hash yedeği).", "warn")
+                self._end_task("SFTP Yükleme")
+                return
+
+            # Uzak dizin oluştur
+            mk_ok, _ = self._run_cmd(
+                f"{self._ssh_prefix()} {cfg['user']}@{cfg['host']} "
+                f"'mkdir -p {remote_dir}'",
+                f"Uzak dizin oluşturuluyor: {remote_dir}"
+            )
+            if not mk_ok:
+                self.after(0, self._log, "Uzak dizin oluşturulamadı.", "error")
+                self._end_task("SFTP Yükleme")
+                return
+
+            ok_all = True
+            for fp in files_to_upload:
+                fname = os.path.basename(fp)
+                dest  = (f"{cfg['user']}@{cfg['host']}:{remote_dir}/{fname}")
+                port  = cfg.get("port") or "22"
+                scp_cmd = " ".join(filter(None, [
+                    "sshpass", f"-p '{cfg['pass']}'" if cfg.get("pass") else "",
+                    "scp",
+                    f"-P {port}",
+                    f"-i {cfg['key_path']}" if cfg.get("key_path") else "",
+                    "-o StrictHostKeyChecking=no",
+                    fp, dest
+                ]))
+                if not cfg.get("pass"):
+                    # password-less, drop sshpass
+                    scp_cmd = scp_cmd.replace("sshpass  scp", "scp")
+                ok, _ = self._run_cmd(scp_cmd, f"  ↑ {fname}")
+                if not ok:
+                    ok_all = False
+
+            if ok_all:
+                self.after(0, self._log,
+                           f"📡 SFTP yükleme tamamlandı → {remote_dir}", "success")
+            else:
+                self.after(0, self._log, "📡 SFTP yükleme başarısız.", "error")
+
+            self._end_task("SFTP Yükleme")
+
+        self._threaded(_task)
 
     def _do_full_update(self):
         if not self._check_uncommitted():

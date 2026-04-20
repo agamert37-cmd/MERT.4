@@ -5,7 +5,7 @@ import {
   ChevronRight, X, ArrowDownRight, ArrowUpRight, RefreshCcw, Tag, Edit,
   Trash2, AlertTriangle, Factory, Link2, Settings, BarChart3, Bell,
   FolderOpen, ArrowUpDown, Eye, Download, Filter, Layers, ShoppingCart,
-  Minus, MoreVertical, Warehouse, Scale, Clock, Flame, History, PieChart, Archive, Camera
+  Minus, MoreVertical, Warehouse, Scale, Clock, Flame, History, PieChart, Archive, Camera, Zap
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { staggerContainer, staggerItem, hover, tap, rowItem } from '../utils/animations';
@@ -31,6 +31,8 @@ import {
 import { PremiumTooltip, GlowBar, EmptyChartState } from '../components/ChartComponents';
 import { kvGet, kvSet } from '../lib/pouchdb-kv';
 import { BarcodeScanner } from '../components/BarcodeScanner';
+import { ChangeLogModal } from '../components/ChangeLogModal';
+import { DuplicateFinderModal } from '../components/DuplicateFinderModal';
 
 export type MovementType = 'ALIS' | 'SATIS' | 'MUSTERI_IADE' | 'TOPTANCI_IADE' | 'FIRE' | 'URETIM_CIKIS' | 'URETIM_GIRIS' | 'FATURA_ALIS' | 'FATURA_SATIS' | 'FATURA_IPTAL' | 'ONCEKI_BAKIYE';
 export type ProductCategory = string;
@@ -473,6 +475,9 @@ export function StokPage() {
   const [sortDir, setSortDir] = useState<SortDir>('asc');
   const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
 
+  const [changeLogTarget, setChangeLogTarget] = useState<string | null>(null);
+  const [showDupFinder, setShowDupFinder] = useState(false);
+
   // Modal State
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isAddMovementModalOpen, setIsAddMovementModalOpen] = useState(false);
@@ -860,6 +865,13 @@ export function StokPage() {
               Son: {new Date(lastSync).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}
             </span>
           )}
+          <button
+            onClick={() => setShowDupFinder(true)}
+            className="hidden sm:flex items-center gap-2 px-3 py-2.5 bg-amber-600/10 hover:bg-amber-600/20 border border-amber-500/20 text-amber-400 text-sm rounded-xl transition-colors"
+          >
+            <Zap className="w-4 h-4" />
+            <span className="hidden lg:inline">Benzer Kayıt</span>
+          </button>
           {canAdd && (
             <motion.button
               whileHover={{ scale: 1.02 }}
@@ -1054,6 +1066,13 @@ export function StokPage() {
                           {canEdit && (
                             <button onClick={() => { setSelectedProduct(product); setEditFormCategory(product.category); setEditFormUnit(product.unit); setIsEditModalOpen(true); }} className="p-2 bg-white/5 hover:bg-white/10 text-gray-400 rounded-xl transition-colors"><Edit className="w-3.5 h-3.5" /></button>
                           )}
+                          <button
+                            onClick={() => setChangeLogTarget(product.id)}
+                            className="p-2 bg-blue-500/10 hover:bg-blue-500/20 text-blue-400/70 rounded-xl transition-colors"
+                            title="Değişim Geçmişi"
+                          >
+                            <Clock className="w-3.5 h-3.5" />
+                          </button>
                           {canDelete && (
                             <button onClick={() => handleDeleteProduct(product.id, product.name)} className="p-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-xl transition-colors"><Trash2 className="w-3.5 h-3.5" /></button>
                           )}
@@ -1803,6 +1822,21 @@ export function StokPage() {
             toast.success(`Barkod okundu: ${value}`, { duration: 2000 });
           }}
           onClose={() => setIsScannerOpen(false)}
+        />
+      )}
+
+      {changeLogTarget && (
+        <ChangeLogModal
+          tableName="urunler"
+          docId={changeLogTarget}
+          onClose={() => setChangeLogTarget(null)}
+        />
+      )}
+      {showDupFinder && (
+        <DuplicateFinderModal
+          tableName="urunler"
+          onClose={() => setShowDupFinder(false)}
+          onMergeComplete={() => refresh()}
         />
       )}
     </div>
