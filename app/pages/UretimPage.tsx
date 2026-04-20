@@ -197,7 +197,7 @@ function StepIndicator({ currentStep, steps }: { currentStep: number; steps: str
         className="absolute top-[18px] md:top-[22px] left-0 h-[2px] bg-gradient-to-r from-emerald-500 via-blue-500 to-indigo-500 mx-8 md:mx-14 rounded-full"
         style={{ originX: 0 }}
         initial={{ scaleX: 0 }}
-        animate={{ scaleX: currentStep / (steps.length - 1) }}
+        animate={{ scaleX: steps.length > 1 ? currentStep / (steps.length - 1) : 0 }}
         transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
       />
 

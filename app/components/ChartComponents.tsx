@@ -799,7 +799,7 @@ export function HorizontalBarList({ items, maxValue: externalMax }: { items: HBa
     <div className="space-y-3">
       {items.map((item, i) => (
         <motion.div
-          key={i}
+          key={item.label ?? i}
           className="flex items-center gap-3 group"
           initial={{ opacity: 0, x: -8 }}
           whileInView={{ opacity: 1, x: 0 }}

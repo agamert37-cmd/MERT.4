@@ -1004,7 +1004,7 @@ export function AracTakipPage() {
                   <div className="flex items-center gap-2 mt-2 text-sm">
                     <Route className="w-4 h-4 text-blue-400" />
                     <span className="text-blue-400 font-medium">
-                      Toplam: {(parseInt(endKm, 10) - activeShift.startKm).toLocaleString()} km
+                      Toplam: {(isNaN(parseInt(endKm, 10)) ? 0 : parseInt(endKm, 10) - activeShift.startKm).toLocaleString()} km
                     </span>
                   </div>
                 )}
