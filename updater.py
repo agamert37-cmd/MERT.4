@@ -322,6 +322,14 @@ class ConfigManager:
         "ssh_pass":              "",
         "ssh_key_path":          "",
         "ssh_remote_path":       "/var/www/mert4",
+        # Bulut Yedek (S3 / Cloudflare R2 / MinIO)
+        "cloud_type":            "r2",   # aws | r2 | minio
+        "cloud_endpoint":        "",     # R2 & MinIO için endpoint URL
+        "cloud_bucket":          "",
+        "cloud_access_key":      "",
+        "cloud_secret_key":      "",
+        "cloud_prefix":          "mert4-backups/",
+        "cloud_auto_on_backup":  False,  # Manuel yedek alınınca otomatik buluta yükle
     }
 
     def __init__(self):
@@ -1638,10 +1646,12 @@ class MertUpdater(tk.Tk):
         tab_couch = tk.Frame(nb, bg=BG_DARK, padx=4, pady=4)
         tab_tg    = tk.Frame(nb, bg=BG_DARK, padx=4, pady=4)
         tab_ssh   = tk.Frame(nb, bg=BG_DARK, padx=4, pady=4)
+        tab_cloud = tk.Frame(nb, bg=BG_DARK, padx=4, pady=4)
         nb.add(tab_genel, text="🏠  Genel")
         nb.add(tab_couch, text="🗄  CouchDB")
         nb.add(tab_tg,    text="✈  Telegram")
         nb.add(tab_ssh,   text="🔌  SSH / Sunucu")
+        nb.add(tab_cloud, text="☁  Bulut Yedek")
 
         def _row(parent, label, var, placeholder="", show=""):
             f = tk.Frame(parent, bg=BG_DARK)
@@ -1787,6 +1797,63 @@ class MertUpdater(tk.Tk):
                  text="Dosya sync ve replikasyon için Ana Pencere → SSH/Sync panelini kullanın.",
                  font=("Segoe UI", 8), fg=FG_DIM, bg=BG_DARK).pack(anchor="w", pady=(8, 0))
 
+        # ── Bulut Yedek sekmesi ──────────────────────────────────────────────
+        self._s_cloud_type      = tk.StringVar(value="r2")
+        self._s_cloud_endpoint  = tk.StringVar()
+        self._s_cloud_bucket    = tk.StringVar()
+        self._s_cloud_access    = tk.StringVar()
+        self._s_cloud_secret    = tk.StringVar()
+        self._s_cloud_prefix    = tk.StringVar()
+        self._s_cloud_auto      = tk.BooleanVar(value=False)
+
+        _section(tab_cloud, "Depolama Türü")
+        type_row = tk.Frame(tab_cloud, bg=BG_DARK)
+        type_row.pack(fill="x", pady=(0, 8))
+        tk.Label(type_row, text="Provider", font=("Segoe UI", 9, "bold"),
+                 fg=ACCENT, bg=BG_DARK, width=20, anchor="w").pack(side="left")
+        for val, lbl in [("r2", "Cloudflare R2"), ("aws", "AWS S3"), ("minio", "MinIO / Özel")]:
+            tk.Radiobutton(
+                type_row, text=lbl, variable=self._s_cloud_type, value=val,
+                font=("Segoe UI", 9), fg=FG_TEXT, bg=BG_DARK,
+                selectcolor=BG_CARD, activebackground=BG_DARK, activeforeground=FG_TEXT
+            ).pack(side="left", padx=(0, 8))
+
+        _section(tab_cloud, "Bağlantı")
+        _row(tab_cloud, "Endpoint URL",   self._s_cloud_endpoint,
+             "https://<account>.r2.cloudflarestorage.com")
+        _row(tab_cloud, "Bucket",         self._s_cloud_bucket,    "mert4-backups")
+        _row(tab_cloud, "Access Key",     self._s_cloud_access,    "")
+        _row(tab_cloud, "Secret Key",     self._s_cloud_secret,    show="•")
+        _row(tab_cloud, "Prefix (klasör)", self._s_cloud_prefix,   "mert4-backups/")
+
+        _section(tab_cloud, "Otomatik Yükleme")
+        tk.Checkbutton(
+            tab_cloud,
+            text="Manuel yedek alındığında otomatik buluta yükle",
+            variable=self._s_cloud_auto,
+            font=("Segoe UI", 9), fg=FG_TEXT, bg=BG_DARK,
+            selectcolor=BG_CARD, activebackground=BG_DARK, activeforeground=FG_TEXT
+        ).pack(anchor="w", pady=2)
+
+        cloud_test_btn = tk.Button(
+            tab_cloud, text="☁ Bağlantıyı Test Et",
+            command=self._test_cloud_from_settings,
+            font=("Segoe UI", 9), fg=BG_DARK, bg=TEAL,
+            relief="flat", cursor="hand2", padx=10, pady=4, bd=0
+        )
+        cloud_test_btn.pack(anchor="w", pady=(12, 0))
+        _bind_hover(cloud_test_btn, TEAL, TEAL_H)
+
+        self._s_cloud_test_lbl = tk.Label(
+            tab_cloud, text="", font=("Segoe UI", 9), fg=FG_DIM, bg=BG_DARK
+        )
+        self._s_cloud_test_lbl.pack(anchor="w", pady=(4, 0))
+
+        tk.Label(tab_cloud,
+                 text="Yedek listesinde ☁ butonuna tıklayarak seçili yedeği buluta yükleyebilirsiniz.",
+                 font=("Segoe UI", 8), fg=FG_DIM, bg=BG_DARK, wraplength=440, justify="left"
+                 ).pack(anchor="w", pady=(8, 0))
+
         # ── Alt bar: durum + kaydet ───────────────────────────────────────────
         bot = tk.Frame(win, bg=BG_DARK)
         bot.pack(fill="x", padx=20, pady=(0, 14))
@@ -1829,6 +1896,13 @@ class MertUpdater(tk.Tk):
         self._s_ssh_pass.set(c.get("ssh_pass"))
         self._s_ssh_key.set(c.get("ssh_key_path"))
         self._s_ssh_remote.set(c.get("ssh_remote_path"))
+        self._s_cloud_type.set(c.get("cloud_type") or "r2")
+        self._s_cloud_endpoint.set(c.get("cloud_endpoint"))
+        self._s_cloud_bucket.set(c.get("cloud_bucket"))
+        self._s_cloud_access.set(c.get("cloud_access_key"))
+        self._s_cloud_secret.set(c.get("cloud_secret_key"))
+        self._s_cloud_prefix.set(c.get("cloud_prefix") or "mert4-backups/")
+        self._s_cloud_auto.set(c.get_bool("cloud_auto_on_backup"))
 
     def _save_all_settings(self):
         """Tüm sekme değerlerini config'e kaydeder."""
@@ -1850,6 +1924,13 @@ class MertUpdater(tk.Tk):
         c.set("ssh_pass",              self._s_ssh_pass.get().strip())
         c.set("ssh_key_path",          self._s_ssh_key.get().strip())
         c.set("ssh_remote_path",       self._s_ssh_remote.get().strip())
+        c.set("cloud_type",            self._s_cloud_type.get().strip())
+        c.set("cloud_endpoint",        self._s_cloud_endpoint.get().strip())
+        c.set("cloud_bucket",          self._s_cloud_bucket.get().strip())
+        c.set("cloud_access_key",      self._s_cloud_access.get().strip())
+        c.set("cloud_secret_key",      self._s_cloud_secret.get().strip())
+        c.set("cloud_prefix",          self._s_cloud_prefix.get().strip())
+        c.set("cloud_auto_on_backup",  self._s_cloud_auto.get())
         c.save()
 
         # .env.local'a CouchDB ayarlarını da yaz
@@ -2501,6 +2582,26 @@ class MertUpdater(tk.Tk):
                     inner, text="🐳",
                     font=("Segoe UI", 8), fg=ACCENT, bg=row_bg
                 ).pack(side="left", padx=(4, 0))
+
+            # SFTP (SSH) yükle butonu
+            sftp_btn = tk.Button(
+                inner, text="📡",
+                command=lambda bid=b["id"]: self._do_sftp_backup(bid),
+                font=("Segoe UI", 9), fg=TEAL, bg=row_bg,
+                relief="flat", cursor="hand2", bd=0, padx=4, pady=1
+            )
+            sftp_btn.pack(side="right", padx=(2, 0))
+            _bind_hover(sftp_btn, row_bg, BG_INPUT)
+
+            # Bulut (S3/R2) yükle butonu
+            cloud_btn = tk.Button(
+                inner, text="☁",
+                command=lambda bid=b["id"]: self._do_cloud_upload(bid),
+                font=("Segoe UI", 9), fg=ACCENT, bg=row_bg,
+                relief="flat", cursor="hand2", bd=0, padx=4, pady=1
+            )
+            cloud_btn.pack(side="right", padx=(2, 0))
+            _bind_hover(cloud_btn, row_bg, BG_INPUT)
 
             # Geri Yükle butonu
             restore_btn = tk.Button(
@@ -3694,6 +3795,326 @@ class MertUpdater(tk.Tk):
         self._backup_mgr.delete(backup_id)
         self._refresh_backups()
         self._log(f"Yedek silindi: {backup_id}", "dim")
+
+    # ─── Bulut Yedek (S3 / R2 / MinIO) ─────────────────────────────────────
+
+    def _cloud_cfg(self) -> dict:
+        c = self._cfg_mgr
+        return {
+            "type":       c.get("cloud_type") or "r2",
+            "endpoint":   c.get("cloud_endpoint").rstrip("/"),
+            "bucket":     c.get("cloud_bucket"),
+            "access_key": c.get("cloud_access_key"),
+            "secret_key": c.get("cloud_secret_key"),
+            "prefix":     c.get("cloud_prefix").rstrip("/"),
+        }
+
+    def _s3_sign_v4(self, cfg: dict, method: str, key: str,
+                    payload: bytes, extra_headers: dict | None = None) -> dict:
+        """AWS Signature V4 — minimal PUT imzalayıcı (boto3/awscli bağımlılığı yok)."""
+        import hmac, hashlib, email.utils
+        region   = "auto"  # R2 için her zaman 'auto'
+        endpoint = cfg["endpoint"] or f"https://s3.amazonaws.com"
+        host     = endpoint.split("//", 1)[-1].split("/")[0]
+        service  = "s3"
+        now      = datetime.datetime.utcnow()
+        amzdate  = now.strftime("%Y%m%dT%H%M%SZ")
+        datestamp= now.strftime("%Y%m%d")
+        payload_hash = hashlib.sha256(payload).hexdigest()
+        headers = {
+            "host":                 host,
+            "x-amz-date":          amzdate,
+            "x-amz-content-sha256": payload_hash,
+            "content-type":        "application/octet-stream",
+        }
+        if extra_headers:
+            headers.update(extra_headers)
+        signed_headers = ";".join(sorted(headers.keys()))
+        canonical_headers = "".join(f"{k}:{v}\n" for k, v in sorted(headers.items()))
+        canonical_request = "\n".join([
+            method, f"/{key}", "",
+            canonical_headers, signed_headers, payload_hash
+        ])
+        credential_scope = f"{datestamp}/{region}/{service}/aws4_request"
+        string_to_sign = "\n".join([
+            "AWS4-HMAC-SHA256", amzdate, credential_scope,
+            hashlib.sha256(canonical_request.encode()).hexdigest()
+        ])
+        def _sign(key_bytes, msg):
+            return hmac.new(key_bytes, msg.encode(), hashlib.sha256).digest()
+        signing_key = _sign(
+            _sign(_sign(_sign(
+                f"AWS4{cfg['secret_key']}".encode(), datestamp),
+                region), service), "aws4_request"
+        )
+        signature = hmac.new(signing_key, string_to_sign.encode(), hashlib.sha256).hexdigest()
+        auth = (f"AWS4-HMAC-SHA256 Credential={cfg['access_key']}/{credential_scope}, "
+                f"SignedHeaders={signed_headers}, Signature={signature}")
+        result = dict(headers)
+        result["authorization"] = auth
+        return result
+
+    def _do_cloud_upload(self, backup_id: str):
+        """Yedeği bulut depolama alanına yükler (S3/R2/MinIO)."""
+        if self._running:
+            messagebox.showwarning("Bekle", "Başka bir işlem devam ediyor!")
+            return
+        cfg = self._cloud_cfg()
+        if not cfg["bucket"]:
+            messagebox.showerror("Bulut Ayarı Eksik",
+                                 "Ayarlar → ☁ Bulut Yedek sekmesinde bucket adı girilmemiş.")
+            return
+
+        backups = self._backup_mgr.list()
+        entry   = next((b for b in backups if b["id"] == backup_id), None)
+        if not entry:
+            messagebox.showerror("Hata", "Yedek bulunamadı.")
+            return
+
+        def _task():
+            self._start_task()
+            self.after(0, self._log, f"☁ Bulut yükleme başladı → {backup_id}", "info")
+
+            # Yüklenecek dosyaları topla
+            files_to_upload = []
+            meta_path = os.path.join(BACKUP_DIR, f"{backup_id}.meta.json")
+            if os.path.exists(meta_path):
+                files_to_upload.append(meta_path)
+            docker_path = entry.get("docker_file")
+            if docker_path and os.path.exists(docker_path):
+                files_to_upload.append(docker_path)
+
+            if not files_to_upload:
+                self.after(0, self._log, "Yüklenecek dosya bulunamadı (sadece git hash yedeği).", "warn")
+                self._end_task("Bulut Yükleme")
+                return
+
+            # Önce aws CLI ile dene, sonra rclone, sonra urllib S3 v4
+            prefix = cfg["prefix"] or "mert4-backups"
+            ok = False
+
+            if not ok and shutil.which("aws"):
+                ok = self._cloud_upload_aws_cli(cfg, files_to_upload, prefix)
+            if not ok and shutil.which("rclone"):
+                ok = self._cloud_upload_rclone(cfg, files_to_upload, prefix)
+            if not ok:
+                ok = self._cloud_upload_urllib(cfg, files_to_upload, prefix)
+
+            if ok:
+                self.after(0, self._log, f"☁ Yükleme tamamlandı → {prefix}/{backup_id}", "success")
+            else:
+                self.after(0, self._log, "☁ Yükleme başarısız! Ayarları kontrol edin.", "error")
+
+            self._end_task("Bulut Yükleme")
+
+        self._threaded(_task)
+
+    def _cloud_upload_aws_cli(self, cfg: dict, files: list, prefix: str) -> bool:
+        env = os.environ.copy()
+        env["AWS_ACCESS_KEY_ID"]     = cfg["access_key"]
+        env["AWS_SECRET_ACCESS_KEY"] = cfg["secret_key"]
+        env["AWS_DEFAULT_REGION"]    = "auto"
+        ok_all = True
+        for fp in files:
+            fname = os.path.basename(fp)
+            s3_url = f"s3://{cfg['bucket']}/{prefix}/{fname}"
+            cmd = ["aws", "s3", "cp", fp, s3_url]
+            if cfg["endpoint"]:
+                cmd += ["--endpoint-url", cfg["endpoint"]]
+            try:
+                r = subprocess.run(cmd, capture_output=True, text=True,
+                                   env=env, timeout=120)
+                if r.returncode != 0:
+                    ok_all = False
+                    self.after(0, self._log, f"aws CLI hata: {r.stderr.strip()[:120]}", "error")
+                else:
+                    self.after(0, self._log, f"  ✓ {fname}", "dim")
+            except Exception as exc:
+                ok_all = False
+                self.after(0, self._log, f"aws CLI exception: {exc}", "error")
+        return ok_all
+
+    def _cloud_upload_rclone(self, cfg: dict, files: list, prefix: str) -> bool:
+        # rclone ile geçici config — gerçek config dosyasını bozmaz
+        rclone_cfg_content = (
+            "[mert4_cloud]\n"
+            "type = s3\n"
+            f"provider = {'Cloudflare' if cfg['type'] == 'r2' else 'AWS'}\n"
+            f"access_key_id = {cfg['access_key']}\n"
+            f"secret_access_key = {cfg['secret_key']}\n"
+            f"endpoint = {cfg['endpoint']}\n"
+            "acl = private\n"
+        )
+        import tempfile
+        with tempfile.NamedTemporaryFile("w", suffix=".conf", delete=False) as tf:
+            tf.write(rclone_cfg_content)
+            cfg_path = tf.name
+
+        ok_all = True
+        try:
+            for fp in files:
+                fname  = os.path.basename(fp)
+                dest   = f"mert4_cloud:{cfg['bucket']}/{prefix}/{fname}"
+                r = subprocess.run(
+                    ["rclone", "--config", cfg_path, "copyto", fp, dest],
+                    capture_output=True, text=True, timeout=120
+                )
+                if r.returncode != 0:
+                    ok_all = False
+                    self.after(0, self._log, f"rclone hata: {r.stderr.strip()[:120]}", "error")
+                else:
+                    self.after(0, self._log, f"  ✓ {fname} (rclone)", "dim")
+        finally:
+            try:
+                os.unlink(cfg_path)
+            except Exception:
+                pass
+        return ok_all
+
+    def _cloud_upload_urllib(self, cfg: dict, files: list, prefix: str) -> bool:
+        """AWS Sig V4 ile direkt urllib PUT — aws/rclone gerektirmez."""
+        ok_all = True
+        for fp in files:
+            fname = os.path.basename(fp)
+            key   = f"{prefix}/{fname}"
+            try:
+                with open(fp, "rb") as fh:
+                    payload = fh.read()
+                hdrs = self._s3_sign_v4(cfg, "PUT", key, payload)
+                endpoint = cfg["endpoint"] or "https://s3.amazonaws.com"
+                url = f"{endpoint}/{cfg['bucket']}/{key}"
+                req = urllib.request.Request(url, data=payload, method="PUT",
+                                             headers={k.replace("-", "_"): v
+                                                      for k, v in hdrs.items()})
+                with urllib.request.urlopen(req, timeout=120):
+                    pass
+                self.after(0, self._log, f"  ✓ {fname} (urllib)", "dim")
+            except Exception as exc:
+                ok_all = False
+                self.after(0, self._log, f"urllib PUT hata: {exc}", "error")
+        return ok_all
+
+    def _test_cloud_from_settings(self):
+        """Ayarlar penceresinden bulut bağlantı testi."""
+        endpoint = self._s_cloud_endpoint.get().strip()
+        bucket   = self._s_cloud_bucket.get().strip()
+        access   = self._s_cloud_access.get().strip()
+        secret   = self._s_cloud_secret.get().strip()
+        if not (bucket and access and secret):
+            self._s_cloud_test_lbl.configure(
+                text="⚠ Bucket, Access Key ve Secret Key zorunlu!", fg=WARNING)
+            return
+
+        self._s_cloud_test_lbl.configure(text="Test ediliyor...", fg=FG_DIM)
+
+        def _run():
+            cfg = {
+                "type":       self._s_cloud_type.get(),
+                "endpoint":   endpoint.rstrip("/"),
+                "bucket":     bucket,
+                "access_key": access,
+                "secret_key": secret,
+                "prefix":     self._s_cloud_prefix.get().strip().rstrip("/") or "mert4-backups",
+            }
+            # Küçük test nesnesi yükle
+            test_key = f"{cfg['prefix']}/.mert4_test"
+            payload  = b"mert4-cloud-test"
+            try:
+                hdrs = self._s3_sign_v4(cfg, "PUT", test_key, payload)
+                ep   = cfg["endpoint"] or "https://s3.amazonaws.com"
+                url  = f"{ep}/{bucket}/{test_key}"
+                req  = urllib.request.Request(url, data=payload, method="PUT",
+                                              headers={k: v for k, v in hdrs.items()})
+                with urllib.request.urlopen(req, timeout=15):
+                    pass
+                self.after(0, self._s_cloud_test_lbl.configure,
+                           {"text": "✓ Bağlantı başarılı!", "fg": SUCCESS})
+            except Exception as exc:
+                self.after(0, self._s_cloud_test_lbl.configure,
+                           {"text": f"✗ Hata: {str(exc)[:80]}", "fg": ERROR})
+
+        threading.Thread(target=_run, daemon=True).start()
+
+    # ─── SFTP / SCP yedek yükleme ───────────────────────────────────────────
+
+    def _do_sftp_backup(self, backup_id: str):
+        """Yedeği SSH/SCP ile uzak sunucuya kopyalar."""
+        if self._running:
+            messagebox.showwarning("Bekle", "Başka bir işlem devam ediyor!")
+            return
+
+        backups  = self._backup_mgr.list()
+        entry    = next((b for b in backups if b["id"] == backup_id), None)
+        if not entry:
+            messagebox.showerror("Hata", "Yedek bulunamadı.")
+            return
+
+        cfg = self._ssh_cfg()
+        if not cfg["host"]:
+            messagebox.showerror("SSH Ayarı Eksik",
+                                 "Ayarlar → SSH sekmesinde Host girilmemiş.")
+            return
+
+        def _task():
+            self._start_task()
+            self.after(0, self._log, f"📡 SFTP yükleme başladı → {backup_id}", "info")
+
+            remote_dir = (cfg["remote_path"] or "/tmp").rstrip("/") + f"/backups/{backup_id}"
+            scp_prefix = self._rsync_prefix()  # rsync prefix == scp auth args prefix
+
+            files_to_upload = []
+            meta_path = os.path.join(BACKUP_DIR, f"{backup_id}.meta.json")
+            if os.path.exists(meta_path):
+                files_to_upload.append(meta_path)
+            docker_path = entry.get("docker_file")
+            if docker_path and os.path.exists(docker_path):
+                files_to_upload.append(docker_path)
+
+            if not files_to_upload:
+                self.after(0, self._log, "Yüklenecek dosya yok (sadece git hash yedeği).", "warn")
+                self._end_task("SFTP Yükleme")
+                return
+
+            # Uzak dizin oluştur
+            mk_ok, _ = self._run_cmd(
+                f"{self._ssh_prefix()} {cfg['user']}@{cfg['host']} "
+                f"'mkdir -p {remote_dir}'",
+                f"Uzak dizin oluşturuluyor: {remote_dir}"
+            )
+            if not mk_ok:
+                self.after(0, self._log, "Uzak dizin oluşturulamadı.", "error")
+                self._end_task("SFTP Yükleme")
+                return
+
+            ok_all = True
+            for fp in files_to_upload:
+                fname = os.path.basename(fp)
+                dest  = (f"{cfg['user']}@{cfg['host']}:{remote_dir}/{fname}")
+                port  = cfg.get("port") or "22"
+                scp_cmd = " ".join(filter(None, [
+                    "sshpass", f"-p '{cfg['pass']}'" if cfg.get("pass") else "",
+                    "scp",
+                    f"-P {port}",
+                    f"-i {cfg['key_path']}" if cfg.get("key_path") else "",
+                    "-o StrictHostKeyChecking=no",
+                    fp, dest
+                ]))
+                if not cfg.get("pass"):
+                    # password-less, drop sshpass
+                    scp_cmd = scp_cmd.replace("sshpass  scp", "scp")
+                ok, _ = self._run_cmd(scp_cmd, f"  ↑ {fname}")
+                if not ok:
+                    ok_all = False
+
+            if ok_all:
+                self.after(0, self._log,
+                           f"📡 SFTP yükleme tamamlandı → {remote_dir}", "success")
+            else:
+                self.after(0, self._log, "📡 SFTP yükleme başarısız.", "error")
+
+            self._end_task("SFTP Yükleme")
+
+        self._threaded(_task)
 
     def _do_full_update(self):
         if not self._check_uncommitted():
