@@ -1561,6 +1561,34 @@ class MertUpdater(tk.Tk):
         self._timeline_canvas.bind("<Configure>", lambda e: self._draw_timeline())
         self.after(1200, self._draw_timeline)
 
+        # ── İşlem Pipeline Göstergesi (gizli, işlem başlayınca görünür) ──────
+        self._pipeline_frame = tk.Frame(self, bg=BG_CARD,
+                                        highlightbackground=BORDER,
+                                        highlightthickness=1)
+        # Başlangıçta pack edilmez — _pipeline_start tetiklediğinde gösterilir
+
+        pipe_inner = tk.Frame(self._pipeline_frame, bg=BG_CARD)
+        pipe_inner.pack(fill="x", padx=8, pady=4)
+
+        pipe_title = tk.Frame(pipe_inner, bg=BG_CARD)
+        pipe_title.pack(fill="x", pady=(0, 2))
+        tk.Label(pipe_title, text="İşlem Adımları",
+                 font=("Segoe UI", 8, "bold"), fg=FG_DIM, bg=BG_CARD).pack(side="left")
+        self._pipe_elapsed_lbl = tk.Label(pipe_title, text="",
+                                          font=("Segoe UI", 8), fg=FG_DIM, bg=BG_CARD)
+        self._pipe_elapsed_lbl.pack(side="right")
+
+        self._pipe_canvas = tk.Canvas(pipe_inner, height=62, bg=BG_CARD,
+                                      highlightthickness=0, bd=0)
+        self._pipe_canvas.pack(fill="x")
+        self._pipe_canvas.bind("<Configure>", lambda e: self._draw_pipeline_canvas())
+
+        # Pipeline iç durumu
+        self._pipe_steps:    list  = []
+        self._pip_phase:     int   = 0
+        self._pip_after:     str | None = None
+        self._pipe_start_t:  float = 0.0
+
         # ── Konsol başlık satırı ──────────────────────────────────────────────
         self._console_frame = tk.Frame(self, bg=BG_DARK)
         con_bar = self._console_frame
@@ -2360,6 +2388,132 @@ class MertUpdater(tk.Tk):
             pass
         return True
 
+    # ─── İşlem Pipeline Göstergesi ──────────────────────────────────────────
+
+    def _pipeline_start(self, steps: list):
+        """Pipeline panelini göster ve ilk adımı aktif et."""
+        self._pipe_steps   = [{"label": s, "status": "pending"} for s in steps]
+        if self._pipe_steps:
+            self._pipe_steps[0]["status"] = "active"
+        self._pipe_start_t = time.monotonic()
+        self._pip_phase    = 0
+        self._pipe_elapsed_lbl.configure(text="⏱  0s", fg=FG_DIM)
+        # Paneli konsol çerçevesinin hemen üstüne yerleştir
+        self._pipeline_frame.pack(fill="x", padx=20, pady=(4, 0),
+                                  before=self._console_frame)
+        self.after(30, self._draw_pipeline_canvas)
+        self._animate_pipeline()
+
+    def _pipeline_advance(self, success: bool = True):
+        """Aktif adımı bitir, sonraki adımı aktive et."""
+        for i, s in enumerate(self._pipe_steps):
+            if s["status"] == "active":
+                s["status"] = "done" if success else "error"
+                if i + 1 < len(self._pipe_steps):
+                    self._pipe_steps[i + 1]["status"] = "active"
+                break
+        self._draw_pipeline_canvas()
+
+    def _pipeline_finish(self, success: bool = True):
+        """Tüm adımları tamamla, animasyonu durdur, 8s sonra gizle."""
+        for s in self._pipe_steps:
+            if s["status"] in ("active", "pending"):
+                s["status"] = "done" if success else "error"
+        if self._pip_after:
+            try:
+                self.after_cancel(self._pip_after)
+            except Exception:
+                pass
+            self._pip_after = None
+        self._pip_phase = 0
+        self._draw_pipeline_canvas()
+        elapsed = time.monotonic() - self._pipe_start_t
+        icon  = "✓" if success else "✗"
+        color = SUCCESS if success else ERROR
+        self._pipe_elapsed_lbl.configure(
+            text=f"{icon}  {elapsed:.0f}s tamamlandı", fg=color)
+        self.after(8000, self._hide_pipeline)
+
+    def _hide_pipeline(self):
+        self._pipeline_frame.pack_forget()
+
+    def _draw_pipeline_canvas(self):
+        """Pipeline Canvas'ı mevcut adım durumuna göre yeniden çizer."""
+        c = self._pipe_canvas
+        c.delete("all")
+        steps = self._pipe_steps
+        if not steps:
+            return
+
+        W = c.winfo_width() or 400
+        H = c.winfo_height() or 62
+        n = len(steps)
+        step_w = W / n
+        cy = 26   # daire merkezi y
+        R  = 13   # temel yarıçap
+
+        # Aktif adım için salınan yarıçap
+        anim_r = R + int(2 * math.sin(self._pip_phase * math.pi / 4))
+
+        # Adım merkez x koordinatları
+        cxs = [int(step_w * i + step_w / 2) for i in range(n)]
+
+        # Bağlantı çizgileri
+        for i in range(n - 1):
+            x1 = cxs[i] + R + 2
+            x2 = cxs[i + 1] - R - 2
+            st = steps[i]["status"]
+            lc = SUCCESS if st == "done" else (ERROR if st == "error" else BORDER)
+            c.create_line(x1, cy, x2, cy, fill=lc, width=2)
+
+        status_fill = {"pending": BG_INPUT, "active": ACCENT,
+                       "done": SUCCESS, "error": ERROR}
+        status_fg   = {"pending": FG_DIM,  "active": BG_DARK,
+                       "done": BG_DARK,    "error": BG_DARK}
+        status_icon = {"pending": "", "active": "●", "done": "✓", "error": "✗"}
+        label_fg    = {"pending": FG_DIM, "active": ACCENT,
+                       "done": SUCCESS,   "error": ERROR}
+
+        for i, (step, cx) in enumerate(zip(steps, cxs)):
+            st   = step["status"]
+            fill = status_fill[st]
+            fg   = status_fg[st]
+            icon = status_icon[st]
+            r    = anim_r if st == "active" else R
+
+            # Aktif için dış halka
+            if st == "active":
+                hr = r + 5
+                c.create_oval(cx - hr, cy - hr, cx + hr, cy + hr,
+                              fill="", outline=ACCENT, width=1,
+                              dash=(4, 3))
+
+            # Ana daire
+            c.create_oval(cx - r, cy - r, cx + r, cy + r,
+                          fill=fill, outline="")
+
+            # İçerik: ikon ya da numara
+            display = icon if icon else str(i + 1)
+            c.create_text(cx, cy, text=display,
+                          fill=fg, font=("Segoe UI", 9, "bold"))
+
+            # Alt etiket
+            lfg = label_fg[st]
+            c.create_text(cx, cy + R + 12, text=step["label"],
+                          fill=lfg, font=("Segoe UI", 8))
+
+    def _animate_pipeline(self):
+        """200ms aralıklı animasyon döngüsü."""
+        self._pip_phase = (self._pip_phase + 1) % 8
+        if self._pipe_start_t > 0:
+            elapsed = time.monotonic() - self._pipe_start_t
+            self._pipe_elapsed_lbl.configure(text=f"⏱  {elapsed:.0f}s")
+        self._draw_pipeline_canvas()
+        if any(s["status"] == "active" for s in self._pipe_steps):
+            self._pip_after = self.after(200, self._animate_pipeline)
+
+    # ────────────────────────────────────────────────────────────────────────
+
     def _do_update(self):
         if not self._check_uncommitted():
             return
@@ -2368,24 +2522,34 @@ class MertUpdater(tk.Tk):
             self._start_task()
             self.after(0, self._clear_console)
             self.after(0, self._log, "━━━ Git Güncelleme ━━━", "info")
+            pipe_steps = ["Yedek", "Fetch", "Reset"]
+            if self.auto_var.get():
+                pipe_steps.append("Build")
+            self.after(0, self._pipeline_start, pipe_steps)
 
             self._capture_pre_hash()
             self._auto_backup_before_update(
                 include_docker=self.backup_docker_var.get()
             )
+            self.after(0, self._pipeline_advance)   # Yedek → done
 
             ok1, _ = self._run_cmd(
                 f"git fetch {REMOTE} {BRANCH}", "1/2 — Uzak depodan çekiliyor..."
             )
             if not ok1:
+                self.after(0, self._pipeline_advance, False)  # Fetch → error
+                self.after(0, self._pipeline_finish, False)
                 self.after(0, self._log, "Fetch başarısız! İşlem durdu.", "error")
                 self._end_task()
                 self._save_summary("Güncelleme", False, time.monotonic() - self._task_start)
                 return
+            self.after(0, self._pipeline_advance)   # Fetch → done
 
             ok2, _ = self._run_cmd(
                 f"git reset --hard {REMOTE}/{BRANCH}", "2/2 — Yerel kod güncelleniyor..."
             )
+            self.after(0, self._pipeline_advance, ok2)   # Reset → done/error
+
             if ok2:
                 self.after(0, self._log, "━━━ Güncelleme Tamamlandı! ━━━", "success")
                 if self._cfg_mgr.get_bool("telegram_on_build"):
@@ -2396,13 +2560,18 @@ class MertUpdater(tk.Tk):
                 if self.auto_var.get():
                     self.after(0, self._log, "Otomatik build başlatılıyor...", "info")
                     ok3 = self._build_inner()
+                    self.after(0, self._pipeline_advance, ok3)  # Build → done/error
+                    self.after(0, self._pipeline_finish, ok3)
                     if not ok3:
                         self.after(0, self._log, "Otomatik build başarısız!", "error")
                         if self._cfg_mgr.get_bool("telegram_on_error"):
                             threading.Thread(target=self._send_telegram,
                                 args=("❌ <b>MERT.4 Build Başarısız</b>\nOtomatik build hatalı!",),
                                 daemon=True).start()
+                else:
+                    self.after(0, self._pipeline_finish, True)
             else:
+                self.after(0, self._pipeline_finish, False)
                 self.after(0, self._log, "Reset başarısız!", "error")
                 if self._cfg_mgr.get_bool("telegram_on_error"):
                     threading.Thread(target=self._send_telegram,
@@ -2428,8 +2597,17 @@ class MertUpdater(tk.Tk):
             self._start_task()
             self.after(0, self._clear_console)
             self.after(0, self._log, "━━━ Docker Build ━━━", "info")
+            self.after(0, self._pipeline_start, ["Docker Down", "Build & Başlat"])
             self._capture_pre_hash()
-            ok = self._build_inner()
+            # Docker down step
+            self._run_cmd(f"{self._compose_cmd} down", "Eski container durduruluyor...")
+            self.after(0, self._pipeline_advance)   # Down → done
+            # Build step
+            ok, _ = self._run_cmd(
+                f"{self._compose_cmd} up --build -d", "Build ediliyor ve başlatılıyor..."
+            )
+            self.after(0, self._pipeline_advance, ok)   # Build → done/error
+            self.after(0, self._pipeline_finish, ok)
             elapsed = time.monotonic() - self._task_start
             self._save_summary("Build & Başlat", ok, elapsed)
             if ok:
@@ -4124,32 +4302,42 @@ class MertUpdater(tk.Tk):
             self._start_task()
             self.after(0, self._clear_console)
             self.after(0, self._log, "⚡━━━ Tam Güncelleme ━━━⚡", "info")
+            self.after(0, self._pipeline_start, ["Yedek", "Fetch", "Reset", "Build"])
 
             self._capture_pre_hash()
             self._auto_backup_before_update(
                 include_docker=self.backup_docker_var.get()
             )
+            self.after(0, self._pipeline_advance)   # Yedek → done
 
             ok1, _ = self._run_cmd(
                 f"git fetch {REMOTE} {BRANCH}", "1/3 — Uzak depodan çekiliyor..."
             )
             if not ok1:
+                self.after(0, self._pipeline_advance, False)  # Fetch → error
+                self.after(0, self._pipeline_finish, False)
                 self.after(0, self._log, "Fetch başarısız! Duruyorum.", "error")
                 self._save_summary("Tam Güncelleme", False, time.monotonic() - self._task_start)
                 self._end_task("Tam Güncelleme")
                 return
+            self.after(0, self._pipeline_advance)   # Fetch → done
 
             ok2, _ = self._run_cmd(
                 f"git reset --hard {REMOTE}/{BRANCH}", "2/3 — Yerel kod güncelleniyor..."
             )
             if not ok2:
+                self.after(0, self._pipeline_advance, False)  # Reset → error
+                self.after(0, self._pipeline_finish, False)
                 self.after(0, self._log, "Reset başarısız! Duruyorum.", "error")
                 self._save_summary("Tam Güncelleme", False, time.monotonic() - self._task_start)
                 self._end_task("Tam Güncelleme")
                 return
+            self.after(0, self._pipeline_advance)   # Reset → done
 
             self.after(0, self._log, "3/3 — Docker build & başlat...", "info")
             ok3 = self._build_inner()
+            self.after(0, self._pipeline_advance, ok3)  # Build → done/error
+            self.after(0, self._pipeline_finish, ok3)
             elapsed = time.monotonic() - self._task_start
             self._save_summary("Tam Güncelleme", ok3, elapsed)
 
