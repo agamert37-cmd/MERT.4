@@ -2544,7 +2544,7 @@ export function FisHistoryPage() {
                             const isIade = item.type === 'iade';
                             return (
                               <motion.tr
-                                key={i}
+                                key={item.id || item.productName || i}
                                 initial={{ opacity: 0 }}
                                 animate={{ opacity: 1 }}
                                 transition={{ delay: i * 0.03 }}
@@ -2577,7 +2577,7 @@ export function FisHistoryPage() {
                           const itemTotal = item.totalPrice || (itemQuantity * itemPrice);
                           const isIade = item.type === 'iade';
                           return (
-                            <div key={i} className={`px-3 py-2.5 ${isIade ? 'bg-red-900/5' : ''}`}>
+                            <div key={item.id || item.productName || i} className={`px-3 py-2.5 ${isIade ? 'bg-red-900/5' : ''}`}>
                               <div className="flex items-center justify-between mb-1">
                                 <div className="flex items-center gap-2 min-w-0">
                                   <span className={`px-1.5 py-0.5 text-[9px] font-bold rounded flex-shrink-0 ${isIade ? 'bg-orange-600/20 text-orange-400' : item.type === 'alis' ? 'bg-blue-600/20 text-blue-400' : 'bg-emerald-600/20 text-emerald-400'}`}>
