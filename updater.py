@@ -21,7 +21,7 @@ import urllib.request
 # ─── Ayarlar ────────────────────────────────────────────────────────────────
 REPO_DIR              = os.path.dirname(os.path.abspath(__file__))
 REMOTE                = "origin"
-BRANCH                = "main"
+BRANCH                = "claude/multi-db-sync-setup-3DmYn"
 APP_URL               = "http://localhost:8080"
 STATUS_REFRESH_MS     = 30_000   # 30 saniye
 CONSOLE_MAX_LINES     = 1_200    # bu limitin üstünde eski satırlar silinir
@@ -759,6 +759,17 @@ class MertUpdater(tk.Tk):
         )
         self.couch_lbl.pack(side="left", padx=(3, 0))
 
+        # İzleme yığını sağlık göstergesi
+        self.grafana_dot = tk.Label(
+            sinner, text="●", font=("Segoe UI", 11), fg=FG_DIM, bg=BG_CARD
+        )
+        self.grafana_dot.pack(side="left", padx=(12, 0))
+        self.grafana_lbl = tk.Label(
+            sinner, text="İzleme kapalı",
+            font=("Segoe UI", 9), fg=FG_DIM, bg=BG_CARD
+        )
+        self.grafana_lbl.pack(side="left", padx=(3, 0))
+
         # Sağ taraf: commit bilgisi + "behind" badge + aç butonu
         right = tk.Frame(sinner, bg=BG_CARD)
         right.pack(side="right")
@@ -1123,6 +1134,69 @@ class MertUpdater(tk.Tk):
 
         # Mevcut ayarları yükle
         self._load_couchdb_config_ui()
+
+        # ── İzleme Yığını Paneli ──────────────────────────────────────────────
+        mon_bar = tk.Frame(self, bg=BG_DARK)
+        mon_bar.pack(fill="x", padx=20, pady=(10, 0))
+
+        self._mon_open = tk.BooleanVar(value=True)
+        mon_bar_left = tk.Frame(mon_bar, bg=BG_DARK)
+        mon_bar_left.pack(side="left")
+        tk.Label(
+            mon_bar_left, text="İzleme Yığını",
+            font=("Segoe UI", 9, "bold"), fg=FG_DIM, bg=BG_DARK
+        ).pack(side="left")
+        self._mon_toggle_lbl = tk.Label(
+            mon_bar_left, text="▲", font=("Segoe UI", 8), fg=FG_DIM, bg=BG_DARK,
+            cursor="hand2"
+        )
+        self._mon_toggle_lbl.pack(side="left", padx=(4, 0))
+        self._mon_toggle_lbl.bind("<Button-1>", self._toggle_monitoring_panel)
+
+        tk.Label(
+            mon_bar, text="Grafana :3000  •  Prometheus :9090  •  CouchDB Exp :9984",
+            font=("Segoe UI", 8), fg=FG_DIM, bg=BG_DARK
+        ).pack(side="right")
+
+        self._mon_frame = tk.Frame(self, bg=BG_CARD,
+                                   highlightbackground=BORDER, highlightthickness=1)
+        self._mon_frame.pack(fill="x", padx=20, pady=(3, 0))
+
+        mon_inner = tk.Frame(self._mon_frame, bg=BG_CARD)
+        mon_inner.pack(fill="x", padx=14, pady=10)
+
+        # Durum noktaları
+        status_row = tk.Frame(mon_inner, bg=BG_CARD)
+        status_row.pack(fill="x", anchor="w")
+
+        for attr, label in [("_mon_grafana_dot", "Grafana"),
+                             ("_mon_prom_dot", "Prometheus"),
+                             ("_mon_exp_dot", "CouchDB Exp")]:
+            dot = tk.Label(status_row, text="●", font=("Segoe UI", 11), fg=FG_DIM, bg=BG_CARD)
+            dot.pack(side="left")
+            setattr(self, attr, dot)
+            tk.Label(status_row, text=label, font=("Segoe UI", 9),
+                     fg=FG_DIM, bg=BG_CARD).pack(side="left", padx=(3, 14))
+
+        # Aksiyon butonları
+        btn_row = tk.Frame(mon_inner, bg=BG_CARD)
+        btn_row.pack(fill="x", anchor="w", pady=(8, 0))
+
+        mon_buttons = [
+            ("▶  Başlat",       self._do_monitoring_start, SUCCESS,  SUCCESS_H),
+            ("■  Durdur",       self._do_monitoring_stop,  ERROR,    ERROR_H),
+            ("📊 Grafana Aç",   self._do_open_grafana,     ACCENT,   ACCENT_H),
+            ("📋 Loglar",       self._do_monitoring_logs,  FG_DIM,   NEUTRAL_H),
+        ]
+        for i, (text, cmd, color, hover) in enumerate(mon_buttons):
+            btn = tk.Button(
+                btn_row, text=text, command=cmd,
+                font=("Segoe UI", 9, "bold"),
+                fg=BG_DARK, bg=color, activebackground=hover,
+                relief="flat", cursor="hand2", padx=10, pady=5, bd=0
+            )
+            btn.pack(side="left", padx=(0 if i == 0 else 6, 0))
+            _bind_hover(btn, color, hover)
 
         # ── Güncelleme Özeti Paneli ───────────────────────────────────────────
         sbar = tk.Frame(self, bg=BG_DARK)
@@ -1561,6 +1635,38 @@ class MertUpdater(tk.Tk):
                     cwd=REPO_DIR, capture_output=True, text=True
                 )
                 couch_ds = r4.stdout.strip()
+
+                # İzleme container'ları
+                r5 = subprocess.run(
+                    ["docker", "ps", "--filter", "name=mert-grafana", "--format", "{{.Status}}"],
+                    cwd=REPO_DIR, capture_output=True, text=True
+                )
+                r6 = subprocess.run(
+                    ["docker", "ps", "--filter", "name=mert-prometheus", "--format", "{{.Status}}"],
+                    cwd=REPO_DIR, capture_output=True, text=True
+                )
+                r7 = subprocess.run(
+                    ["docker", "ps", "--filter", "name=mert-couchdb-exporter", "--format", "{{.Status}}"],
+                    cwd=REPO_DIR, capture_output=True, text=True
+                )
+                grafana_up = r5.stdout.strip() and "Up" in r5.stdout
+                prom_up    = r6.stdout.strip() and "Up" in r6.stdout
+                exp_up     = r7.stdout.strip() and "Up" in r7.stdout
+
+                mon_color  = SUCCESS if grafana_up else FG_DIM
+                prom_color = SUCCESS if prom_up    else FG_DIM
+                exp_color  = SUCCESS if exp_up     else FG_DIM
+                if grafana_up:
+                    self.after(0, lambda: self.grafana_dot.configure(fg=SUCCESS))
+                    self.after(0, lambda: self.grafana_lbl.configure(
+                        text="Grafana ✓", fg=SUCCESS))
+                else:
+                    self.after(0, lambda: self.grafana_dot.configure(fg=FG_DIM))
+                    self.after(0, lambda: self.grafana_lbl.configure(
+                        text="İzleme kapalı", fg=FG_DIM))
+                self.after(0, lambda c=mon_color:  self._mon_grafana_dot.configure(fg=c))
+                self.after(0, lambda c=prom_color: self._mon_prom_dot.configure(fg=c))
+                self.after(0, lambda c=exp_color:  self._mon_exp_dot.configure(fg=c))
 
                 site_up = ds and "Up" in ds
                 couch_up = couch_ds and "Up" in couch_ds
@@ -2414,6 +2520,72 @@ class MertUpdater(tk.Tk):
                                     before=self._console_frame)
             self._graphs_open.set(True)
             self._graph_toggle_lbl.config(text="▲")
+
+    def _toggle_monitoring_panel(self, event=None):
+        """İzleme panelini aç/kapat."""
+        if self._mon_open.get():
+            self._mon_frame.pack_forget()
+            self._mon_open.set(False)
+            self._mon_toggle_lbl.config(text="▼")
+        else:
+            self._mon_frame.pack(fill="x", padx=20, pady=(3, 0),
+                                 before=self._summary_panel)
+            self._mon_open.set(True)
+            self._mon_toggle_lbl.config(text="▲")
+
+    # ─── İzleme Yığını Aksiyonları ───────────────────────────────────────────
+    def _do_monitoring_start(self):
+        def _task():
+            self._start_task()
+            self.after(0, self._clear_console)
+            self._log("▶ İzleme yığını başlatılıyor…", "info")
+            ok, _ = self._run_cmd(
+                f"{self._compose_cmd} --profile monitoring up -d",
+                "İzleme Başlatılıyor"
+            )
+            if ok:
+                self.after(0, self._log,
+                           "✓ Grafana :3000  •  Prometheus :9090  •  CouchDB Exp :9984",
+                           "success")
+            self._end_task("İzleme başlatıldı" if ok else "İzleme başlatma başarısız")
+        self._threaded(_task)
+
+    def _do_monitoring_stop(self):
+        def _task():
+            self._start_task()
+            self.after(0, self._clear_console)
+            self._log("■ İzleme servisleri durduruluyor…", "info")
+            ok, _ = self._run_cmd(
+                f"{self._compose_cmd} --profile monitoring stop "
+                "couchdb-exporter prometheus grafana",
+                "İzleme Durduruluyor"
+            )
+            self._end_task("İzleme durduruldu" if ok else "Durdurma başarısız")
+        self._threaded(_task)
+
+    def _do_open_grafana(self):
+        import socket
+        try:
+            host_ip = socket.gethostbyname(socket.gethostname())
+        except Exception:
+            host_ip = "localhost"
+        grafana_port = os.environ.get("GRAFANA_PORT", "3000")
+        url = f"http://{host_ip}:{grafana_port}"
+        self._log(f"📊 Grafana açılıyor: {url}", "info")
+        webbrowser.open(url)
+
+    def _do_monitoring_logs(self):
+        def _task():
+            self._start_task()
+            self.after(0, self._clear_console)
+            self._log("📋 İzleme logları (Ctrl+C ile durdur)…", "info")
+            self._run_cmd(
+                f"{self._compose_cmd} logs --tail=200 "
+                "couchdb-exporter prometheus grafana",
+                "İzleme Logları"
+            )
+            self._end_task("Loglar tamamlandı")
+        self._threaded(_task)
 
     def _redraw_history_charts(self):
         """Özet geçmişinden build süresi + kod değişikliği grafiklerini çizer."""

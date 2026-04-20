@@ -161,6 +161,29 @@ export function startAllSync(): void {
   }
 }
 
+// Mobilde önce sync edilecek kritik tablolar (satış, stok, müşteri, kasa)
+const MOBILE_PRIORITY_TABLES = [
+  'fisler', 'urunler', 'cari_hesaplar', 'kasa_islemleri', 'personeller',
+];
+
+/**
+ * Mobil optimizasyonlu sync: kritik tablolar hemen, geri kalanlar 2s sonra.
+ * Bant genişliği ve pil tasarrufu sağlar.
+ */
+export function startMobileSync(): void {
+  // Kritik tablolar — anında
+  MOBILE_PRIORITY_TABLES.forEach((table, i) => {
+    const timer = setTimeout(() => startSync(table), i * 150);
+    staggerTimers.push(timer);
+  });
+  // Diğer tablolar — 2 saniye sonra
+  const rest = [...TABLE_NAMES, KV_DB_NAME].filter(t => !MOBILE_PRIORITY_TABLES.includes(t));
+  rest.forEach((table, i) => {
+    const timer = setTimeout(() => startSync(table), 2000 + i * 300);
+    staggerTimers.push(timer);
+  });
+}
+
 /** Tüm sync'leri durdur */
 export function stopAllSync(): void {
   // Henüz başlamamış bekleyen zamanlayıcıları iptal et
@@ -175,6 +198,40 @@ export function stopAllSync(): void {
     sync.cancel();
   }
   peerSyncs.clear();
+}
+
+// ── DB Sıkıştırma ──────────────────────────────────────────────
+const COMPACT_KEY = 'mert4_last_compact';
+const COMPACT_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000; // 7 gün
+
+/**
+ * Tüm PouchDB veritabanlarını sıkıştır.
+ * Silinmiş belgeler ve eski revision'lar temizlenir, boyut küçülür.
+ * Son sıkıştırmadan 7 gün geçmediyse çalışmaz.
+ */
+export async function compactAllDbs(force = false): Promise<{ compacted: number; skipped: boolean }> {
+  if (!force) {
+    const last = localStorage.getItem(COMPACT_KEY);
+    if (last && Date.now() - Number(last) < COMPACT_INTERVAL_MS) {
+      return { compacted: 0, skipped: true };
+    }
+  }
+  const all = [...TABLE_NAMES, KV_DB_NAME];
+  let compacted = 0;
+  for (const t of all) {
+    try {
+      await getDb(t).compact();
+      compacted++;
+    } catch {}
+  }
+  localStorage.setItem(COMPACT_KEY, String(Date.now()));
+  return { compacted, skipped: false };
+}
+
+/** Son sıkıştırma tarihini döndürür */
+export function getLastCompactDate(): Date | null {
+  const val = localStorage.getItem(COMPACT_KEY);
+  return val ? new Date(Number(val)) : null;
 }
 
 /** Belirli tabloyu yeniden sync başlat */

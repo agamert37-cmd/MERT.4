@@ -65,5 +65,77 @@ services:
       couchdb:
         condition: service_healthy
 
+  # ─── İZLEME STEĞİ (opsiyonel) ────────────────────────────────────────────────
+  # Başlatmak için: docker-compose --profile monitoring up -d
+  # Grafana arayüzü: http://sunucu-ip:3000  (admin / mert2024)
+  # Prometheus:      http://sunucu-ip:9090
+
+  # CouchDB → Prometheus metrik köprüsü
+  couchdb-exporter:
+    image: gesellix/couchdb-prometheus-exporter:latest
+    container_name: mert-couchdb-exporter
+    restart: unless-stopped
+    profiles: ["monitoring"]
+    environment:
+      COUCHDB_URI: http://couchdb:5984
+      COUCHDB_USERNAME: ${COUCHDB_USER:-adm1n}
+      COUCHDB_PASSWORD: ${COUCHDB_PASSWORD:-135790}
+      # Hangi DB'leri izleyeceğini bildir (virgülle)
+      DATABASES: "mert_fisler,mert_urunler,mert_cari_hesaplar,mert_kasa_islemleri,mert_personeller,mert_bankalar,mert_cekler,mert_araclar,mert_arac_shifts,mert_arac_km_logs,mert_uretim_profilleri,mert_uretim_kayitlari,mert_faturalar,mert_fatura_stok,mert_tahsilatlar,mert_kv_store"
+    ports:
+      - "9984:9984"
+    depends_on:
+      couchdb:
+        condition: service_healthy
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: mert-prometheus
+    restart: unless-stopped
+    profiles: ["monitoring"]
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./monitoring/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.retention.time=30d"
+      - "--storage.tsdb.path=/prometheus"
+      - "--web.enable-lifecycle"
+      - "--log.level=warn"
+    depends_on:
+      - couchdb-exporter
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: mert-grafana
+    restart: unless-stopped
+    profiles: ["monitoring"]
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-mert2024}
+      GF_SERVER_ROOT_URL: "%(protocol)s://%(domain)s:%(http_port)s/"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/couchdb.json
+      # Grafana alerting — Telegram bildirimleri için .env dosyasına ekleyin:
+      # TELEGRAM_BOT_TOKEN=123456:ABC...
+      # TELEGRAM_CHAT_ID=-100123456
+      GF_UNIFIED_ALERTING_ENABLED: "true"
+      GF_ALERTING_ENABLED: "false"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    depends_on:
+      - prometheus
+
 volumes:
   couchdb_data:
+  prometheus_data:
+  grafana_data:
+

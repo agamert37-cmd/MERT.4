@@ -22,7 +22,7 @@ warn()    { echo -e "${YELLOW}[WARN]${NC}  $1"; }
 error()   { echo -e "${RED}[HATA]${NC}  $1"; exit 1; }
 
 # ─── Parametreler ────────────────────────────────────────────────────
-BRANCH="main"
+BRANCH="claude/multi-db-sync-setup-3DmYn"
 NO_CACHE=""
 GITHUB_REPO="https://github.com/agamert37-cmd/MERT.4.git"   # ← KENDİ REPO URL'İNİ GİR
 

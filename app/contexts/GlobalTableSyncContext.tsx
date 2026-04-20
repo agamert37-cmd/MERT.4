@@ -19,7 +19,10 @@ import { useTableSync } from '../hooks/useTableSync';
 import type { SyncState } from '../hooks/useTableSync';
 import { cariFromDb, cariToDb, productFromDb, productToDb } from '../lib/db-transforms';
 import { StorageKey } from '../utils/storage';
-import { startAllSync, stopAllSync, autoSeedIfEmpty, startCouchDbHealthMonitor, stopCouchDbHealthMonitor } from '../lib/pouchdb';
+import { startAllSync, startMobileSync, stopAllSync, startPeerSync, stopPeerSync, autoSeedIfEmpty, compactAllDbs, startCouchDbHealthMonitor, stopCouchDbHealthMonitor } from '../lib/pouchdb';
+import { replayWAL, walLoad } from '../lib/active-client';
+import { getCouchDbConfig } from '../lib/db-config';
+import { startAutoBackupScheduler, stopAutoBackupScheduler, getAutoBackupConfig } from '../lib/pouchdb-backup';
 import { toast } from 'sonner';
 
 // ─── Per-tablo sync durumu context ────────────────────────────────────────────
@@ -222,8 +225,24 @@ export function GlobalTableSyncProvider({ children }: GlobalTableSyncProviderPro
 
   // PouchDB ↔ CouchDB continuous sync başlat + peer sync + otomatik seed
   useEffect(() => {
-    startAllSync();
+    // iOS/Android'in IndexedDB'yi hafıza baskısında silmesini önle
+    if (navigator.storage?.persist) {
+      navigator.storage.persist().then(granted => {
+        if (!granted) console.warn('[Storage] Kalıcı depolama izni verilmedi — veri kaybolabilir');
+        else console.info('[Storage] Kalıcı depolama aktif');
+      });
+    }
+
+    // Mobilde kritik tablolar önce sync edilir
+    const isMobile = window.innerWidth < 768 || /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
+    if (isMobile) startMobileSync(); else startAllSync();
     startCouchDbHealthMonitor();
+    const cfg = getCouchDbConfig();
+    if (cfg.peerUrl) startPeerSync();
+
+    // Otomatik yedek zamanlaması
+    const autoCfg = getAutoBackupConfig();
+    if (autoCfg.enabled) startAutoBackupScheduler();
 
     const seedTimer = setTimeout(() => {
       autoSeedIfEmpty(
@@ -242,10 +261,33 @@ export function GlobalTableSyncProvider({ children }: GlobalTableSyncProviderPro
       );
     }, 1500);
 
+    // WAL replay — çökme/çevrimdışı dönemde birikmiş yazmaları PouchDB'ye uygula
+    const walTimer = setTimeout(async () => {
+      const pending = walLoad().length;
+      if (pending > 0) {
+        const { replayed, failed } = await replayWAL();
+        if (replayed > 0) {
+          console.info(`[WAL] ${replayed} kayıt yeniden uygulandı${failed > 0 ? `, ${failed} başarısız` : ''}`);
+        }
+      }
+    }, 5_000);
+
+    // Haftalık DB sıkıştırma — eski revision ve tombstone'ları temizler
+    const compactTimer = setTimeout(async () => {
+      const result = await compactAllDbs();
+      if (!result.skipped) {
+        console.info(`[DB] Sıkıştırma tamamlandı — ${result.compacted} tablo`);
+      }
+    }, 30_000); // 30 saniye gecikme — sync yerleştikten sonra
+
     return () => {
       stopAllSync();
       stopCouchDbHealthMonitor();
       clearTimeout(seedTimer);
+      clearTimeout(walTimer);
+      clearTimeout(compactTimer);
+      stopPeerSync();
+      stopAutoBackupScheduler();
     };
   }, []);
 

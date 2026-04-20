@@ -375,12 +375,21 @@ export function runIntegrityCheck(autoFix = true): IntegrityReport {
   const cariIds = new Set(fixedCari.map(c => c.id));
   const orphanedFisCari = fixedFis.filter(f => f.cari_id && !cariIds.has(f.cari_id));
   if (orphanedFisCari.length > 0) {
+    if (autoFix) {
+      // cari_id bağlantısını temizle — fiş kaybolmaz, sadece sahipsiz kalır
+      const orphanIds = new Set(orphanedFisCari.map(f => f.id));
+      const repairedFis = fixedFis.map(f =>
+        orphanIds.has(f.id) ? { ...f, cari_id: null, cari: null } : f
+      );
+      setInStorage(StorageKey.FISLER, repairedFis);
+      fixedFis = repairedFis;
+    }
     checks.push({
       table: 'fisler',
       issue: `${orphanedFisCari.length} fiş silinmiş cari hesaba referans veriyor`,
       severity: 'info',
-      fixed: false,
-      details: 'Otomatik düzeltme uygulanmadı — yalnızca bilgilendirme',
+      fixed: autoFix,
+      details: autoFix ? 'cari_id bağlantısı temizlendi' : 'Yalnızca bilgilendirme',
     });
   }
 

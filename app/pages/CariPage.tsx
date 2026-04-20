@@ -4,7 +4,7 @@ import {
   Plus, Search, Building2, User, Phone, TrendingUp, TrendingDown,
   Eye, Trash2, MapPin, Tag, Receipt, Mail, CreditCard, Edit2,
   X, ChevronDown, Check, Globe, LayoutGrid, List, Filter, BadgeCheck, Users,
-  Sparkles, ArrowRight, ShieldCheck, Store, Truck, CheckCircle2
+  Sparkles, ArrowRight, ShieldCheck, Store, Truck, CheckCircle2, History
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { staggerContainer, tableRow, gridCard, hover, tap } from '../utils/animations';
@@ -705,6 +705,16 @@ export function CariPage() {
   const [isRegionManagerOpen, setIsRegionManagerOpen] = useState(false);
   const [selectedCari, setSelectedCari] = useState<Cari | null>(null);
 
+  // Önceki Bakiye dialog state
+  const [isOncekiBakiyeOpen, setIsOncekiBakiyeOpen] = useState(false);
+  const [oncekiBakiyeCari, setOncekiBakiyeCari] = useState<Cari | null>(null);
+  const [oncekiBakiyeForm, setOncekiBakiyeForm] = useState({
+    amount: '',
+    type: 'debit' as 'debit' | 'credit',
+    description: 'Önceki Bakiye',
+    date: new Date().toISOString().split('T')[0],
+  });
+
   // Add form state
   const [formData, setFormData] = useState({
     type: 'Müşteri' as 'Müşteri' | 'Toptancı',
@@ -865,6 +875,40 @@ export function CariPage() {
     toast.success(`${newCari.type} ${t('cari.added')}: ${newCari.companyName}`);
     setIsAddModalOpen(false);
     resetForm();
+  };
+
+  const handleSaveOncekiBakiye = () => {
+    if (!oncekiBakiyeCari) return;
+    const amount = parseFloat(oncekiBakiyeForm.amount);
+    if (!amount || amount <= 0) { toast.error('Geçerli bir tutar girin.'); return; }
+
+    const tx: Transaction = {
+      id: crypto.randomUUID(),
+      date: new Date(oncekiBakiyeForm.date).toISOString(),
+      description: oncekiBakiyeForm.description.trim() || 'Önceki Bakiye',
+      amount,
+      type: oncekiBakiyeForm.type,
+      category: 'Önceki Bakiye',
+    };
+
+    const balanceDelta = oncekiBakiyeForm.type === 'debit' ? amount : -amount;
+    const updatedHistory = [...(oncekiBakiyeCari.transactionHistory || []), tx];
+
+    updateItem(oncekiBakiyeCari.id, {
+      balance: (oncekiBakiyeCari.balance || 0) + balanceDelta,
+      openingBalance: (oncekiBakiyeCari.openingBalance || 0) + balanceDelta,
+      transactionHistory: updatedHistory,
+    } as any);
+
+    logActivity('employee_update', 'Önceki Bakiye Girildi', {
+      employeeName: user?.name,
+      page: 'Cari',
+      description: `${oncekiBakiyeCari.companyName} için ₺${amount} önceki bakiye girildi (${oncekiBakiyeForm.type === 'debit' ? 'Alacak' : 'Borç'}).`,
+    });
+    toast.success(`Önceki bakiye kaydedildi: ₺${amount.toLocaleString('tr-TR')}`);
+    setIsOncekiBakiyeOpen(false);
+    setOncekiBakiyeCari(null);
+    setOncekiBakiyeForm({ amount: '', type: 'debit', description: 'Önceki Bakiye', date: new Date().toISOString().split('T')[0] });
   };
 
   const handleDeleteCari = async (id: string, name: string) => {
@@ -1171,14 +1215,29 @@ export function CariPage() {
                   </div>
                 </div>
 
-                {/* Detay Butonu */}
-                <button
-                  onClick={(e) => { e.stopPropagation(); navigate(`/cari/${cari.id}`); }}
-                  className="w-full mt-3 py-2 text-sm text-blue-400 hover:text-white bg-blue-600/10 hover:bg-blue-600 border border-blue-600/30 hover:border-blue-600 rounded-xl transition-all flex items-center justify-center gap-2"
-                >
-                  <Eye className="w-4 h-4" />
-                  {t('cari.viewDetails')}
-                </button>
+                {/* Detay + Önceki Bakiye Butonları */}
+                <div className="flex gap-2 mt-3">
+                  <button
+                    onClick={(e) => { e.stopPropagation(); navigate(`/cari/${cari.id}`); }}
+                    className="flex-1 py-2 text-sm text-blue-400 hover:text-white bg-blue-600/10 hover:bg-blue-600 border border-blue-600/30 hover:border-blue-600 rounded-xl transition-all flex items-center justify-center gap-2"
+                  >
+                    <Eye className="w-4 h-4" />
+                    {t('cari.viewDetails')}
+                  </button>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setOncekiBakiyeCari(cari);
+                      setOncekiBakiyeForm({ amount: '', type: 'debit', description: 'Önceki Bakiye', date: new Date().toISOString().split('T')[0] });
+                      setIsOncekiBakiyeOpen(true);
+                    }}
+                    className="px-3 py-2 text-sm text-violet-400 hover:text-white bg-violet-600/10 hover:bg-violet-600 border border-violet-600/30 hover:border-violet-600 rounded-xl transition-all flex items-center justify-center gap-1.5"
+                    title="Önceki Bakiye Gir"
+                  >
+                    <History className="w-4 h-4" />
+                    <span className="text-xs font-semibold">Önceki</span>
+                  </button>
+                </div>
               </motion.div>
             ))}
           </AnimatePresence>
@@ -1263,9 +1322,22 @@ export function CariPage() {
                       <td className="px-5 py-4" onClick={(e) => e.stopPropagation()}>
                         <div className="flex gap-1 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
                           <button onClick={() => navigate(`/cari/${cari.id}`)} className="p-1.5 hover:bg-accent rounded-lg transition-colors">
+                        <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <button onClick={() => navigate(`/cari/${cari.id}`)} className="p-1.5 hover:bg-accent rounded-lg transition-colors" title="Detay">
                             <Eye className="w-4 h-4 text-blue-400" />
                           </button>
-                          <button onClick={() => handleDeleteCari(cari.id, cari.companyName)} className="p-1.5 hover:bg-red-900/40 rounded-lg transition-colors">
+                          <button
+                            onClick={() => {
+                              setOncekiBakiyeCari(cari);
+                              setOncekiBakiyeForm({ amount: '', type: 'debit', description: 'Önceki Bakiye', date: new Date().toISOString().split('T')[0] });
+                              setIsOncekiBakiyeOpen(true);
+                            }}
+                            className="p-1.5 hover:bg-violet-900/40 rounded-lg transition-colors"
+                            title="Önceki Bakiye Gir"
+                          >
+                            <History className="w-4 h-4 text-violet-400" />
+                          </button>
+                          <button onClick={() => handleDeleteCari(cari.id, cari.companyName)} className="p-1.5 hover:bg-red-900/40 rounded-lg transition-colors" title="Sil">
                             <Trash2 className="w-4 h-4 text-red-400" />
                           </button>
                         </div>
@@ -2182,6 +2254,104 @@ export function CariPage() {
         toptanciCategories={toptanciCategories}
         onSave={saveCategories}
       />
+
+      {/* ─── Önceki Bakiye Dialog ──────────────────────────────────────────── */}
+      <Dialog.Root open={isOncekiBakiyeOpen} onOpenChange={v => { if (!v) { setIsOncekiBakiyeOpen(false); setOncekiBakiyeCari(null); } }}>
+        <Dialog.Portal>
+          <Dialog.Overlay className="fixed inset-0 bg-black/80 backdrop-blur-md z-50" />
+          <Dialog.Content aria-describedby={undefined} className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[95vw] max-w-sm bg-[#0d1117] border border-white/10 rounded-2xl shadow-2xl z-50 p-6">
+            <div className="flex items-center justify-between mb-5">
+              <Dialog.Title className="text-base font-bold text-white flex items-center gap-2">
+                <div className="w-8 h-8 rounded-xl bg-violet-500/15 flex items-center justify-center">
+                  <History className="w-4 h-4 text-violet-400" />
+                </div>
+                Önceki Bakiye Gir
+              </Dialog.Title>
+              <Dialog.Close className="p-2 hover:bg-white/10 rounded-xl transition-colors">
+                <X className="w-4 h-4 text-gray-500" />
+              </Dialog.Close>
+            </div>
+
+            {oncekiBakiyeCari && (
+              <div className="flex items-center gap-3 p-3 bg-white/[0.04] border border-white/[0.08] rounded-xl mb-5">
+                <div className={`p-2 rounded-lg ${oncekiBakiyeCari.type === 'Müşteri' ? 'bg-blue-600/20' : 'bg-purple-600/20'}`}>
+                  <Building2 className={`w-4 h-4 ${oncekiBakiyeCari.type === 'Müşteri' ? 'text-blue-400' : 'text-purple-400'}`} />
+                </div>
+                <div>
+                  <p className="text-sm font-bold text-white">{oncekiBakiyeCari.companyName}</p>
+                  <p className="text-xs text-gray-500">{oncekiBakiyeCari.type}</p>
+                </div>
+              </div>
+            )}
+
+            <div className="space-y-4">
+              {/* Tutar + Tür yan yana */}
+              <div className="grid grid-cols-[1fr_auto] gap-3 items-end">
+                <div>
+                  <label className="text-[10px] text-gray-500 font-bold uppercase block mb-1.5 ml-1">Tutar (₺)</label>
+                  <div className="relative">
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0.01"
+                      value={oncekiBakiyeForm.amount}
+                      onChange={e => setOncekiBakiyeForm(f => ({ ...f, amount: e.target.value }))}
+                      placeholder="0.00"
+                      className="w-full px-4 py-3 bg-white/[0.04] border border-white/[0.08] rounded-xl text-white placeholder-gray-600 focus:border-violet-500/50 transition-all text-sm outline-none"
+                      autoFocus
+                    />
+                    <span className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-500 text-sm font-bold">₺</span>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setOncekiBakiyeForm(f => ({ ...f, type: f.type === 'debit' ? 'credit' : 'debit' }))}
+                  className={`px-4 py-3 rounded-xl text-sm font-bold border transition-all ${
+                    oncekiBakiyeForm.type === 'debit'
+                      ? 'bg-green-600/20 border-green-500/30 text-green-400'
+                      : 'bg-red-600/20 border-red-500/30 text-red-400'
+                  }`}
+                >
+                  {oncekiBakiyeForm.type === 'debit' ? 'Alacak' : 'Borç'}
+                </button>
+              </div>
+
+              <div>
+                <label className="text-[10px] text-gray-500 font-bold uppercase block mb-1.5 ml-1">Açıklama</label>
+                <input
+                  type="text"
+                  value={oncekiBakiyeForm.description}
+                  onChange={e => setOncekiBakiyeForm(f => ({ ...f, description: e.target.value }))}
+                  className="w-full px-4 py-3 bg-white/[0.04] border border-white/[0.08] rounded-xl text-white placeholder-gray-600 focus:border-violet-500/50 transition-all text-sm outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="text-[10px] text-gray-500 font-bold uppercase block mb-1.5 ml-1">Tarih</label>
+                <input
+                  type="date"
+                  value={oncekiBakiyeForm.date}
+                  onChange={e => setOncekiBakiyeForm(f => ({ ...f, date: e.target.value }))}
+                  className="w-full px-4 py-3 bg-white/[0.04] border border-white/[0.08] rounded-xl text-white focus:border-violet-500/50 transition-all text-sm outline-none"
+                />
+              </div>
+
+              <p className="text-[10px] text-gray-600">
+                <span className="text-green-500 font-bold">Alacak</span> = müşteri/toptancı bize borçlu (bakiye artar) ·{' '}
+                <span className="text-red-500 font-bold">Borç</span> = biz borçluyuz (bakiye azalır)
+              </p>
+
+              <button
+                onClick={handleSaveOncekiBakiye}
+                className="w-full py-3 bg-violet-600 hover:bg-violet-500 text-white font-bold rounded-xl transition-colors flex items-center justify-center gap-2"
+              >
+                <History className="w-4 h-4" />
+                Önceki Bakiyeyi Kaydet
+              </button>
+            </div>
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
     </div>
   );
 }
