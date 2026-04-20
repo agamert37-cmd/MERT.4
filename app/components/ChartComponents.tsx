@@ -694,11 +694,12 @@ export function MetricBar({ label, value, maxValue, color, suffix = '', delay = 
       </div>
       <div className="h-2 rounded-full bg-[#131c30] overflow-hidden">
         <motion.div
-          initial={{ width: 0 }}
-          animate={{ width: `${pct}%` }}
+          initial={{ scaleX: 0 }}
+          animate={{ scaleX: pct / 100 }}
           transition={{ duration: 1.2, delay, ease: [0.16, 1, 0.3, 1] }}
-          className="h-full rounded-full"
+          className="h-full w-full rounded-full"
           style={{
+            transformOrigin: 'left',
             background: `linear-gradient(90deg, ${color}99, ${color})`,
             boxShadow: `0 0 12px ${color}30`,
           }}
@@ -808,12 +809,13 @@ export function HorizontalBarList({ items, maxValue: externalMax }: { items: HBa
           <span className="text-[11px] text-muted-foreground w-24 truncate group-hover:text-white transition-colors">{item.label}</span>
           <div className="flex-1 h-3 rounded-full bg-[#131c30] overflow-hidden relative">
             <motion.div
-              initial={{ width: 0 }}
-              whileInView={{ width: `${(item.value / maxValue) * 100}%` }}
+              initial={{ scaleX: 0 }}
+              whileInView={{ scaleX: item.value / maxValue }}
               viewport={{ once: true, margin: '-20px' }}
               transition={{ duration: 1.1, delay: i * 0.08 + 0.1, ease: [0.16, 1, 0.3, 1] }}
-              className="h-full rounded-full"
+              className="h-full w-full rounded-full"
               style={{
+                transformOrigin: 'left',
                 background: `linear-gradient(90deg, ${item.color}80, ${item.color})`,
                 boxShadow: `0 0 8px ${item.color}25`,
               }}
@@ -1146,11 +1148,11 @@ export function WeekCompareBar({ thisWeek, lastWeek, label = 'Bu Hafta', color =
         </div>
         <div className="h-2.5 sm:h-3 rounded-full bg-[#131c30] overflow-hidden">
           <motion.div
-            initial={{ width: 0 }}
-            animate={{ width: `${(thisWeek / max) * 100}%` }}
+            initial={{ scaleX: 0 }}
+            animate={{ scaleX: thisWeek / max }}
             transition={{ duration: 1, ease: [0.16, 1, 0.3, 1] }}
-            className="h-full rounded-full"
-            style={{ background: `linear-gradient(90deg, ${color}80, ${color})`, boxShadow: `0 0 12px ${color}25` }}
+            className="h-full w-full rounded-full"
+            style={{ transformOrigin: 'left', background: `linear-gradient(90deg, ${color}80, ${color})`, boxShadow: `0 0 12px ${color}25` }}
           />
         </div>
       </div>
@@ -1162,10 +1164,11 @@ export function WeekCompareBar({ thisWeek, lastWeek, label = 'Bu Hafta', color =
         </div>
         <div className="h-2 rounded-full bg-[#131c30] overflow-hidden">
           <motion.div
-            initial={{ width: 0 }}
-            animate={{ width: `${(lastWeek / max) * 100}%` }}
+            initial={{ scaleX: 0 }}
+            animate={{ scaleX: lastWeek / max }}
             transition={{ duration: 1, delay: 0.2, ease: [0.16, 1, 0.3, 1] }}
-            className="h-full rounded-full bg-white/10"
+            className="h-full w-full rounded-full bg-white/10"
+            style={{ transformOrigin: 'left' }}
           />
         </div>
       </div>
@@ -1498,11 +1501,12 @@ export function BulletGauge({ label, actual, target, max, color, suffix = '' }: 
           <div className="h-full bg-white/[0.06]" style={{ width: '15%' }} />
         </div>
         <motion.div
-          initial={{ width: 0 }}
-          animate={{ width: `${actualPct}%` }}
+          initial={{ scaleX: 0 }}
+          animate={{ scaleX: actualPct / 100 }}
           transition={{ duration: 1.2, ease: [0.16, 1, 0.3, 1] }}
-          className="absolute top-1 bottom-1 left-0 rounded-md"
+          className="absolute top-1 bottom-1 left-0 right-0 rounded-md"
           style={{
+            transformOrigin: 'left',
             background: `linear-gradient(90deg, ${color}90, ${color})`,
             boxShadow: `0 0 12px ${color}30`,
           }}

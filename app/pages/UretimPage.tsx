@@ -727,10 +727,11 @@ function FlowVisualization({ cigKg, copKg, temizKg, ciktiKg, fireKg, copOrani, f
           <div className="mt-2 flex items-center gap-2">
             <div className="flex-1 h-1.5 bg-secondary/40 rounded-full overflow-hidden">
               <motion.div
-                initial={{ width: 0 }}
-                animate={{ width: `${verimlilik}%` }}
+                initial={{ scaleX: 0 }}
+                animate={{ scaleX: verimlilik / 100 }}
                 transition={{ duration: 0.8, ease: 'easeOut' }}
-                className={`h-full rounded-full ${
+                style={{ transformOrigin: 'left' }}
+                className={`h-full w-full rounded-full ${
                   verimlilik >= 70 ? 'bg-gradient-to-r from-emerald-500 to-emerald-400' :
                   verimlilik >= 50 ? 'bg-gradient-to-r from-orange-500 to-orange-400' :
                   'bg-gradient-to-r from-red-500 to-red-400'
@@ -2777,10 +2778,11 @@ export function UretimPage() {
                     
                     {/* Gauge */}
                     <div className="relative h-6 md:h-8 bg-card rounded-full overflow-hidden border border-border/30">
-                      <motion.div initial={{ width: 0 }}
-                        animate={{ width: `${Math.min(100, (calc.tupKullanilanKg / Math.max(1, form.kazanSayisi * form.tupPerKazan * 2)) * 100)}%` }}
+                      <motion.div initial={{ scaleX: 0 }}
+                        animate={{ scaleX: Math.min(1, calc.tupKullanilanKg / Math.max(1, form.kazanSayisi * form.tupPerKazan * 2)) }}
                         transition={{ duration: 0.8, ease: 'easeOut' }}
-                        className="absolute inset-y-0 left-0 bg-gradient-to-r from-orange-600/60 via-red-500/50 to-orange-500/40 rounded-full" />
+                        style={{ transformOrigin: 'left' }}
+                        className="absolute inset-y-0 inset-x-0 bg-gradient-to-r from-orange-600/60 via-red-500/50 to-orange-500/40 rounded-full" />
                       <div className="absolute inset-0 flex items-center justify-center">
                         <span className="text-[10px] md:text-xs font-bold text-white drop-shadow-lg">
                           {calc.tupKullanilanKg.toFixed(1)}kg × ₺{form.tupFiyatKg} = ₺{(calc.tupKullanilanKg * form.tupFiyatKg).toLocaleString('tr-TR', { maximumFractionDigits: 0 })}
@@ -3599,10 +3601,11 @@ export function UretimPage() {
                       <span className="text-[10px] text-muted-foreground/60">Verimlilik:</span>
                       <div className="flex-1 h-2 bg-secondary/40 rounded-full overflow-hidden">
                         <motion.div
-                          initial={{ width: 0 }}
-                          animate={{ width: `${Math.min(100, hizliCalc.verimlilik)}%` }}
+                          initial={{ scaleX: 0 }}
+                          animate={{ scaleX: Math.min(1, hizliCalc.verimlilik / 100) }}
                           transition={{ duration: 0.8, ease: [0.22, 1, 0.36, 1] }}
-                          className={`h-full rounded-full ${
+                          style={{ transformOrigin: 'left' }}
+                          className={`h-full w-full rounded-full ${
                             hizliCalc.verimlilik >= 90 ? 'bg-gradient-to-r from-emerald-500 to-emerald-400' :
                             hizliCalc.verimlilik >= 70 ? 'bg-gradient-to-r from-blue-500 to-blue-400' :
                             hizliCalc.verimlilik >= 50 ? 'bg-gradient-to-r from-orange-500 to-orange-400' :
@@ -3962,10 +3965,11 @@ export function UretimPage() {
                       <span className="text-[10px] text-muted-foreground/60">Verimlilik:</span>
                       <div className="flex-1 h-2 bg-secondary/40 rounded-full overflow-hidden">
                         <motion.div
-                          initial={{ width: 0 }}
-                          animate={{ width: `${Math.min(100, karisimCalc.verimlilik)}%` }}
+                          initial={{ scaleX: 0 }}
+                          animate={{ scaleX: Math.min(1, karisimCalc.verimlilik / 100) }}
                           transition={{ duration: 0.8 }}
-                          className={`h-full rounded-full ${
+                          style={{ transformOrigin: 'left' }}
+                          className={`h-full w-full rounded-full ${
                             karisimCalc.verimlilik >= 90 ? 'bg-gradient-to-r from-emerald-500 to-emerald-400' :
                             karisimCalc.verimlilik >= 70 ? 'bg-gradient-to-r from-blue-500 to-blue-400' :
                             'bg-gradient-to-r from-orange-500 to-orange-400'

@@ -40,11 +40,11 @@ export function PasswordStrengthBar({ password, showSuggestions = true, compact 
         <div className="flex items-center gap-2 mb-1">
           <div className={`h-1.5 flex-1 rounded-full bg-white/5 overflow-hidden`}>
             <motion.div
-              className={`h-full rounded-full ${config.bgBar}`}
-              initial={{ width: 0 }}
-              animate={{ width: `${strength.score}%` }}
+              className={`h-full w-full rounded-full ${config.bgBar}`}
+              initial={{ scaleX: 0 }}
+              animate={{ scaleX: strength.score / 100 }}
               transition={{ duration: 0.5, ease: 'easeOut' }}
-              style={{ boxShadow: `0 0 8px ${strength.color}40` }}
+              style={{ transformOrigin: 'left', boxShadow: `0 0 8px ${strength.color}40` }}
             />
           </div>
           <span className="text-[10px] font-bold shrink-0" style={{ color: strength.color }}>
@@ -107,10 +107,10 @@ export function PasswordStrengthBar({ password, showSuggestions = true, compact 
                   initial={false}
                 >
                   <motion.div
-                    className="h-full rounded-full"
-                    style={{ backgroundColor: strength.color }}
-                    initial={{ width: 0 }}
-                    animate={{ width: isActive ? '100%' : isPartial ? `${((strength.score - seg * 20) / 20) * 100}%` : '0%' }}
+                    className="h-full w-full rounded-full"
+                    style={{ backgroundColor: strength.color, transformOrigin: 'left' }}
+                    initial={{ scaleX: 0 }}
+                    animate={{ scaleX: isActive ? 1 : isPartial ? (strength.score - seg * 20) / 20 : 0 }}
                     transition={{ duration: 0.4, delay: seg * 0.06, ease: 'easeOut' }}
                   />
                 </motion.div>
