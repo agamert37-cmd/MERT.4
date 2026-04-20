@@ -2390,7 +2390,7 @@ export function CariPage() {
         <DuplicateFinderModal
           tableName="cari_hesaplar"
           onClose={() => setShowDupFinder(false)}
-          onMergeComplete={() => refresh()}
+          onMergeComplete={() => setShowDupFinder(false)}
         />
       )}
     </div>
