@@ -975,7 +975,7 @@ export function PersonelPage() {
         <DuplicateFinderModal
           tableName="personeller"
           onClose={() => setShowDupFinder(false)}
-          onMergeComplete={() => refresh()}
+          onMergeComplete={() => setShowDupFinder(false)}
         />
       )}
 

@@ -1836,7 +1836,7 @@ export function StokPage() {
         <DuplicateFinderModal
           tableName="urunler"
           onClose={() => setShowDupFinder(false)}
-          onMergeComplete={() => refresh()}
+          onMergeComplete={() => setShowDupFinder(false)}
         />
       )}
     </div>
