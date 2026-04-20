@@ -50,11 +50,11 @@ const InlineBar = ({ value, max, color = '#3b82f6', height = 6 }: { value: numbe
   return (
     <div className="w-full bg-white/5 rounded-full overflow-hidden" style={{ height }}>
       <motion.div
-        initial={{ width: 0 }}
-        animate={{ width: `${pct}%` }}
+        initial={{ scaleX: 0 }}
+        animate={{ scaleX: pct / 100 }}
         transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
-        className="h-full rounded-full"
-        style={{ background: `linear-gradient(90deg, ${color}cc, ${color})`, boxShadow: `0 0 8px ${color}40` }}
+        className="h-full w-full rounded-full"
+        style={{ transformOrigin: 'left', background: `linear-gradient(90deg, ${color}cc, ${color})`, boxShadow: `0 0 8px ${color}40` }}
       />
     </div>
   );
@@ -504,11 +504,11 @@ export function RaporlarPage() {
                     </div>
                     <div className="h-2 bg-white/5 rounded-full overflow-hidden">
                       <motion.div
-                        initial={{ width: 0 }}
-                        animate={{ width: `${pct}%` }}
+                        initial={{ scaleX: 0 }}
+                        animate={{ scaleX: pct / 100 }}
                         transition={{ duration: 1, delay: i * 0.15, ease: [0.16, 1, 0.3, 1] }}
-                        className="h-full rounded-full"
-                        style={{ background: `linear-gradient(90deg, #06b6d4, #3b82f6)`, boxShadow: '0 0 8px rgba(6,182,212,0.3)' }}
+                        className="h-full w-full rounded-full"
+                        style={{ transformOrigin: 'left', background: `linear-gradient(90deg, #06b6d4, #3b82f6)`, boxShadow: '0 0 8px rgba(6,182,212,0.3)' }}
                       />
                     </div>
                     <p className="text-[10px] text-gray-500 mt-0.5">{p.qty} adet satış</p>
