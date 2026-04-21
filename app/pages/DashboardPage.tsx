@@ -1368,11 +1368,12 @@ export function DashboardPage() {
                       </div>
                       <div className="h-1.5 rounded-full bg-[#1a1a1a] overflow-hidden ml-8 sm:ml-10">
                         <motion.div
-                          initial={{ width: 0 }}
-                          animate={{ width: `${(p.revenue / maxRev) * 100}%` }}
+                          initial={{ scaleX: 0 }}
+                          animate={{ scaleX: p.revenue / maxRev }}
                           transition={{ duration: 1, delay: 0.5 + i * 0.1, ease: [0.16, 1, 0.3, 1] }}
-                          className="h-full rounded-full"
-                          style={{ 
+                          className="h-full w-full rounded-full"
+                          style={{
+                            transformOrigin: 'left',
                             background: `linear-gradient(90deg, ${CHART_COLORS[i]}80, ${CHART_COLORS[i]})`,
                             boxShadow: `0 0 8px ${CHART_COLORS[i]}25`
                           }}

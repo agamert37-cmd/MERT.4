@@ -509,7 +509,7 @@ function CategoryManagerModal({
                         ) : (
                           <span className="flex-1 text-white text-sm">{cat}</span>
                         )}
-                        <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <div className="flex gap-1 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
                           <button
                             type="button"
                             onClick={() => { setEditIdx(idx); setEditVal(cat); }}
@@ -1157,7 +1157,7 @@ export function CariPage() {
                   </div>
                   <button
                     onClick={(e) => { e.stopPropagation(); handleDeleteCari(cari.id, cari.companyName); }}
-                    className="opacity-0 group-hover:opacity-100 p-1.5 hover:bg-red-900/40 rounded-lg transition-all"
+                    className="sm:opacity-0 sm:group-hover:opacity-100 p-1.5 hover:bg-red-900/40 rounded-lg transition-all"
                   >
                     <Trash2 className="w-4 h-4 text-red-400" />
                   </button>
@@ -1341,7 +1341,7 @@ export function CariPage() {
                         </span>
                       </td>
                       <td className="px-5 py-4" onClick={(e) => e.stopPropagation()}>
-                        <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <div className="flex gap-1 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
                           <button onClick={() => navigate(`/cari/${cari.id}`)} className="p-1.5 hover:bg-accent rounded-lg transition-colors" title="Detay">
                             <Eye className="w-4 h-4 text-blue-400" />
                           </button>
@@ -2390,7 +2390,7 @@ export function CariPage() {
         <DuplicateFinderModal
           tableName="cari_hesaplar"
           onClose={() => setShowDupFinder(false)}
-          onMergeComplete={() => refresh()}
+          onMergeComplete={() => setShowDupFinder(false)}
         />
       )}
     </div>

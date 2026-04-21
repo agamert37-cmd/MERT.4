@@ -517,7 +517,7 @@ export function PersonelPage() {
         const kDate = k.date;
         allActions.push({
           date: kDate.split('T')[0], time: k.time || (kDate.includes('T') ? kDate.split('T')[1].substring(0, 5) : '12:00'),
-          type: 'Kasa İşlemi', desc: `${k.type === 'income' ? 'Gelir' : 'Gider'}: ${k.amount?.toLocaleString('tr-TR')} ₺`, page: 'Kasa',
+          type: 'Kasa İşlemi', desc: `${k.type === 'income' ? 'Gelir' : 'Gider'}: ${(k.amount || 0).toLocaleString('tr-TR')} ₺`, page: 'Kasa',
         });
       }
     });
@@ -975,7 +975,7 @@ export function PersonelPage() {
         <DuplicateFinderModal
           tableName="personeller"
           onClose={() => setShowDupFinder(false)}
-          onMergeComplete={() => refresh()}
+          onMergeComplete={() => setShowDupFinder(false)}
         />
       )}
 

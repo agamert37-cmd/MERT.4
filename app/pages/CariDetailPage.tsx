@@ -672,15 +672,15 @@ export function CariDetailPage() {
                         <span className="text-[9px] uppercase font-bold">{ex.date ? new Date(ex.date.split('.').reverse().join('-')).toLocaleString('tr-TR', {month:'short'}) : '—'}</span>
                       </div>
                       <div>
-                        <p className="text-sm text-gray-400">Önceki: <span className="text-white">₺{ex.previousBalance.toLocaleString()}</span></p>
-                        <p className="text-sm text-gray-400">Satış: <span className="text-blue-400">₺{ex.orderAmount.toLocaleString()}</span></p>
-                        <p className="text-sm text-gray-400">Ödeme: <span className="text-emerald-400">₺{ex.payment.toLocaleString()}</span></p>
+                        <p className="text-sm text-gray-400">Önceki: <span className="text-white">₺{(ex.previousBalance ?? 0).toLocaleString()}</span></p>
+                        <p className="text-sm text-gray-400">Satış: <span className="text-blue-400">₺{(ex.orderAmount ?? 0).toLocaleString()}</span></p>
+                        <p className="text-sm text-gray-400">Ödeme: <span className="text-emerald-400">₺{(ex.payment ?? 0).toLocaleString()}</span></p>
                       </div>
                     </div>
                     <div className="text-right">
                       <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1">Kapanış Bakiyesi</p>
                       <p className={`text-xl font-bold ${ex.newBalance < 0 ? 'text-red-400' : 'text-emerald-400'}`}>
-                        ₺{Math.abs(ex.newBalance).toLocaleString()}
+                        ₺{Math.abs(ex.newBalance ?? 0).toLocaleString()}
                       </p>
                     </div>
                   </div>
@@ -824,7 +824,7 @@ export function CariDetailPage() {
                       <p className={`text-xs font-bold tracking-widest uppercase mb-1 ${isAlis ? 'text-orange-400' : 'text-blue-400'}`}>
                         {isAlis ? t('salesPage.purchaseReceipt') : t('salesPage.saleReceipt')}
                       </p>
-                      <h2 className="text-3xl font-black text-white">{selectedFis.id.split('-')[0].toUpperCase()}</h2>
+                      <h2 className="text-3xl font-black text-white">{(selectedFis.id?.split('-')[0] || 'ID').toUpperCase()}</h2>
                     </div>
                     <div className="text-right">
                       <p className="text-3xl font-black text-white">₺{(selectedFis.total || 0).toLocaleString()}</p>

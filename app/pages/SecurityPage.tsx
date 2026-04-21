@@ -91,9 +91,9 @@ function CategoryBar({ label, value, color }: { label: string; value: number; co
       </div>
       <div className="h-2 bg-white/5 rounded-full overflow-hidden">
         <motion.div
-          className="h-full rounded-full"
-          style={{ backgroundColor: color }}
-          initial={{ width: 0 }} animate={{ width: `${value}%` }}
+          className="h-full w-full rounded-full"
+          style={{ backgroundColor: color, transformOrigin: 'left' }}
+          initial={{ scaleX: 0 }} animate={{ scaleX: value / 100 }}
           transition={{ duration: 1, ease: 'easeOut' }}
         />
       </div>

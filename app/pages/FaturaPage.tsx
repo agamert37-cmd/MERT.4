@@ -131,7 +131,7 @@ const AnimatedCounter = ({ value, prefix = '', suffix = '' }: { value: number; p
 function shareViaWhatsApp(fatura: Fatura) {
   const tarih = new Date(fatura.date).toLocaleDateString('tr-TR');
   const satirlar = (fatura.faturaItems || [])
-    .map((i: any) => `• ${i.name}: ${i.quantity} ${i.unit} × ₺${Number(i.unitPrice).toFixed(2)} = ₺${Number(i.totalPrice).toFixed(2)}`)
+    .map((i: any) => `• ${i.name}: ${i.quantity} ${i.unit} × ₺${(Number(i.unitPrice) || 0).toFixed(2)} = ₺${(Number(i.totalPrice) || 0).toFixed(2)}`)
     .join('\n');
   const tip = fatura.type === 'satis' ? 'Satış Faturası' : 'Alış Faturası';
   const text = [
@@ -142,7 +142,7 @@ function shareViaWhatsApp(fatura: Fatura) {
     '',
     satirlar,
     '',
-    `KDV (%${fatura.kdvRate}): ₺${Number(fatura.kdvAmount).toFixed(2)}`,
+    `KDV (%${fatura.kdvRate}): ₺${(Number(fatura.kdvAmount) || 0).toFixed(2)}`,
     `TOPLAM: ₺${Number(fatura.grossAmount).toLocaleString('tr-TR', { minimumFractionDigits: 2 })}`,
   ].join('\n');
   window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
@@ -946,9 +946,9 @@ export function FaturaPage() {
               {/* Items preview */}
               {(fatura.faturaItems || []).length > 0 && (
                 <div className="mt-3 pt-3 border-t border-white/5 flex flex-wrap gap-2">
-                  {(fatura.faturaItems || []).slice(0, 4).map((item: any, i: number) => (
-                    <span key={i} className="px-2 py-1 bg-white/5 rounded-lg text-[10px] text-gray-400">
-                      {item.name} • {item.quantity} {item.unit} • ₺{item.totalPrice.toFixed(2)}
+                  {(fatura.faturaItems || []).slice(0, 4).map((item: any) => (
+                    <span key={item.id || item.name} className="px-2 py-1 bg-white/5 rounded-lg text-[10px] text-gray-400">
+                      {item.name} • {item.quantity} {item.unit} • ₺{(Number(item.totalPrice) || 0).toFixed(2)}
                     </span>
                   ))}
                   {(fatura.faturaItems || []).length > 4 && (
@@ -1418,13 +1418,13 @@ export function FaturaPage() {
                   <div>
                     <h3 className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">Fatura Kalemleri ({(selectedFatura.faturaItems || []).length})</h3>
                     <div className="space-y-1.5">
-                      {(selectedFatura.faturaItems || []).map((item, i) => (
-                        <div key={i} className="flex items-center justify-between p-3 bg-black/40 border border-white/5 rounded-xl">
+                      {(selectedFatura.faturaItems || []).map((item) => (
+                        <div key={item.id || item.name} className="flex items-center justify-between p-3 bg-black/40 border border-white/5 rounded-xl">
                           <div>
                             <span className="font-bold text-white text-sm">{item.name}</span>
-                            <span className="text-xs text-gray-500 ml-2">{item.quantity} {item.unit} x ₺{item.unitPrice.toFixed(2)}</span>
+                            <span className="text-xs text-gray-500 ml-2">{item.quantity} {item.unit} x ₺{(Number(item.unitPrice) || 0).toFixed(2)}</span>
                           </div>
-                          <span className="text-sm font-bold text-white">₺{item.totalPrice.toFixed(2)}</span>
+                          <span className="text-sm font-bold text-white">₺{(Number(item.totalPrice) || 0).toFixed(2)}</span>
                         </div>
                       ))}
                     </div>
@@ -1457,11 +1457,11 @@ export function FaturaPage() {
                         <Package className="w-3 h-3" /> Stok Etkisi
                       </h3>
                       <div className="space-y-1">
-                        {(selectedFatura.faturaItems || []).map((item, i) => {
+                        {(selectedFatura.faturaItems || []).map((item) => {
                           const fsItem = faturaStok.find(fs => fs.name === item.name);
                           const hasLink = item.linkedStockId || fsItem?.linkedStockId;
                           return (
-                            <div key={i} className="flex items-center justify-between text-xs">
+                            <div key={item.id || item.name} className="flex items-center justify-between text-xs">
                               <span className="text-gray-400">{item.name}</span>
                               {hasLink ? (
                                 <span className="text-emerald-400 font-bold">

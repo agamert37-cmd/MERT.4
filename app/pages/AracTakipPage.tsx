@@ -270,7 +270,7 @@ export function AracTakipPage() {
       vehicleId: vehicle.id,
       vehiclePlate: vehicle.plate,
       vehicleModel: vehicle.model,
-      startKm: parseInt(startKm),
+      startKm: parseInt(startKm, 10),
       endKm: null,
       startTime: nowTime(),
       endTime: null,
@@ -287,7 +287,7 @@ export function AracTakipPage() {
       timestamp: nowTimestamp(),
       action: 'start',
       vehicle: vehicle.plate,
-      km: parseInt(startKm),
+      km: parseInt(startKm, 10),
       employee: currentEmployee?.name || 'Bilinmeyen',
       date: today(),
     };
@@ -302,13 +302,13 @@ export function AracTakipPage() {
       employeeId: currentEmployee?.id,
       employeeName: currentEmployee?.name,
       page: 'arac-takip',
-      metadata: { vehicle: vehicle.plate, startKm: parseInt(startKm) },
+      metadata: { vehicle: vehicle.plate, startKm: parseInt(startKm, 10) },
     });
 
     setIsStartDayOpen(false);
     setSelectedVehicle('');
     setStartKm('');
-    emit('arac:shift_started', { vehiclePlate: vehicle.plate, startKm: parseInt(startKm) });
+    emit('arac:shift_started', { vehiclePlate: vehicle.plate, startKm: parseInt(startKm, 10) });
     toast.success(`Gun baslatildi! Arac: ${vehicle.plate} - Baslangic KM: ${startKm}`);
   };
 
@@ -322,7 +322,7 @@ export function AracTakipPage() {
       toast.error('Lutfen bitis kilometresini giriniz');
       return;
     }
-    const endKmNum = parseInt(endKm);
+    const endKmNum = parseInt(endKm, 10);
     if (endKmNum < activeShift.startKm) {
       toast.error('Bitis kilometresi baslangictan kucuk olamaz!');
       return;
@@ -376,8 +376,8 @@ export function AracTakipPage() {
       toast.error('Lutfen tum alanlari doldurunuz');
       return;
     }
-    const endKmNum = parseInt(endKm);
-    const newStartKmNum = parseInt(newStartKm);
+    const endKmNum = parseInt(endKm, 10);
+    const newStartKmNum = parseInt(newStartKm, 10);
     if (endKmNum < activeShift.startKm) {
       toast.error('Mevcut aracin bitis kilometresi baslangictan kucuk olamaz!');
       return;
@@ -1004,7 +1004,7 @@ export function AracTakipPage() {
                   <div className="flex items-center gap-2 mt-2 text-sm">
                     <Route className="w-4 h-4 text-blue-400" />
                     <span className="text-blue-400 font-medium">
-                      Toplam: {(parseInt(endKm) - activeShift.startKm).toLocaleString()} km
+                      Toplam: {(isNaN(parseInt(endKm, 10)) ? 0 : parseInt(endKm, 10) - activeShift.startKm).toLocaleString()} km
                     </span>
                   </div>
                 )}

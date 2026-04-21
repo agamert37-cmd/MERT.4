@@ -275,7 +275,7 @@ function VitrinAnalyticsTab() {
               <div key={i} className="flex items-center gap-3">
                 <span className="text-[10px] text-gray-500 font-mono w-16 shrink-0">{new Date(day.date).toLocaleDateString('tr-TR', { day: '2-digit', month: 'short' })}</span>
                 <div className="flex-1 h-6 bg-black/40 rounded-lg overflow-hidden relative">
-                  {day.views > 0 && <motion.div initial={{ width: 0 }} animate={{ width: `${(day.views / maxD) * 100}%` }} transition={{ delay: i * 0.05, duration: 0.5 }} className="absolute inset-y-0 left-0 bg-blue-600/60 rounded-l-lg" />}
+                  {day.views > 0 && <motion.div initial={{ scaleX: 0 }} animate={{ scaleX: (day.views / maxD) }} transition={{ delay: i * 0.05, duration: 0.5 }} style={{ transformOrigin: 'left' }} className="absolute inset-y-0 left-0 w-full bg-blue-600/60 rounded-l-lg" />}
                   <span className="absolute inset-0 flex items-center px-2 text-[10px] text-white/70 font-medium">{total > 0 ? total : ''}</span>
                 </div>
                 <div className="flex gap-1.5 shrink-0">
@@ -304,7 +304,7 @@ function VitrinAnalyticsTab() {
         ) : (
           <div className="space-y-2">
             {popular.slice(0, 10).map((p, i) => (
-              <div key={i} className="flex items-center gap-3 p-3 rounded-xl bg-white/[0.03] border border-white/5">
+              <div key={p.name ?? i} className="flex items-center gap-3 p-3 rounded-xl bg-white/[0.03] border border-white/5">
                 <span className="w-6 h-6 rounded-lg bg-white/5 flex items-center justify-center text-[10px] font-bold text-gray-500">{i + 1}</span>
                 <span className="flex-1 text-sm font-medium text-white truncate">{p.name}</span>
                 <div className="flex gap-3 shrink-0 text-[10px]">
@@ -1597,10 +1597,11 @@ export function PazarlamaPage() {
         <AnimatePresence>
           {showPreview && (
             <motion.div
-              initial={{ opacity: 0, x: 20, width: 0 }}
-              animate={{ opacity: 1, x: 0, width: 260 }}
-              exit={{ opacity: 0, x: 20, width: 0 }}
-              className="flex-shrink-0 hidden lg:block"
+              initial={{ opacity: 0, x: 20, maxWidth: 0 }}
+              animate={{ opacity: 1, x: 0, maxWidth: 260 }}
+              exit={{ opacity: 0, x: 20, maxWidth: 0 }}
+              transition={{ type: 'spring', stiffness: 280, damping: 26 }}
+              className="flex-shrink-0 hidden lg:block overflow-hidden"
             >
               <div className="sticky top-4 space-y-3">
                 <div className="flex items-center justify-between">
