@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Lock, LogIn } from 'lucide-react';
-import { isAppLocked, unlockApp, startLockTimer, updateActivity, onAppLock } from '../lib/secure-storage';
+import { isAppLocked, unlockApp, stopLockTimer, startLockTimer, updateActivity, onAppLock } from '../lib/secure-storage';
 import { broadcastLock } from '../lib/broadcast-sync';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -9,15 +9,31 @@ import { useAuth } from '../contexts/AuthContext';
  * - 10 dakika hareketsizlikte otomatik kilitler
  * - Kullanıcı adı/şifresiyle açılır (PIN yerine — ek altyapı gerekmez)
  * - Tüm sekmelere broadcastLock() gönderilir
+ *
+ * Önemli: Kimlik doğrulanmamış kullanıcı kilit ekranında tutulmaz —
+ * giriş ekranı zaten kendi başına koruma sağlar. Aksi halde login öncesi
+ * zamanlayıcı tetiklenirse kullanıcı kilit ekranında sıkışır.
  */
 export function AppLockScreen({ children }: { children: React.ReactNode }) {
-  const { user, login } = useAuth();
+  const { user, login, logout } = useAuth();
   const [locked, setLocked] = useState(false);
   const [pin, setPin] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
+  // Kimlik doğrulanmamış kullanıcı için kilidi temizle (sıkışmayı önle)
   useEffect(() => {
+    if (!user) {
+      if (isAppLocked()) unlockApp();
+      setLocked(false);
+      stopLockTimer();
+    }
+  }, [user]);
+
+  useEffect(() => {
+    // Sadece giriş yapmış kullanıcı için kilit mantığı çalışsın
+    if (!user) return;
+
     // Sayfa yüklendiğinde kilit durumunu kontrol et
     if (isAppLocked()) setLocked(true);
 
@@ -36,7 +52,7 @@ export function AppLockScreen({ children }: { children: React.ReactNode }) {
       unsubLock();
       events.forEach(e => document.removeEventListener(e, activity));
     };
-  }, []);
+  }, [user]);
 
   const handleUnlock = useCallback(async () => {
     if (!pin.trim() || !user) return;
@@ -69,7 +85,8 @@ export function AppLockScreen({ children }: { children: React.ReactNode }) {
     return () => window.removeEventListener('mert:lock_app', handleManualLock);
   }, []);
 
-  if (!locked) return <>{children}</>;
+  // Kilit yoksa veya kullanıcı yoksa normal akış (login ekranı zaten koruma sağlar)
+  if (!locked || !user) return <>{children}</>;
 
   return (
     <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-[#06090f]">
@@ -121,6 +138,19 @@ export function AppLockScreen({ children }: { children: React.ReactNode }) {
         <p className="text-xs text-gray-600 text-center">
           10 dakika hareketsizlik sonrası otomatik kilitlendi
         </p>
+
+        {/* Acil çıkış: farklı kullanıcı veya şifre hatırlamama durumu */}
+        <button
+          onClick={() => {
+            unlockApp();
+            logout();
+            setLocked(false);
+            setPin('');
+          }}
+          className="text-xs text-gray-500 hover:text-white transition-colors underline-offset-2 hover:underline"
+        >
+          Farklı bir hesapla giriş yap
+        </button>
       </div>
     </div>
   );
