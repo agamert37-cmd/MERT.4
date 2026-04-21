@@ -9,6 +9,9 @@ import { NotificationProvider } from "./contexts/NotificationContext";
 import { SyncProvider } from "./contexts/SyncContext";
 import { LanguageProvider } from "./contexts/LanguageContext";
 
+// NOT: AuthProvider artık App.tsx'te (AppLockScreen erişimi için) tanımlanıyor.
+// RootProviders içindeki AuthProvider kaldırıldı — App.tsx'teki Provider tüm ağacı kapsar.
+
 // Eagerly loaded — her zaman hızlı açılmalı
 import { LoginPage } from "./pages/LoginPage";
 import { DashboardPage } from "./pages/DashboardPage";
@@ -83,15 +86,13 @@ function RootErrorBoundary() {
 function RootProviders() {
   return (
     <LanguageProvider>
-      <AuthProvider>
-        <EmployeeProvider>
-          <NotificationProvider>
-            <SyncProvider>
-              <Outlet />
-            </SyncProvider>
-          </NotificationProvider>
-        </EmployeeProvider>
-      </AuthProvider>
+      <EmployeeProvider>
+        <NotificationProvider>
+          <SyncProvider>
+            <Outlet />
+          </SyncProvider>
+        </NotificationProvider>
+      </EmployeeProvider>
     </LanguageProvider>
   );
 }
