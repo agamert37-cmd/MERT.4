@@ -21,7 +21,7 @@ import urllib.request
 # ─── Ayarlar ────────────────────────────────────────────────────────────────
 REPO_DIR              = os.path.dirname(os.path.abspath(__file__))
 REMOTE                = "origin"
-BRANCH                = "claude/multi-db-sync-setup-3DmYn"
+BRANCH                = "main"
 APP_URL               = "http://localhost:8080"
 STATUS_REFRESH_MS     = 30_000   # 30 saniye
 CONSOLE_MAX_LINES     = 1_200    # bu limitin üstünde eski satırlar silinir
