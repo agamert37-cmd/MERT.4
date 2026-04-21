@@ -167,7 +167,7 @@ export function PersonelPage() {
   // Güvenlik kontrolleri (RBAC) - merkezi utility
   const { canAdd, canEdit, canDelete } = getPagePermissions(user, currentEmployee, 'personel');
   const { trackAction } = useSecurityMonitor(true);
-  const { data: personnelList, addItem, updateItem, deleteItem } = useTableSync<Personnel>({
+  const { data: personnelList, addItem, updateItem, deleteItem, refresh } = useTableSync<Personnel>({
     tableName: 'personeller', storageKey: 'personel_data', initialData: INITIAL_PERSONNEL,
     orderBy: 'created_at', orderAsc: false, toDb: personnelToDb, fromDb: personnelFromDb,
   });
