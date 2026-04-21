@@ -1,4 +1,4 @@
-// [AJAN-2 | claude/serene-gagarin | 2026-03-25] Son düzenleyen: Claude Opus 4.6
+// [AJAN-2 | claude/serene-gagarin | 2026-03-25] Son düzenleyen: Claude Sonnet 4.6
 import { RouterProvider } from 'react-router';
 import { GlobalTableSyncProvider } from './contexts/GlobalTableSyncContext';
 import { SyncStatusBanner } from './components/SyncStatusBanner';
@@ -8,6 +8,7 @@ import { useEffect } from 'react';
 import { useUpdateCheck } from './hooks/useUpdateCheck';
 import { StorageQuotaBanner } from './components/StorageQuotaBanner';
 import { AppLockScreen } from './components/AppLockScreen';
+import { AuthProvider } from './contexts/AuthContext';
 
 export default function App() {
   // Dark tema
@@ -20,14 +21,17 @@ export default function App() {
 
   return (
     <div className="dark min-h-screen bg-background">
-      {/* Tüm tabloları PouchDB ↔ CouchDB ile senkronize et */}
-      <GlobalTableSyncProvider>
-        <AppLockScreen>
-          <RouterProvider router={router} />
-        </AppLockScreen>
-        <SyncStatusBanner />
-        <StorageQuotaBanner />
-      </GlobalTableSyncProvider>
+      {/* AuthProvider burada — AppLockScreen useAuth() dışarıdan erişemiyordu */}
+      <AuthProvider>
+        {/* Tüm tabloları PouchDB ↔ CouchDB ile senkronize et */}
+        <GlobalTableSyncProvider>
+          <AppLockScreen>
+            <RouterProvider router={router} />
+          </AppLockScreen>
+          <SyncStatusBanner />
+          <StorageQuotaBanner />
+        </GlobalTableSyncProvider>
+      </AuthProvider>
       <Toaster
         position="top-right"
         toastOptions={{
@@ -44,6 +48,6 @@ export default function App() {
           duration: 3000,
         }}
       />
-    </div>
+      </div>
   );
 }
