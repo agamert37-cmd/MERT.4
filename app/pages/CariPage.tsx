@@ -629,7 +629,7 @@ export function CariPage() {
   const { canAdd, canDelete } = getPagePermissions(user, currentEmployee, 'cari');
   const sec = usePageSecurity('cari');
 
-  const { data: cariList, addItem, deleteItem } = useTableSync<Cari>({
+  const { data: cariList, addItem, deleteItem, refresh } = useTableSync<Cari>({
     tableName: 'cari_hesaplar',
     storageKey: 'cari_data',
     initialData: initialCariList,
