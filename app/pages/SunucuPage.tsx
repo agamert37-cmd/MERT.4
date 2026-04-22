@@ -259,7 +259,7 @@ export function SunucuPage() {
           { label: 'Hata / Sorun', value: tableStatus.length ? errorTables : liveError, icon: <AlertCircle className="w-4 h-4 text-red-400" />, color: errorTables > 0 || liveError > 0 ? 'border-red-500/30 bg-red-950/15' : 'border-white/10 bg-white/3' },
         ].map(card => (
           <div key={card.label} className={`rounded-2xl border p-4 flex flex-col gap-2 ${card.color}`}>
-            <div className="flex items-center gap-2">{card.icon}<span className="text-[11px] text-gray-500 font-semibold uppercase tracking-wide">{card.label}</span></div>
+            <div className="flex items-center gap-2 min-w-0 overflow-hidden">{card.icon}<span className="text-[11px] text-gray-500 font-semibold uppercase tracking-wide truncate">{card.label}</span></div>
             <span className="text-2xl font-extrabold">{card.value}</span>
           </div>
         ))}

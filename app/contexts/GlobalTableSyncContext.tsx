@@ -263,20 +263,28 @@ export function GlobalTableSyncProvider({ children }: GlobalTableSyncProviderPro
 
     // WAL replay — çökme/çevrimdışı dönemde birikmiş yazmaları PouchDB'ye uygula
     const walTimer = setTimeout(async () => {
-      const pending = walLoad().length;
-      if (pending > 0) {
-        const { replayed, failed } = await replayWAL();
-        if (replayed > 0) {
-          console.info(`[WAL] ${replayed} kayıt yeniden uygulandı${failed > 0 ? `, ${failed} başarısız` : ''}`);
+      try {
+        const pending = walLoad().length;
+        if (pending > 0) {
+          const { replayed, failed } = await replayWAL();
+          if (replayed > 0) {
+            console.info(`[WAL] ${replayed} kayıt yeniden uygulandı${failed > 0 ? `, ${failed} başarısız` : ''}`);
+          }
         }
+      } catch (e: any) {
+        console.error('[WAL] Replay hatası:', e?.message);
       }
     }, 5_000);
 
     // Haftalık DB sıkıştırma — eski revision ve tombstone'ları temizler
     const compactTimer = setTimeout(async () => {
-      const result = await compactAllDbs();
-      if (!result.skipped) {
-        console.info(`[DB] Sıkıştırma tamamlandı — ${result.compacted} tablo`);
+      try {
+        const result = await compactAllDbs();
+        if (!result.skipped) {
+          console.info(`[DB] Sıkıştırma tamamlandı — ${result.compacted} tablo`);
+        }
+      } catch (e: any) {
+        console.error('[DB] Sıkıştırma hatası:', e?.message);
       }
     }, 30_000); // 30 saniye gecikme — sync yerleştikten sonra
 

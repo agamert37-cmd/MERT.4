@@ -450,33 +450,32 @@ export function startCouchDbHealthMonitor(): void {
   const config = getCouchDbConfig();
   if (!config.peerUrl) return;   // peer URL yoksa monitör gerekmiyor
 
-  _healthTimer = setInterval(async () => {
-    const cfg = getCouchDbConfig();
+  _healthTimer = setInterval(() => {
+    (async () => {
+      const cfg = getCouchDbConfig();
 
-    if (_failoverActive) {
-      // Peer'dayken birincili izle — geri döndüyse orijinale dön
-      if (!_savedPrimaryUrl) return;
-      const primaryBack = await _pingUrl(_savedPrimaryUrl, cfg.user, cfg.password);
-      if (primaryBack) _deactivateFailover();
-      return;
-    }
-
-    // Birincil URL sağlığını kontrol et
-    if (!cfg.url) return;
-    const ok = await _pingUrl(cfg.url, cfg.user, cfg.password);
-
-    if (ok) {
-      _healthConsecFails = 0;
-    } else {
-      _healthConsecFails++;
-      console.warn(`[PouchDB] Sağlık kontrolü başarısız (${_healthConsecFails}/${HEALTH_FAIL_THRESHOLD})…`);
-
-      if (_healthConsecFails >= HEALTH_FAIL_THRESHOLD && cfg.peerUrl) {
-        // Peer erişilebilir mi?
-        const peerOk = await _pingUrl(cfg.peerUrl, cfg.user, cfg.password);
-        if (peerOk) _activateFailover(cfg.peerUrl, cfg);
+      if (_failoverActive) {
+        if (!_savedPrimaryUrl) return;
+        const primaryBack = await _pingUrl(_savedPrimaryUrl, cfg.user, cfg.password);
+        if (primaryBack) _deactivateFailover();
+        return;
       }
-    }
+
+      if (!cfg.url) return;
+      const ok = await _pingUrl(cfg.url, cfg.user, cfg.password);
+
+      if (ok) {
+        _healthConsecFails = 0;
+      } else {
+        _healthConsecFails++;
+        console.warn(`[PouchDB] Sağlık kontrolü başarısız (${_healthConsecFails}/${HEALTH_FAIL_THRESHOLD})…`);
+
+        if (_healthConsecFails >= HEALTH_FAIL_THRESHOLD && cfg.peerUrl) {
+          const peerOk = await _pingUrl(cfg.peerUrl, cfg.user, cfg.password);
+          if (peerOk) _activateFailover(cfg.peerUrl, cfg);
+        }
+      }
+    })().catch(e => console.error('[Health] İzleme hatası:', e?.message));
   }, HEALTH_INTERVAL_MS);
 }
 
