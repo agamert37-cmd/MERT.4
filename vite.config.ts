@@ -34,6 +34,10 @@ export default defineConfig({
             '@radix-ui/react-popover',
             '@radix-ui/react-alert-dialog',
           ],
+          // Framer Motion ayrı chunk → sık değişen uygulama kodundan izole, iyi cache
+          'motion': ['motion/react'],
+          // PouchDB ayrı chunk → ~150KB, nadiren değişir
+          'pouchdb': ['pouchdb-browser'],
           'utils': ['date-fns', 'clsx', 'tailwind-merge'],
           'charts': ['recharts'],
         },
