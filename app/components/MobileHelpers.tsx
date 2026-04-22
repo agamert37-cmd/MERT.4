@@ -271,8 +271,11 @@ export function SwipeToDelete({ onDelete, children, className = '', disabled = f
   if (disabled) return <div className={`relative ${className}`}>{children}</div>;
 
   return (
-    <div className={`relative overflow-hidden ${className}`}>
-      <div className="absolute inset-y-0 right-0 w-20 bg-rose-600/90 flex items-center justify-center rounded-r-xl">
+    <div className={`relative ${className}`}>
+      <div
+        className="absolute inset-y-0 right-0 w-20 bg-rose-600/90 flex items-center justify-center rounded-r-xl"
+        style={{ opacity: Math.min(1, Math.abs(offsetX) / THRESHOLD) }}
+      >
         <Trash2 className="w-4 h-4 text-white" />
       </div>
       <motion.div

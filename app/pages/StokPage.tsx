@@ -3,9 +3,8 @@ import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react'
 import {
   Plus, Search, AlertCircle, CheckCircle, TrendingUp, Package, ChevronDown,
   ChevronRight, X, ArrowDownRight, ArrowUpRight, RefreshCcw, Tag, Edit,
-  Trash2, AlertTriangle, Factory, Link2, Settings, BarChart3, Bell,
-  FolderOpen, ArrowUpDown, Eye, Download, Filter, Layers, ShoppingCart,
-  Minus, MoreVertical, Warehouse, Scale, Clock, Flame, History, PieChart, Archive, Camera, Zap
+  Trash2, AlertTriangle, BarChart3, Bell,
+  FolderOpen, Minus, Warehouse, Scale, Clock, Flame, History, PieChart, Archive, Camera, Zap
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { staggerContainer, staggerItem, hover, tap, rowItem } from '../utils/animations';
@@ -473,8 +472,6 @@ export function StokPage() {
   const [expandedProducts, setExpandedProducts] = useState<Set<string>>(new Set());
   const [sortKey, setSortKey] = useState<SortKey>('name');
   const [sortDir, setSortDir] = useState<SortDir>('asc');
-  const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
-
   const [changeLogTarget, setChangeLogTarget] = useState<string | null>(null);
   const [showDupFinder, setShowDupFinder] = useState(false);
 
@@ -483,7 +480,6 @@ export function StokPage() {
   const [isAddMovementModalOpen, setIsAddMovementModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
-  const [detailProduct, setDetailProduct] = useState<Product | null>(null);
 
   // Silinen stoklar arşivi
   const [silindenStoklar, setSilinenStoklar] = useState<any[]>(() =>
@@ -902,13 +898,13 @@ export function StokPage() {
           >
             <div className={`absolute -top-8 -right-8 w-28 h-28 ${s.glow} rounded-full blur-2xl group-hover:opacity-100 opacity-70 transition-all pointer-events-none`} />
             <div className="relative z-10">
-              <div className="flex items-center justify-between mb-3 sm:mb-4">
-                <div className={`p-2 sm:p-2.5 rounded-xl ${s.iconBg} ${s.text} shadow-lg ${s.shadow}`}>
+              <div className="mb-3 sm:mb-4">
+                <div className={`p-2 sm:p-2.5 rounded-xl ${s.iconBg} ${s.text} shadow-lg ${s.shadow} inline-flex`}>
                   <s.icon className="w-4 h-4 sm:w-5 sm:h-5" />
                 </div>
               </div>
               <p className="text-[9px] sm:text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1">{s.label}</p>
-              <p className={`text-xl sm:text-2xl lg:text-3xl font-black text-white tabular-nums`}>{s.value}</p>
+              <p className="text-xl sm:text-2xl lg:text-3xl font-black text-white tabular-nums">{s.value}</p>
             </div>
           </motion.div>
         ))}
@@ -1009,6 +1005,7 @@ export function StokPage() {
                     onDelete={() => handleDeleteProduct(product.id, product.name)}
                   >
                   <motion.div
+                    layout
                     variants={staggerItem}
                     exit={{ opacity: 0, y: -8, filter: 'blur(4px)', transition: { duration: 0.18 } }}
                     whileHover={{ y: -2, transition: { duration: 0.15 } }}
@@ -1061,7 +1058,7 @@ export function StokPage() {
                         </div>
                         <div className="col-span-3 sm:col-span-1 flex gap-1.5">
                           <button onClick={() => { setSelectedProduct(product); setIsAddMovementModalOpen(true); }} className="flex-1 sm:flex-initial px-3 py-2 bg-indigo-500/15 hover:bg-indigo-500/25 text-indigo-300 font-bold text-[10px] sm:text-xs rounded-xl transition-colors border border-indigo-500/15 flex items-center justify-center gap-1">
-                            <RefreshCcw className="w-3 h-3" /><span className="hidden sm:inline">Hareket</span>
+                            <RefreshCcw className="w-3 h-3" /><span className="hidden lg:inline">Hareket</span>
                           </button>
                           {canEdit && (
                             <button onClick={() => { setSelectedProduct(product); setEditFormCategory(product.category); setEditFormUnit(product.unit); setIsEditModalOpen(true); }} className="p-2 bg-white/5 hover:bg-white/10 text-gray-400 rounded-xl transition-colors"><Edit className="w-3.5 h-3.5" /></button>
@@ -1660,7 +1657,7 @@ export function StokPage() {
               <input type="number" name="minStock" required placeholder="Orn: 10" className="w-full p-3 bg-secondary/60 border border-border rounded-xl text-white outline-none focus:border-blue-500/50 text-sm transition-all" />
             </div>
             <div>
-              <label className="text-[10px] text-gray-500 font-bold uppercase block mb-1 ml-1 flex items-center gap-1">
+              <label className="text-[10px] text-gray-500 font-bold uppercase mb-1 ml-1 flex items-center gap-1">
                 <History className="w-3 h-3 text-violet-400" />
                 Başlangıç Stoku (Önceki Bakiye) — Opsiyonel
               </label>
