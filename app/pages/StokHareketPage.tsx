@@ -327,24 +327,50 @@ export function StokHareketPage() {
       // 1. stok_giris tablosuna kaydet (PouchDB → CouchDB sync)
       await addStokGiris(newGiris);
 
-      // 2. Ürünün currentStock'unu güncelle — localStorage + PouchDB
+      // 2. Ürünün currentStock + movements dizisini güncelle — localStorage + PouchDB
       const existingStok = getFromStorage<any[]>(StorageKey.STOK_DATA) || [];
+      const newMovement = {
+        id: newGiris.id,
+        type: gecmisForm.isEskiStok ? 'ONCEKI_BAKIYE' : 'ALIS',
+        partyName: gecmisForm.cari || (gecmisForm.isEskiStok ? 'Önceki Bakiye' : 'Manuel Giriş'),
+        date: new Date(gecmisForm.date).toISOString(),
+        quantity: qty,
+        price: price,
+        totalAmount: qty * price,
+        description: gecmisForm.note || (gecmisForm.isEskiStok ? 'Önceki Bakiye — Stok Hareket sayfasından eklendi' : 'Manuel stok girişi'),
+      };
       const updatedStok = existingStok.map(s => {
         if (s.id !== gecmisForm.productId) return s;
-        return { ...s, currentStock: (s.currentStock || 0) + qty };
+        return {
+          ...s,
+          currentStock: (s.currentStock || 0) + qty,
+          movements: [newMovement, ...(s.movements || [])],
+        };
       });
       setInStorage(StorageKey.STOK_DATA, updatedStok);
 
-      // PouchDB güncelle
+      // PouchDB'de ürün dokümanını güncelle (currentStock + movements)
       try {
         const db = getDb('urunler');
         const existing = await db.get(gecmisForm.productId) as any;
-        await db.put({ ...existing, current_stock: (existing.current_stock || existing.currentStock || 0) + qty });
+        // supplier_entries içinde category ve movements saklanır (db-transforms.ts formatı)
+        let parsed: { category?: string; movements?: any[] } = {};
+        try { parsed = JSON.parse(existing.supplier_entries || '{}'); } catch { /* ignore */ }
+        const existingMovements: any[] = Array.isArray(parsed.movements) ? parsed.movements : [];
+        const updatedSupplierEntries = JSON.stringify({
+          category: parsed.category || existing.category || '',
+          movements: [newMovement, ...existingMovements],
+        });
+        await db.put({
+          ...existing,
+          current_stock: (existing.current_stock || existing.currentStock || 0) + qty,
+          supplier_entries: updatedSupplierEntries,
+        });
       } catch (dbErr) {
         console.warn('[StokGiris] PouchDB stok güncelleme:', dbErr);
       }
 
-      toast.success(`${product.name} için ${qty} ${product.unit || 'AD'} ${gecmisForm.isEskiStok ? 'eski stok' : 'manuel'} girişi eklendi`);
+      toast.success(`${product.name}: +${qty} ${product.unit || 'AD'} ${gecmisForm.isEskiStok ? 'önceki bakiye' : 'manuel giriş'} olarak kaydedildi`);
       logActivity('employee_update', 'Geçmiş stok girişi eklendi', {
         employeeName: user?.name,
         page: 'stok_hareket',

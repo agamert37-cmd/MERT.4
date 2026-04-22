@@ -1636,13 +1636,13 @@ export function StokPage() {
           <div className="flex justify-between items-center mb-6">
             <Dialog.Title className="text-lg sm:text-xl font-black text-white flex items-center gap-2.5">
               <div className="w-8 h-8 rounded-xl bg-blue-500/15 flex items-center justify-center"><Package className="w-4 h-4 text-blue-400" /></div>
-              Yeni Urun
+              Yeni Ürün
             </Dialog.Title>
             <Dialog.Close className="p-2 hover:bg-white/10 rounded-xl transition-colors"><X className="w-4 h-4 text-gray-500" /></Dialog.Close>
           </div>
           <form onSubmit={handleAddProduct} className="space-y-4">
             <div>
-              <label className="text-[10px] text-gray-500 font-bold uppercase block mb-1.5 ml-1">Urun Adi</label>
+              <label className="text-[10px] text-gray-500 font-bold uppercase block mb-1.5 ml-1">Ürün Adı</label>
               <input type="text" name="name" required placeholder="Orn: Dana But" className="w-full p-3 bg-secondary/60 border border-border rounded-xl text-white outline-none focus:border-blue-500/50 text-sm transition-all" />
             </div>
             <div className="grid grid-cols-2 gap-3">
@@ -1670,12 +1670,12 @@ export function StokPage() {
                 min="0"
                 value={addFormOncekiStok}
                 onChange={e => setAddFormOncekiStok(e.target.value)}
-                placeholder="0 — Sistemden önce mevcut stok miktarı"
+                placeholder="Örn: 100 — Boş bırakılırsa stok sıfırdan başlar"
                 className="w-full p-3 bg-violet-500/5 border border-violet-500/20 rounded-xl text-white placeholder-gray-600 outline-none focus:border-violet-500/50 text-sm transition-all"
               />
-              <p className="text-[10px] text-gray-600 mt-1 ml-1">Bu ürün sisteme girilmeden önce mevcut olan stok miktarı "Önceki Bakiye" olarak kaydedilir.</p>
+              <p className="text-[10px] text-gray-600 mt-1 ml-1">Bu sisteme geçmeden önce elde bulunan stok miktarıdır. Girilirse "Önceki Bakiye" hareketi olarak kaydedilir.</p>
             </div>
-            <button type="submit" className="w-full py-3 mt-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-bold rounded-xl transition-all active:scale-[0.98] shadow-lg shadow-blue-600/20">Urunu Kaydet</button>
+            <button type="submit" className="w-full py-3 mt-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-bold rounded-xl transition-all active:scale-[0.98] shadow-lg shadow-blue-600/20">Ürünü Kaydet</button>
           </form>
         </Dialog.Content></Dialog.Portal>
       </Dialog.Root>
@@ -1700,12 +1700,12 @@ export function StokPage() {
                 <span className="font-bold text-white text-sm">{formatStock(selectedProduct.currentStock, selectedProduct.unit)} {getUnitLabel(selectedProduct.unit)}</span>
               </div>
               <div>
-                <label className="text-[10px] text-gray-500 font-bold uppercase block mb-1.5 ml-1">Islem Turu</label>
+                <label className="text-[10px] text-gray-500 font-bold uppercase block mb-1.5 ml-1">İşlem Türü</label>
                 <CustomSelect
                   value={movementTypeForFilter}
                   onChange={(v) => { setMovementTypeForFilter(v); setPartySearch(''); setSelectedCariId(null); }}
                   options={[
-                    { value: 'ONCEKI_BAKIYE', label: '⬛ Önceki Bakiye (+)' },
+                    { value: 'ONCEKI_BAKIYE', label: '🕐 Önceki Bakiye (+)' },
                     { value: 'ALIS', label: 'Toptancidan Alis (+)' },
                     { value: 'SATIS', label: 'Musteriye Satis (-)' },
                     { value: 'MUSTERI_IADE', label: 'Musteri Iadesi (+)' },
@@ -1750,7 +1750,7 @@ export function StokPage() {
                   <History className="w-4 h-4 text-violet-400 flex-shrink-0" />
                   <div>
                     <p className="text-xs font-bold text-violet-300">Önceki Bakiye Girişi</p>
-                    <p className="text-[10px] text-gray-500 mt-0.5">Sisteme girmeden önce mevcut olan stok miktarını girin. Firma/fiyat alanları uygulanmaz.</p>
+                    <p className="text-[10px] text-gray-500 mt-0.5">Bu sisteme geçmeden önce elde bulunan mevcut stok miktarını girin. Firma ve fiyat alanları bu giriş türü için geçerli değildir.</p>
                   </div>
                 </div>
               )}
