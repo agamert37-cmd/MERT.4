@@ -1,5 +1,5 @@
 // [AJAN-2 | claude/serene-gagarin | 2026-03-25] Son düzenleyen: Claude Opus 4.6
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useNavigate, useLocation } from 'react-router';
 import { motion, AnimatePresence } from 'motion/react';
 import {
@@ -105,10 +105,10 @@ export function MobileBottomNav() {
   const { couchdbConnected } = useCouchDbStatus();
   const urunler = useGlobalTableData<any>('urunler');
   const faturalar = useGlobalTableData<any>('faturalar');
-  const tabBadges: Record<string, number> = {
+  const tabBadges = useMemo<Record<string, number>>(() => ({
     '/stok': urunler.filter(u => u.minStock > 0 && (u.currentStock ?? 0) <= u.minStock).length,
     '/faturalar': faturalar.filter(f => f.status === 'aktif' || f.durum === 'aktif').length,
-  };
+  }), [urunler, faturalar]);
   const sheetRef = useRef<HTMLDivElement>(null);
   const startY = useRef(0);
   const searchRef = useRef<HTMLInputElement>(null);
@@ -188,16 +188,18 @@ export function MobileBottomNav() {
     }
   };
 
-  // Filtered groups for search
-  const filteredGroups = search.trim()
-    ? moreGroups.map(g => ({
-        ...g,
-        items: g.items.filter(i =>
-          hasPermission(i.permKey) &&
-          t(i.labelKey).toLowerCase().includes(search.toLowerCase())
-        ),
-      })).filter(g => g.items.length > 0)
-    : moreGroups.map(g => ({ ...g, items: g.items.filter(i => hasPermission(i.permKey)) })).filter(g => g.items.length > 0);
+  // Filtered groups for search — memoized: user/employee/search/t değişince yeniden hesapla
+  const filteredGroups = useMemo(() => {
+    const searchLower = search.toLowerCase();
+    return moreGroups.map(g => ({
+      ...g,
+      items: g.items.filter(i =>
+        hasPermission(i.permKey) &&
+        (!search.trim() || t(i.labelKey).toLowerCase().includes(searchLower))
+      ),
+    })).filter(g => g.items.length > 0);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search, user, currentEmployee]);
 
   return (
     <>
@@ -218,7 +220,7 @@ export function MobileBottomNav() {
               animate={{ y: 0 }}
               exit={{ y: '100%' }}
               transition={{ type: 'spring', stiffness: 320, damping: 32 }}
-              className="fixed bottom-0 left-0 right-0 z-[46] bg-[#0d1117]/98 backdrop-blur-2xl border-t border-white/[0.08] rounded-t-3xl max-h-[82vh] overflow-hidden flex flex-col"
+              className="fixed bottom-0 left-0 right-0 z-[46] bg-[#0d1117]/98 backdrop-blur-2xl border-t border-white/[0.08] rounded-t-3xl max-h-[82vh] overflow-hidden flex flex-col gpu-layer"
               onTouchStart={handleTouchStart}
               onTouchEnd={handleTouchEnd}
             >

@@ -157,3 +157,49 @@ html, body {
     transition: transform 60ms ease, opacity 60ms ease;
   }
 }
+
+/* ─── GPU Compositing — Animasyonlu katmanları compositor thread'e al ─────── */
+/* Framer Motion'ın transform animasyonlarını GPU'da çalıştır.
+   Sadece gerçekten animate edilecek elementlere uygulanmalı. */
+.will-change-transform {
+  will-change: transform;
+}
+.will-change-opacity {
+  will-change: opacity;
+}
+/* Bottom sheet, swipe panel vb. ağır overlay'lar */
+.gpu-layer {
+  will-change: transform;
+  transform: translate3d(0, 0, 0);
+}
+
+/* ─── CSS Containment — Layout/Paint maliyetini izole et ─────────────────── */
+/* Sayfanın büyük liste bölümlerine uygula: scroll container içindeki her kart */
+.contain-layout {
+  contain: layout style;
+}
+
+/* ─── prefers-reduced-motion — Animasyon hassasiyeti ─────────────────────── */
+/* Düşük güçlü cihaz veya erişilebilirlik ayarında animasyonları azalt */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  /* Framer Motion'ın duration'ı JS tarafından kontrol edildiği için
+     aşağıdaki CSS değişkeni ile de override edebiliriz */
+  :root {
+    --motion-duration-override: 0.01s;
+  }
+}
+
+/* ─── Scroll Snap — Drawer / Modal kaydırma akıcılığı ───────────────────── */
+.scroll-smooth-touch {
+  scroll-behavior: smooth;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+}

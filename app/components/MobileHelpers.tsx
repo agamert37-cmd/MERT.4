@@ -279,7 +279,7 @@ export function SwipeToDelete({ onDelete, children, className = '', disabled = f
         <Trash2 className="w-4 h-4 text-white" />
       </div>
       <motion.div
-        style={{ x: offsetX }}
+        style={{ x: offsetX, willChange: 'transform' }}
         animate={{ x: offsetX }}
         transition={{ type: 'spring', stiffness: 500, damping: 40 }}
         onTouchStart={e => { startX.current = e.touches[0].clientX; dragging.current = true; }}

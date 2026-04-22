@@ -1,2 +1,9 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
-@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap');
+/* Preconnect → DNS lookup ve TLS handshake'i önceden yap */
+/* (index.html'de <link rel="preconnect"> yok; CSS'te @import yeterli) */
+
+/* Inter — 300 (font-light) uygulamada kullanılmıyor, kaldırıldı.
+   Gerekli weightler: 400 500 600 700 800 (extrabold) 900 (black) */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
+
+/* JetBrains Mono — font-mono sınıfı için; 600/700 uygulamada kullanılmıyor */
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap');
