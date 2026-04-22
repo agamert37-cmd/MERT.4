@@ -59,8 +59,28 @@ server {
         proxy_set_header Authorization $http_authorization;
         proxy_buffering off;
         proxy_read_timeout 600s;
-        proxy_connect_timeout 10s;
+        proxy_connect_timeout 15s;
         proxy_send_timeout 60s;
+        # Mobil ağ geçişlerinde (Wi-Fi ↔ 4G) tarayıcı bağlantıyı kesebilir;
+        # 502/503 hatalarında nginx kendisi yeniden dener.
+        proxy_next_upstream error timeout http_502 http_503;
+        proxy_next_upstream_tries 2;
+    }
+
+    # _changes long-polling için ayrı konum — çok daha uzun timeout
+    location ~* ^/couchdb/[^/]+/_changes {
+        proxy_pass http://couchdb:5984;
+        proxy_http_version 1.1;
+        proxy_set_header Connection "";
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Authorization $http_authorization;
+        proxy_buffering off;
+        proxy_read_timeout 900s;
+        proxy_connect_timeout 15s;
+        proxy_send_timeout 900s;
     }
 
     # SPA route yönlendirmesi

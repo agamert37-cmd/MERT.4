@@ -108,6 +108,10 @@ export function startSync(tableName: string): PouchDB.Replication.Sync<{}> | nul
     .on('error', (err: any) => {
       console.error(`[PouchDB] Sync hatası — ${dbName}:`, err?.message || err);
       updateSyncStatus(dbName, 'error', err?.message ?? String(err));
+      // retry:true olduğu halde bazı mobil ağ geçişlerinde PouchDB sync tamamen
+      // durabilir. Kaydı temizle ve debouncedRestart ile yeniden başlat.
+      syncs.delete(dbName);
+      _debouncedRestart(2000);
     })
     .on('denied', (err: any) => {
       console.warn(`[PouchDB] Sync reddedildi — ${dbName}:`, err?.message || err);
@@ -394,7 +398,7 @@ async function _pingUrl(url: string, user: string, password: string): Promise<bo
     const res = await fetch(url, {
       method: 'GET',
       headers,
-      signal: AbortSignal.timeout(5000),
+      signal: AbortSignal.timeout(10_000),
     });
     return res.ok;
   } catch {

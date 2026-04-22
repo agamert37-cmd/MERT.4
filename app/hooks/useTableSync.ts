@@ -266,44 +266,62 @@ export function useTableSync<T extends { id: string }>(
     const handleForegrounded = () => fetchData(true);
     window.addEventListener('pouchdb:app_foregrounded', handleForegrounded);
 
-    // PouchDB changes feed — realtime güncellemeler (yerel + CouchDB'den gelen)
-    const db = getDb(tableName);
-    const changes = db.changes({
-      since: 'now',
-      live: true,
-      include_docs: true,
-    });
+    // PouchDB changes feed — realtime güncellemeler (yerel + CouchDB'den gelen).
+    // Mobil ağ kesintilerinde feed hata alır ve ölür; otomatik yeniden başlatma
+    // için üstel geri çekilme (1s → 2s → 4s … 30s maks) kullanılır.
+    let destroyed = false;
+    let retryTimer: ReturnType<typeof setTimeout> | null = null;
+    let retryDelay = 1000;
+    let activeChanges: any = null;
 
-    changes.on('change', (change: any) => {
-      if (change.deleted) {
-        setDataState(prev => {
-          const updated = prev.filter(i => i.id !== change.id);
-          return updated;
-        });
-      } else if (change.doc) {
-        const cleaned = cleanDoc(change.doc);
-        const item = fromDbRef.current ? fromDbRef.current(cleaned) : cleaned as T;
+    function startFeed() {
+      if (destroyed) return;
+      const db = getDb(tableName);
+      const changes = db.changes({
+        since: 'now',
+        live: true,
+        include_docs: true,
+      });
+      activeChanges = changes;
+      changesRef.current = changes;
 
-        setDataState(prev => {
-          const idx = prev.findIndex(i => i.id === change.id);
-          let updated: T[];
-          if (idx !== -1) {
-            updated = [...prev];
-            updated[idx] = item;
-          } else {
-            updated = [item, ...prev];
-          }
-          return sortData(updated);
-        });
-      }
-      setLastSync(new Date());
-    });
+      changes.on('change', (change: any) => {
+        retryDelay = 1000; // başarılı değişimde geri çekilmeyi sıfırla
+        if (change.deleted) {
+          setDataState(prev => prev.filter(i => i.id !== change.id));
+        } else if (change.doc) {
+          const cleaned = cleanDoc(change.doc);
+          const item = fromDbRef.current ? fromDbRef.current(cleaned) : cleaned as T;
+          setDataState(prev => {
+            const idx = prev.findIndex(i => i.id === change.id);
+            if (idx !== -1) {
+              const updated = [...prev];
+              updated[idx] = item;
+              return sortData(updated);
+            }
+            return sortData([item, ...prev]);
+          });
+        }
+        setLastSync(new Date());
+      });
 
-    changes.on('error', (err: any) => {
-      console.error(`[useTableSync] ${tableName} changes error:`, err);
-    });
+      // Hata → feed öldü; üstel geri çekilme ile yeniden başlat
+      changes.on('error', (err: any) => {
+        console.warn(
+          `[useTableSync] ${tableName} changes feed kesildi — ${retryDelay}ms sonra yeniden başlatılıyor:`,
+          err
+        );
+        changes.cancel();
+        if (!destroyed) {
+          retryTimer = setTimeout(() => {
+            retryDelay = Math.min(retryDelay * 2, 30_000);
+            startFeed();
+          }, retryDelay);
+        }
+      });
+    }
 
-    changesRef.current = changes;
+    startFeed();
 
     // BroadcastChannel — diğer sekmelerden gelen değişiklikleri yansıt
     const unsubBroadcast = onBroadcastMessage((msg) => {
@@ -313,7 +331,9 @@ export function useTableSync<T extends { id: string }>(
     });
 
     return () => {
-      changes.cancel();
+      destroyed = true;
+      if (retryTimer) clearTimeout(retryTimer);
+      if (activeChanges) activeChanges.cancel();
       window.removeEventListener('pouchdb:app_foregrounded', handleForegrounded);
       unsubBroadcast();
     };
